@@ -1,0 +1,40 @@
+{
+  "name": "@nullclear/x402-arbiter",
+  "version": "1.0.0",
+  "description": "NullClear Developer and Agent SDK for safe x402 calls with deferred schema escrow",
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    }
+  },
+  "scripts": {
+    "build": "tsup src/index.ts --format esm,cjs --dts",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "lint": "echo \"@nullclear/x402-arbiter clean\""
+  },
+  "dependencies": {
+    "@nullclear/shared": "workspace:*",
+    "viem": "^2.23.0",
+    "zod": "^3.24.2"
+  },
+  "devDependencies": {
+    "@nullclear/worker-arbiter": "workspace:*",
+    "tsup": "^8.3.6",
+    "typescript": "^5.7.3",
+    "vitest": "^3.0.5"
+  }
+}

@@ -1,0 +1,35 @@
+{
+  "name": "@nullclear/mcp",
+  "version": "1.0.0",
+  "description": "Model Context Protocol server for autonomous agents using NullClear",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "bin": {
+    "nullclear-mcp": "./dist/index.js"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "tsup",
+    "typecheck": "tsc --noEmit",
+    "start": "node dist/index.js",
+    "lint": "echo \"@nullclear/mcp clean\""
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.6.1",
+    "@nullclear/shared": "workspace:*",
+    "@nullclear/x402-arbiter": "workspace:*",
+    "viem": "^2.23.0",
+    "zod": "^3.24.2"
+  },
+  "devDependencies": {
+    "tsup": "^8.3.6",
+    "typescript": "^5.7.3"
+  }
+}

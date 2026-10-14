@@ -1,0 +1,36 @@
+name = "nullclear-arbiter"
+main = "src/index.ts"
+compatibility_date = "2026-03-01"
+workers_dev = false
+preview_urls = false
+compatibility_flags = ["nodejs_compat"]
+
+# Production Domain Routes Configuration
+# To deploy to Cloudflare custom domains, enable these routes:
+# routes = [
+#   { pattern = "nullclear.dev/*", zone_name = "nullclear.dev" },
+#   { pattern = "api.nullclear.dev/*", zone_name = "nullclear.dev" },
+#   { pattern = "nullclear.com/*", zone_name = "nullclear.com" },
+#   { pattern = "www.nullclear.com/*", zone_name = "nullclear.com" }
+# ]
+
+[[d1_databases]]
+binding = "DB"
+database_name = "nullclear-db"
+database_id = "70f27a5e-4446-4ace-bcdc-617cfd9c4377"
+migrations_dir = "migrations"
+
+[[kv_namespaces]]
+binding = "KV"
+id = "23274a59f8984445a5863d1f95fd45eb"
+
+[[kv_namespaces]]
+binding = "NULLCLEAR_CACHE"
+id = "23274a59f8984445a5863d1f95fd45eb"
+
+[vars]
+ENVIRONMENT = "production"
+SETTLEMENT_MODE = "onchain"
+FACILITATOR_URL = "https://x402.org/facilitator/settle"
+BASE_RPC_URL = "https://mainnet.base.org"
+BASE_SEPOLIA_RPC_URL = "https://sepolia.base.org"

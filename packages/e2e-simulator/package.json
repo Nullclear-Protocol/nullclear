@@ -1,0 +1,23 @@
+{
+  "name": "@nullclear/e2e-simulator",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Autonomous E2E simulator verifying NullClear clearing, schema enforcement, and Sybil detection",
+  "scripts": {
+    "build": "tsc --noEmit",
+    "typecheck": "tsc --noEmit",
+    "demo": "tsx src/run-demo.ts"
+  },
+  "dependencies": {
+    "@nullclear/shared": "workspace:*",
+    "@nullclear/worker-arbiter": "workspace:*",
+    "@nullclear/x402-arbiter": "workspace:*",
+    "viem": "^2.23.0",
+    "zod": "^3.24.2"
+  },
+  "devDependencies": {
+    "tsx": "^4.19.3",
+    "typescript": "^5.7.3"
+  }
+}
