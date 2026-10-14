@@ -15,6 +15,8 @@ export interface Env {
     BASE_RPC_URL?: string;
     BASE_MAINNET_RPC_URL?: string;
     BASE_SEPOLIA_RPC_URL?: string;
+    MIN_ONCHAIN_ATOMIC?: string;
+    MAX_DAILY_ONCHAIN_PER_WALLET?: string;
   };
 }
 

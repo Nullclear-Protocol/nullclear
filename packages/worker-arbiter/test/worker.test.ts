@@ -528,4 +528,115 @@ describe("NullClear Worker Arbiter Test Suite", () => {
     expect(postData.result.tools.length).toBe(3);
     expect(postData.result.tools[0].name).toBe("nullclear_check_reputation");
   });
+
+  // 15. Anti-Abuse Guard A: Self-Clearing Prohibited (from === to)
+  it("blocks self-clearing wash loops with 400 SELF_CLEARING_PROHIBITED", async () => {
+    // Generate signature where from === to (buyer pays buyer)
+    const selfSignatureHeader = await createValidPaymentSignature(buyerAccount.address, "10000");
+
+    const res = await app.fetch(
+      new Request("http://localhost/v1/clear", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          targetUrl: `http://127.0.0.1:${mockServerPort}/honest`,
+          paymentSignatureHeader: selfSignatureHeader
+        })
+      }),
+      testEnv
+    );
+
+    expect(res.status).toBe(400);
+    const json = (await res.json()) as any;
+    expect(json.error).toBe("SELF_CLEARING_PROHIBITED");
+    expect(json.message).toContain("wash-trading guard");
+  });
+
+  // 16. Anti-Abuse Guard B: Micro-Tier Floor Fallback (< 5000 atomic units)
+  it("routes micro-transactions below 5000 atomic units to facilitator fallback", async () => {
+    // 1000 atomic units ($0.001 USDC) is below MIN_ONCHAIN_ATOMIC (5000)
+    const microSigHeader = await createValidPaymentSignature(sellerAccount.address, "1000");
+
+    const res = await app.fetch(
+      new Request("http://localhost/v1/clear", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          targetUrl: `http://127.0.0.1:${mockServerPort}/honest`,
+          paymentSignatureHeader: microSigHeader,
+          validation: { expectedStatus: [200] }
+        })
+      }),
+      {
+        ...testEnv,
+        SETTLEMENT_MODE: "onchain",
+        MIN_ONCHAIN_ATOMIC: "5000"
+      }
+    );
+
+    expect(res.status).toBe(200);
+    const json = (await res.json()) as any;
+    expect(json.cleared).toBe(true);
+    expect(json.settled).toBe(true);
+    expect(json.settlementRouting).toBe("facilitator_micro_tier");
+  });
+
+  // 17. Anti-Abuse Guard C: On-chain Sponsored vs Daily Cap Fallback
+  it("routes transactions >= 5000 atomic units via onchain_sponsored or daily cap fallback", async () => {
+    const normalSigHeader = await createValidPaymentSignature(sellerAccount.address, "10000");
+
+    // Standard call without KV cap exceeded
+    const res = await app.fetch(
+      new Request("http://localhost/v1/clear", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          targetUrl: `http://127.0.0.1:${mockServerPort}/honest`,
+          paymentSignatureHeader: normalSigHeader,
+          validation: { expectedStatus: [200] }
+        })
+      }),
+      {
+        ...testEnv,
+        SETTLEMENT_MODE: "onchain",
+        MIN_ONCHAIN_ATOMIC: "5000"
+      }
+    );
+
+    expect(res.status).toBe(200);
+    const json = (await res.json()) as any;
+    expect(json.cleared).toBe(true);
+    expect(json.settlementRouting).toBe("onchain_sponsored");
+
+    // Test with mock KV indicating daily cap exceeded
+    const cappedSigHeader = await createValidPaymentSignature(sellerAccount.address, "10000");
+    const mockKv = {
+      get: async () => "50", // already at 50 limit
+      put: async () => {}
+    };
+
+    const cappedRes = await app.fetch(
+      new Request("http://localhost/v1/clear", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          targetUrl: `http://127.0.0.1:${mockServerPort}/honest`,
+          paymentSignatureHeader: cappedSigHeader,
+          validation: { expectedStatus: [200] }
+        })
+      }),
+      {
+        ...testEnv,
+        SETTLEMENT_MODE: "onchain",
+        MIN_ONCHAIN_ATOMIC: "5000",
+        MAX_DAILY_ONCHAIN_PER_WALLET: "50",
+        KV: mockKv as any
+      }
+    );
+
+    expect(cappedRes.status).toBe(200);
+    const cappedJson = (await cappedRes.json()) as any;
+    expect(cappedJson.cleared).toBe(true);
+    expect(cappedJson.settlementRouting).toBe("facilitator_daily_cap_fallback");
+  });
 });

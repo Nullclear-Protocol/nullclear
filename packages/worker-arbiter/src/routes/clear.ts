@@ -9,7 +9,7 @@ import {
 } from "@nullclear/shared";
 import { getArbiterStore, type Env } from "../env.js";
 import { computeTrustScore } from "../services/reputation.js";
-import { verifyEIP3009Local, settleTransfer } from "../services/facilitator.js";
+import { verifyEIP3009Local, settleTransfer, settleOnChain, settleViaFacilitator } from "../services/facilitator.js";
 import { validateUpstreamResponse, type ValidationOptions } from "../services/validator.js";
 import { signClearingReceipt } from "../services/attestation.js";
 import {
@@ -87,6 +87,17 @@ clearRouter.post("/", async (c) => {
   const { accepted, payload } = paymentSigPayload;
   const { authorization, signature } = payload;
   const chainConfig = getChainConfig(accepted.network);
+
+  // Guard A: Self-Clearing / Wash-Loop Rejection (400 Bad Request)
+  if (authorization.from.toLowerCase() === authorization.to.toLowerCase()) {
+    return c.json(
+      {
+        error: "SELF_CLEARING_PROHIBITED",
+        message: "Buyer and seller wallet addresses cannot be identical (wash-trading guard)."
+      },
+      400
+    );
+  }
 
   // 3. Replay Protection: Check if (network, from, nonce) tuple was already used
   const isReplayed = await store.hasUsedNonce(accepted.network, authorization.from, authorization.nonce);
@@ -286,16 +297,76 @@ clearRouter.post("/", async (c) => {
   }
 
   // Step 4B: Upstream Validated -> SETTLE & ATTEST
-  const settlement = await settleTransfer({
+  const defaultMode = c.env.SETTLEMENT_MODE || (c.env.ENVIRONMENT === "production" ? "onchain" : "simulated");
+  let effectiveMode: "onchain" | "facilitator" | "simulated" = defaultMode;
+  let settlementRouting = defaultMode === "onchain" ? "onchain_sponsored" : defaultMode;
+
+  if (defaultMode === "onchain") {
+    const minOnchainAtomic = BigInt(c.env.MIN_ONCHAIN_ATOMIC || "5000");
+    const amountAtomic = BigInt(accepted.amount);
+
+    // Guard B: Minimum Value Floor for On-Chain Gas Sponsorship ($0.005 USDC / 5000 atomic units)
+    if (amountAtomic < minOnchainAtomic) {
+      effectiveMode = "facilitator";
+      settlementRouting = "facilitator_micro_tier";
+    } else {
+      // Guard C: Per-Wallet & Per-IP Daily On-Chain Gas Cap (50 / UTC day)
+      const kv = c.env.KV || c.env.NULLCLEAR_CACHE;
+      if (kv) {
+        const utcDate = new Date().toISOString().slice(0, 10);
+        const clientIp =
+          c.req.header("cf-connecting-ip") ||
+          c.req.header("x-forwarded-for")?.split(",")[0].trim() ||
+          "127.0.0.1";
+        const maxDaily = Number(c.env.MAX_DAILY_ONCHAIN_PER_WALLET || "50");
+
+        const walletKey = `gas_cap:wallet:${utcDate}:${authorization.from.toLowerCase()}`;
+        const ipKey = `gas_cap:ip:${utcDate}:${clientIp}`;
+
+        const [walletCountStr, ipCountStr] = await Promise.all([
+          kv.get(walletKey),
+          kv.get(ipKey)
+        ]);
+
+        const walletCount = Number(walletCountStr || 0);
+        const ipCount = Number(ipCountStr || 0);
+
+        if (walletCount >= maxDaily || ipCount >= maxDaily) {
+          effectiveMode = "facilitator";
+          settlementRouting = "facilitator_daily_cap_fallback";
+        } else {
+          await Promise.all([
+            kv.put(walletKey, String(walletCount + 1), { expirationTtl: 86400 }),
+            kv.put(ipKey, String(ipCount + 1), { expirationTtl: 86400 })
+          ]);
+          settlementRouting = "onchain_sponsored";
+        }
+      } else {
+        settlementRouting = "onchain_sponsored";
+      }
+    }
+  }
+
+  const settlementOptions = {
     authorization,
     signature,
     accepted,
     facilitatorUrl: c.env.FACILITATOR_URL,
-    settlementMode: c.env.SETTLEMENT_MODE || (c.env.ENVIRONMENT === "production" ? "onchain" : "simulated"),
+    settlementMode: effectiveMode,
     arbiterPrivateKey: c.env.ARBITER_PRIVATE_KEY,
-    rpcUrl: chainConfig.chainId === 8453 ? (c.env.BASE_MAINNET_RPC_URL || c.env.BASE_RPC_URL) : c.env.BASE_SEPOLIA_RPC_URL,
+    rpcUrl:
+      chainConfig.chainId === 8453
+        ? (c.env.BASE_MAINNET_RPC_URL || c.env.BASE_RPC_URL)
+        : c.env.BASE_SEPOLIA_RPC_URL,
     environment: c.env.ENVIRONMENT
-  });
+  };
+
+  const settlement =
+    effectiveMode === "facilitator"
+      ? await settleViaFacilitator(settlementOptions)
+      : (effectiveMode === "onchain"
+          ? await settleOnChain(settlementOptions)
+          : await settleTransfer(settlementOptions));
 
   if (!settlement.success) {
     return c.json(
@@ -369,6 +440,7 @@ clearRouter.post("/", async (c) => {
     clearingId,
     buyerCharged: accepted.amount,
     clearingFee: feeAtomic,
+    settlementRouting,
     transaction: settlement.transaction,
     attestation: signedReceipt,
     data: upstreamJson !== null ? upstreamJson : upstreamRawText
