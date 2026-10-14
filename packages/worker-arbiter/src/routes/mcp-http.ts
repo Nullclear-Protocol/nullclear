@@ -87,6 +87,28 @@ mcpHttpRouter.post("/", async (c) => {
     });
   }
 
+  // 1b. resources/list (empty collection for compliance)
+  if (method === "resources/list") {
+    return c.json({
+      jsonrpc: "2.0",
+      id,
+      result: {
+        resources: []
+      }
+    });
+  }
+
+  // 1c. prompts/list (empty collection for compliance)
+  if (method === "prompts/list") {
+    return c.json({
+      jsonrpc: "2.0",
+      id,
+      result: {
+        prompts: []
+      }
+    });
+  }
+
   // 2. tools/call
   if (method === "tools/call") {
     const toolName = params?.name;
@@ -231,7 +253,9 @@ mcpHttpRouter.post("/", async (c) => {
       result: {
         protocolVersion: "2024-11-05",
         capabilities: {
-          tools: {}
+          tools: {},
+          resources: {},
+          prompts: {}
         },
         serverInfo: {
           name: "nullclear-mcp",
