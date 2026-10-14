@@ -170,6 +170,64 @@ const res = await fetchWithNullClear("https://agent-seller.com/api/data", {
   return c.html(html);
 });
 
+// GET /robots.txt
+discoveryRouter.get("/robots.txt", (c) => {
+  const robots = `User-agent: *
+Allow: /
+
+User-agent: GPTBot
+Allow: /
+
+User-agent: ClaudeBot
+Allow: /
+
+User-agent: PerplexityBot
+Allow: /
+
+Sitemap: https://nullclear.dev/sitemap.xml
+`;
+  return c.text(robots);
+});
+
+// GET /sitemap.xml
+discoveryRouter.get("/sitemap.xml", (c) => {
+  const sitemap = `<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url>
+    <loc>https://nullclear.dev/</loc>
+    <changefreq>daily</changefreq>
+    <priority>1.0</priority>
+  </url>
+  <url>
+    <loc>https://nullclear.dev/llms.txt</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://nullclear.dev/openapi.json</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://nullclear.dev/.well-known/agent.json</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://nullclear.dev/.well-known/x402.json</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://nullclear.dev/mcp</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+  </url>
+</urlset>`;
+  c.header("Content-Type", "application/xml; charset=UTF-8");
+  return c.body(sitemap);
+});
+
 // GET /llms.txt
 discoveryRouter.get("/llms.txt", (c) => {
   const text = `# NullClear Protocol for Autonomous AI Agents
