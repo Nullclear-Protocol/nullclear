@@ -506,4 +506,26 @@ describe("NullClear Worker Arbiter Test Suite", () => {
     expect(res2.status).toBe(301);
     expect(res2.headers.get("Location")).toBe("https://nullclear.dev/openapi.json?v=2");
   });
+
+  // 14. Remote HTTP MCP Server
+  it("GET /mcp and POST /mcp handle Model Context Protocol remote requests", async () => {
+    const getRes = await app.fetch(new Request("http://localhost/mcp"), testEnv);
+    expect(getRes.status).toBe(200);
+    const getData = (await getRes.json()) as any;
+    expect(getData.name).toBe("nullclear-mcp");
+    expect(getData.tools.length).toBe(3);
+
+    const postRes = await app.fetch(
+      new Request("http://localhost/mcp", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list" })
+      }),
+      testEnv
+    );
+    expect(postRes.status).toBe(200);
+    const postData = (await postRes.json()) as any;
+    expect(postData.result.tools.length).toBe(3);
+    expect(postData.result.tools[0].name).toBe("nullclear_check_reputation");
+  });
 });

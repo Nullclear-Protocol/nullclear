@@ -5,6 +5,7 @@ import { clearRouter } from "./routes/clear.js";
 import { scoreRouter } from "./routes/score.js";
 import { kyaRouter } from "./routes/kya.js";
 import { discoveryRouter } from "./routes/discovery.js";
+import { mcpHttpRouter } from "./routes/mcp-http.js";
 
 declare const process: any;
 
@@ -55,6 +56,7 @@ app.onError((err, c) => {
 app.route("/v1/clear", clearRouter);
 app.route("/v1/score", scoreRouter);
 app.route("/v1/kya", kyaRouter);
+app.route("/mcp", mcpHttpRouter);
 app.route("/", discoveryRouter);
 
 export default app;
