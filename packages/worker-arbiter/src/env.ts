@@ -8,6 +8,9 @@ export interface Env {
     ENVIRONMENT?: string;
     SETTLEMENT_MODE?: "onchain" | "facilitator" | "simulated";
     ARBITER_PRIVATE_KEY?: string;
+    TREASURY_WALLET_ADDRESS?: string;
+    ARBITER_WALLET_ADDRESS?: string;
+    ERC8004_AGENT_ID?: string;
     FACILITATOR_URL?: string;
     BASE_RPC_URL?: string;
     BASE_MAINNET_RPC_URL?: string;

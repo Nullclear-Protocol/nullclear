@@ -159,12 +159,19 @@ describe("NullClear Worker Arbiter Test Suite", () => {
     const data1 = (await res1.json()) as any;
     expect(data1.x402Version).toBe(2);
     expect(data1.endpoints.clear).toBe("/v1/clear");
+    expect(data1.treasuryAddress).toBe("0xB586eFcCa41dF27ad3873BEcA54da0c30bf04d5c");
+    expect(data1.arbiterAddress).toBe("0xfd74fF802EA0E735514C070AF04E0D6528deD145");
+    expect(data1.feeBps).toBe(50);
 
     const res2 = await app.fetch(new Request("http://localhost/.well-known/agent.json"), testEnv);
     expect(res2.status).toBe(200);
     const data2 = (await res2.json()) as any;
     expect(data2.name).toContain("NullClear Arbiter");
+    expect(data2.type).toBe("https://eips.ethereum.org/EIPS/eip-8004#registration-v1");
+    expect(data2.agentWallet).toBe("0xfd74fF802EA0E735514C070AF04E0D6528deD145");
+    expect(data2.treasuryWallet).toBe("0xB586eFcCa41dF27ad3873BEcA54da0c30bf04d5c");
     expect(data2.supportedTrust).toContain("crypto-economic");
+    expect(data2.registrations[0].agentRegistry).toBe("eip155:8453:0x8004A169FB4a3325136EB29fA0ceB6D2e539a432");
   });
 
   it("GET /openapi.json returns valid OpenAPI 3.1.0 schema", async () => {

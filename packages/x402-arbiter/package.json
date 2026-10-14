@@ -2,6 +2,12 @@
   "name": "@nullclear/x402-arbiter",
   "version": "1.0.0",
   "description": "NullClear Developer and Agent SDK for safe x402 calls with deferred schema escrow",
+  "license": "MIT",
+  "homepage": "https://nullclear.dev",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Nullclear-Protocol/nullclear.git"
+  },
   "type": "module",
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",

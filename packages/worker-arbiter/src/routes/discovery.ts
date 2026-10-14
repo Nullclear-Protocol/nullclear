@@ -255,10 +255,16 @@ Available at \`/openapi.json\` with 100% schema definitions for all routes.
 
 // GET /.well-known/x402.json
 discoveryRouter.get("/.well-known/x402.json", (c) => {
+  const treasuryAddress = c.env?.TREASURY_WALLET_ADDRESS || "0xB586eFcCa41dF27ad3873BEcA54da0c30bf04d5c";
+  const arbiterAddress = c.env?.ARBITER_WALLET_ADDRESS || "0xfd74fF802EA0E735514C070AF04E0D6528deD145";
+
   return c.json({
     x402Version: 2,
     service: "NullClear Arbiter",
     description: "Autonomous non-custodial schema escrow and reputation clearinghouse",
+    treasuryAddress,
+    arbiterAddress,
+    feeBps: 50,
     networks: ["eip155:8453", "eip155:84532"],
     assets: [
       {
@@ -282,16 +288,32 @@ discoveryRouter.get("/.well-known/x402.json", (c) => {
 
 // GET /.well-known/agent.json
 discoveryRouter.get("/.well-known/agent.json", (c) => {
+  const agentWallet = c.env?.ARBITER_WALLET_ADDRESS || "0xfd74fF802EA0E735514C070AF04E0D6528deD145";
+  const treasuryWallet = c.env?.TREASURY_WALLET_ADDRESS || "0xB586eFcCa41dF27ad3873BEcA54da0c30bf04d5c";
+  const agentId = c.env?.ERC8004_AGENT_ID || "pending";
+
   return c.json({
-    name: "NullClear Arbiter Agent",
+    type: "https://eips.ethereum.org/EIPS/eip-8004#registration-v1",
+    name: "NullClear Arbiter",
     description: "Autonomous non-custodial clearing, reputation scoring, and KYA arbiter for AI commerce",
+    image: "https://nullclear.dev/logo.png",
+    active: true,
+    x402Support: true,
+    agentWallet,
+    treasuryWallet,
     supportedTrust: ["reputation", "crypto-economic"],
-    services: ["mcp", "a2a", "rest"],
+    services: [
+      { name: "web", endpoint: "https://nullclear.dev" },
+      { name: "rest", endpoint: "https://nullclear.dev/v1" },
+      { name: "mcp", endpoint: "https://nullclear.dev/.well-known/mcp.json" },
+      { name: "a2a", endpoint: "https://nullclear.dev/.well-known/agent.json" },
+      { name: "x402", endpoint: "https://nullclear.dev/.well-known/x402.json" },
+      { name: "llms", endpoint: "https://nullclear.dev/llms.txt" }
+    ],
     registrations: [
       {
-        network: "eip155:8453",
-        registry: "0x8004A169FB4a3325136EB29fA0ceB6D2e539a432",
-        agentId: "1"
+        agentRegistry: "eip155:8453:0x8004A169FB4a3325136EB29fA0ceB6D2e539a432",
+        agentId
       }
     ],
     capabilities: [

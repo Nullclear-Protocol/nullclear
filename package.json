@@ -8,12 +8,15 @@
     "typecheck": "turbo run typecheck",
     "test": "turbo run test",
     "demo": "pnpm --filter @nullclear/e2e-simulator demo",
+    "register:erc8004": "tsx scripts/register-erc8004.ts",
     "lint": "turbo run lint"
   },
   "devDependencies": {
     "@types/node": "^20.17.0",
+    "tsx": "^4.19.3",
     "turbo": "^2.4.4",
-    "typescript": "^5.7.3"
+    "typescript": "^5.7.3",
+    "viem": "^2.23.5"
   },
   "packageManager": "pnpm@12.6.0",
   "engines": {

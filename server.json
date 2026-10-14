@@ -1,0 +1,47 @@
+{
+  "$schema": "https://raw.githubusercontent.com/modelcontextprotocol/registry/main/schema.json",
+  "name": "dev.nullclear/mcp",
+  "title": "NullClear MCP Server",
+  "description": "Autonomous non-custodial clearing, reputation scoring, and KYA corporate liability verification for AI agent commerce",
+  "version": "1.0.0",
+  "homepage": "https://nullclear.dev",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Nullclear-Protocol/nullclear"
+  },
+  "license": "MIT",
+  "packages": [
+    {
+      "registry": "npm",
+      "package": "@nullclear/mcp",
+      "version": "1.0.0",
+      "transport": {
+        "type": "stdio"
+      },
+      "executable": "nullclear-mcp",
+      "command": "npx",
+      "args": ["-y", "@nullclear/mcp"]
+    }
+  ],
+  "tools": [
+    {
+      "name": "nullclear_check_reputation",
+      "description": "Inspect an agent's on-chain ERC-8004 identity, composite trust score (0-100), letter grade (A-F), and Sybil wash-trading risk flags before interacting."
+    },
+    {
+      "name": "nullclear_escrow_x402_call",
+      "description": "Execute a deferred-escrow x402 upstream call. The buyer signs an EIP-3009 payment authorization held in escrow by NullClear. If the seller agent returns an invalid response or crashes, settlement is VOIDED with $0 lost."
+    },
+    {
+      "name": "nullclear_verify_kya_mandate",
+      "description": "Verify an autonomous agent's corporate liability mandate (KYA) signed via EIP-712, checking legal entity backing, max transaction limit, and liability coverage."
+    }
+  ],
+  "categories": [
+    "finance",
+    "payments",
+    "security",
+    "reputation",
+    "web3"
+  ]
+}

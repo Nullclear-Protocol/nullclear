@@ -14,6 +14,8 @@ export interface ChainConfig {
   rpcUrl: string;
   blockExplorer: string;
 }
+export const NULLCLEAR_TREASURY_ADDRESS = "0xB586eFcCa41dF27ad3873BEcA54da0c30bf04d5c" as const;
+export const NULLCLEAR_ARBITER_ADDRESS = "0xfd74fF802EA0E735514C070AF04E0D6528deD145" as const;
 
 export const BASE_MAINNET: ChainConfig = {
   name: "Base Mainnet",

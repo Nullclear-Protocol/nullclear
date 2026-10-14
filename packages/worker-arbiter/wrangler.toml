@@ -30,7 +30,11 @@ id = "23274a59f8984445a5863d1f95fd45eb"
 
 [vars]
 ENVIRONMENT = "production"
+TREASURY_WALLET_ADDRESS = "0xB586eFcCa41dF27ad3873BEcA54da0c30bf04d5c"
+ARBITER_WALLET_ADDRESS = "0xfd74fF802EA0E735514C070AF04E0D6528deD145"
+ERC8004_AGENT_ID = "pending"
 SETTLEMENT_MODE = "onchain"
 FACILITATOR_URL = "https://x402.org/facilitator/settle"
 BASE_RPC_URL = "https://mainnet.base.org"
 BASE_SEPOLIA_RPC_URL = "https://sepolia.base.org"
+
