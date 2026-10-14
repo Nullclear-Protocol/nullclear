@@ -1,0 +1,13 @@
+{
+  "$schema": "https://smithery.ai/docs/config/schema.json",
+  "startCommand": {
+    "type": "stdio",
+    "config": {
+      "command": "npx",
+      "args": ["-y", "@nullclear/mcp"],
+      "env": {
+        "ARBITER_URL": "https://nullclear.dev"
+      }
+    }
+  }
+}
