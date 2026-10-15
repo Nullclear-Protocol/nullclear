@@ -48,7 +48,10 @@ Submit via Pull Request or the submission form at [agentpaymentsstack.com](https
     "x402 V2",
     "ERC-8004 (Agent Identity & Reputation)",
     "EIP-3009 (Transfer With Authorization)",
-    "EIP-712 (Typed Structured Data & Corporate KYA)"
+    "EIP-712 (Typed Structured Data & Corporate KYA)",
+    "Deep Invariants & Semantic Bounds (v1.1)",
+    "Autonomous Multi-Seller Failover (v1.1)",
+    "Outbound Spend Firewall (v1.1)"
   ],
   "contracts": {
     "base": {
@@ -75,7 +78,7 @@ Submit to the x402 ecosystem directory repository or ecosystem index:
 ### [NullClear](https://nullclear.dev)
 - **Role**: Non-Custodial Clearinghouse, Facilitator & Deferred Schema Escrow
 - **Supported Chains**: Base Mainnet (`8453`), Base Sepolia (`84532`)
-- **Key Feature**: Zero-loss guarantee on agent hallucinations. Validates seller responses against caller JSON schemas before executing EIP-3009 payment settlement.
+- **Key Feature**: Zero-loss guarantee on agent hallucinations. Validates seller responses against caller JSON schemas and deep semantic invariants before executing EIP-3009 payment settlement. Features autonomous multi-seller failover and outbound spend policies.
 - **Protocol Fee**: 50 bps (0.50%)
 - **Treasury Address**: `0xB586eFcCa41dF27ad3873BEcA54da0c30bf04d5c`
 - **Arbiter Signer**: `0xfd74fF802EA0E735514C070AF04E0D6528deD145`
@@ -89,6 +92,7 @@ Submit to the x402 ecosystem directory repository or ecosystem index:
 {
   "id": "nullclear",
   "name": "NullClear Protocol",
+  "version": "1.1.0",
   "type": "clearinghouse",
   "url": "https://nullclear.dev",
   "x402Manifest": "https://nullclear.dev/.well-known/x402.json",
@@ -98,6 +102,10 @@ Submit to the x402 ecosystem directory repository or ecosystem index:
   "arbiterAddress": "0xfd74fF802EA0E735514C070AF04E0D6528deD145",
   "features": [
     "deferred_schema_escrow",
+    "deep_value_invariants",
+    "llm_refusal_guard",
+    "multi_seller_failover",
+    "spend_firewall_policy",
     "zero_loss_abort",
     "erc8004_sybil_scoring",
     "eip712_kya_attestation"

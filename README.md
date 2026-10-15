@@ -60,6 +60,15 @@ NullClear eliminates payment risk in Agent-to-Agent (A2A) commerce. In standard 
 
 ---
 
+## What's New in v1.1.0
+
+- 🛡️ **Deep Deterministic Value Invariants:** Extend basic JSON schema validation with field-level semantic invariants (`gt`, `gte`, `lt`, `lte`, `eq`, `neq`, `minLength`, `maxLength`, `pattern`, `notContains`, and `maxStalenessSeconds`). Stale data or numeric drift triggers instant authorization voiding ($0 charged).
+- 🛑 **Canonical LLM Refusal Guard:** Automatically inspects text and JSON responses for common LLM refusal boilerplate (`"as an ai language model"`, `"i cannot fulfill this request"`, `"i am unable to assist"`, rate limits, and server error strings), treating refusal as non-delivery.
+- 🔀 **Autonomous Multi-Seller Failover Routing:** Callers can provide ordered fallback candidates (`fallbacks: [{ targetUrl, sellerAgentId, paymentSignatureHeader }]`). If the primary seller crashes or fails validation, the Arbiter voids the primary authorization and automatically routes to the secondary candidate without roundtripping back to the client agent.
+- 🔒 **Outbound Spend Firewall & Anti-Abuse Guards:** Protect buyer agent wallets with per-call caps (`maxPerCallAtomic`) and daily rolling spend policies (`maxDailyWalletAtomic`). Rejects self-clearing wash-loops (buyer address === seller address) and enforces minimum on-chain settlement floors.
+
+---
+
 ## Quickstart
 
 ### Prerequisites

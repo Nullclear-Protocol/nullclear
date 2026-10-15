@@ -312,6 +312,7 @@ All payments use EIP-3009 signed authorizations on USDC:
 Composite Score (0-100):
 - Identity component: 25 points if ERC-8004 registered with valid URI; 15 baseline.
 - Reliability component: 40 * (cleared / (cleared + failed * 3)).
+- Counterparty diversity & volume track record: up to 23 points for diversified counterparties (max single buyer share <= 60%).
 - Sybil penalty: If cleared >= 3 and single buyer share > 60%, subtract 25 points and raise HIGH_COUNTERPARTY_CONCENTRATION_WASH_RISK.
 - KYA mandate bonus: +10 points for active corporate liability mandate.
 

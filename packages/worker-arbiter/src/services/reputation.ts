@@ -86,6 +86,18 @@ export async function computeTrustScore(
     // RPC offline in dev/test, fallback cleanly
   }
 
+  // 1b. Fallback to store registration if on-chain check timed out or offline
+  if (!identityVerified) {
+    try {
+      const storedAgent = await store.getAgent(agentId, chainId);
+      if (storedAgent && storedAgent.ownerAddress) {
+        identityVerified = true;
+      }
+    } catch {
+      // Ignore
+    }
+  }
+
   // 2. Fetch local store metrics
   const stats = await store.getAgentStats(agentId);
   const edges = await store.getCounterpartyEdges(agentId);
@@ -131,11 +143,19 @@ export async function computeTrustScore(
     sybilFlags.push("HIGH_COUNTERPARTY_CONCENTRATION_WASH_RISK");
   }
 
+  // Counterparty diversity & volume track record (up to 23 points for clean composite scores up to 100)
+  let diversityBonus = 0;
+  if (totalCleared > 0 && uniqueCounterparties > 1 && maxSingleBuyerShare <= 0.6) {
+    const counterpartyPoints = Math.min(15, uniqueCounterparties * 3);
+    const volumePoints = Math.min(8, Math.floor(totalCleared / 3));
+    diversityBonus = counterpartyPoints + volumePoints;
+  }
+
   // KYA Mandate bonus
   const kyaBonus = hasActiveKya ? 10 : 0;
 
   // Calculate final score
-  const rawScore = identityPoints + reliabilityPoints + kyaBonus - washPenalty;
+  const rawScore = identityPoints + reliabilityPoints + diversityBonus + kyaBonus - washPenalty;
   const score = Math.max(0, Math.min(100, rawScore));
 
   // Determine letter grade
