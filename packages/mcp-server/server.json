@@ -3,7 +3,7 @@
   "name": "dev.nullclear/mcp",
   "title": "NullClear MCP Server",
   "description": "Autonomous non-custodial clearing, reputation scoring, and KYA corporate liability verification for AI agent commerce",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "homepage": "https://nullclear.dev",
   "repository": {
     "type": "git",
@@ -14,7 +14,7 @@
     {
       "registry": "npm",
       "package": "@nullclear/mcp",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "transport": {
         "type": "stdio"
       },
@@ -30,7 +30,7 @@
     },
     {
       "name": "nullclear_escrow_x402_call",
-      "description": "Execute a deferred-escrow x402 upstream call. The buyer signs an EIP-3009 payment authorization held in escrow by NullClear. If the seller agent returns an invalid response or crashes, settlement is VOIDED with $0 lost."
+      "description": "Execute a deferred-escrow x402 call with deep value invariants (numeric bounds, regex, staleness), LLM-refusal traps, autonomous multi-seller failover routing, and outbound spend firewall limits. Settlement is strictly conditional: if upstream hallucinates or crashes, payment is VOIDED with $0 lost."
     },
     {
       "name": "nullclear_verify_kya_mandate",
