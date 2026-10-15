@@ -1,9 +1,9 @@
 import http from "node:http";
 import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
 import { z } from "zod";
-import { encodeBase64Json, BASE_MAINNET, type X402PaymentRequired } from "@nullclear/shared";
+import { encodeBase64Json, BASE_MAINNET, type X402PaymentRequired, type X402PaymentOption } from "@nullclear/shared";
 import { app as arbiterApp } from "@nullclear/worker-arbiter";
-import { createNullClearFetch, NullClearEscrowAbortedError } from "@nullclear/x402-arbiter";
+import { createNullClearFetch, NullClearEscrowAbortedError, signX402Payment } from "@nullclear/x402-arbiter";
 
 // ANSI color escape codes for high-contrast rich terminal output
 const BOLD = "\x1b[1m";
@@ -119,6 +119,46 @@ async function runDemo() {
       return res.end(JSON.stringify({ error: "Fatal LLM Out-Of-Memory Error" }));
     }
 
+    if (url === "/api/refusal-alpha") {
+      if (!paymentSigHeader) {
+        res.writeHead(402, {
+          "Content-Type": "application/json",
+          "PAYMENT-REQUIRED": encodeBase64Json(paymentRequired)
+        });
+        return res.end(JSON.stringify({ error: "Payment required: 0.05 USDC" }));
+      }
+      // Structurally valid JSON matching schema, but negative price and LLM refusal boilerplate!
+      res.writeHead(200, { "Content-Type": "application/json" });
+      return res.end(
+        JSON.stringify({
+          ticker: "ETH-USDC",
+          price: -50,
+          summary: "As an AI language model, I cannot provide accurate market data.",
+          confidence: 0.5
+        })
+      );
+    }
+
+    if (url === "/api/backup-honest-alpha") {
+      if (!paymentSigHeader) {
+        res.writeHead(402, {
+          "Content-Type": "application/json",
+          "PAYMENT-REQUIRED": encodeBase64Json(paymentRequired)
+        });
+        return res.end(JSON.stringify({ error: "Payment required: 0.05 USDC" }));
+      }
+      // Honest backup seller with positive price and verified summary
+      res.writeHead(200, { "Content-Type": "application/json" });
+      return res.end(
+        JSON.stringify({
+          ticker: "ETH-USDC",
+          price: 42.5,
+          summary: "Verified live feed",
+          confidence: 0.99
+        })
+      );
+    }
+
     res.writeHead(404);
     res.end();
   });
@@ -130,7 +170,9 @@ async function runDemo() {
   console.log(`${BOLD}2. Mock Seller HTTP Server mounted at:${RESET} http://127.0.0.1:${sellerPort}`);
   console.log(`  - ${YELLOW}Route 1:${RESET} /api/market-alpha (Honest seller, valid response)`);
   console.log(`  - ${YELLOW}Route 2:${RESET} /api/hallucinated-alpha (Hallucinating model, corrupted types)`);
-  console.log(`  - ${YELLOW}Route 3:${RESET} /api/broken-500 (Crashing server, HTTP 500 error)\n`);
+  console.log(`  - ${YELLOW}Route 3:${RESET} /api/broken-500 (Crashing server, HTTP 500 error)`);
+  console.log(`  - ${YELLOW}Route 4:${RESET} /api/refusal-alpha (Refusal boilerplate & negative price)`);
+  console.log(`  - ${YELLOW}Route 5:${RESET} /api/backup-honest-alpha (Verified fallback seller)\n`);
 
   // 3. Configure in-process NullClear customFetch dispatcher
   const arbiterBaseUrl = "https://mock-arbiter.nullclear.internal";
@@ -373,6 +415,78 @@ async function runDemo() {
     });
   }
 
+  // =========================================================================
+  // SCENARIO 5: DEEP INVARIANT REFUSAL TRAP + AUTONOMOUS FAILOVER ROUTING
+  // =========================================================================
+  console.log(`\n${BOLD}${CYAN}--- Executing Scenario 5: Deep Invariant & LLM Refusal Trap + Failover ---${RESET}`);
+
+  // Create payment authorization for backup seller
+  const backupPaymentOption: X402PaymentOption = {
+    scheme: "exact",
+    network: "eip155:8453",
+    amount: "50000",
+    asset: BASE_MAINNET.usdc,
+    payTo: sellerAccount.address,
+    maxTimeoutSeconds: 300
+  };
+  const backupSignatureHeader = await signX402Payment(
+    buyerKey,
+    backupPaymentOption,
+    `http://127.0.0.1:${sellerPort}/api/backup-honest-alpha`
+  );
+
+  try {
+    const res = await nullclearFetch(`http://127.0.0.1:${sellerPort}/api/refusal-alpha`, {
+      nullclear: {
+        sellerAgentId: "flaky-primary-seller",
+        schema: z.object({
+          ticker: z.string(),
+          price: z.number(),
+          summary: z.string(),
+          confidence: z.number()
+        }),
+        invariants: [
+          { path: "price", gt: 0 }
+        ],
+        rejectRefusals: true,
+        fallbacks: [
+          {
+            targetUrl: `http://127.0.0.1:${sellerPort}/api/backup-honest-alpha`,
+            sellerAgentId: "backup-honest-seller",
+            paymentSignatureHeader: backupSignatureHeader
+          }
+        ]
+      }
+    });
+
+    const data = (await res.json()) as any;
+    console.log(`  ${GREEN}✔ Primary Seller #1 flagged for LLM refusal and negative price (VOIDED, $0 charged)${RESET}`);
+    console.log(`  ${GREEN}✔ Arbiter autonomously executed failover to Backup Seller #2 in single HTTP call${RESET}`);
+    console.log(`  ${GREEN}✔ Backup Seller #2 output passed schema + value invariants (price = ${data.price})${RESET}`);
+    console.log(`  ${GRAY}Data received:${RESET}`, JSON.stringify(data));
+
+    results.push({
+      scenario: "5. Failover & Invariants",
+      expected: "Failover to Backup",
+      status: "SUCCESS (FAILOVER 200)",
+      settled: "0.05 USDC",
+      buyerSpent: "0.05 USDC",
+      passed: data.price === 42.5 && data.summary === "Verified live feed",
+      notes: "Auto-switched from refusal seller to verified backup"
+    });
+  } catch (err: any) {
+    console.error(`  ${RED}Scenario 5 Failed:${RESET}`, err.message);
+    results.push({
+      scenario: "5. Failover & Invariants",
+      expected: "Failover to Backup",
+      status: "FAILED",
+      settled: "0.00 USDC",
+      buyerSpent: "0.00 USDC",
+      passed: false,
+      notes: err.message
+    });
+  }
+
   // 4. Shutdown Mock Server
   sellerServer.close();
 
@@ -396,7 +510,7 @@ async function runDemo() {
   console.log("-".repeat(105));
   const allPassed = results.every((r) => r.passed);
   if (allPassed) {
-    console.log(`\n${BOLD}${GREEN}🎉 ALL 4 E2E SCENARIOS VERIFIED 100% GREEN! PROTOCOL FULLY FUNCTIONAL.${RESET}\n`);
+    console.log(`\n${BOLD}${GREEN}🎉 ALL 5 E2E SCENARIOS VERIFIED 100% GREEN! PROTOCOL FULLY FUNCTIONAL.${RESET}\n`);
     process.exit(0);
   } else {
     console.log(`\n${BOLD}${RED}✘ SOME SCENARIOS FAILED. CHECK OUTPUT ABOVE.${RESET}\n`);

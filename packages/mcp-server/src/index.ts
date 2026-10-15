@@ -84,6 +84,55 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
               type: "object",
               description: "JSON Schema draft-07 contract that response must strictly satisfy"
             },
+            invariants: {
+              type: "array",
+              description: "Deep value invariants (numeric bounds, regex, forbidden substrings, timestamp freshness)",
+              items: {
+                type: "object",
+                required: ["path"],
+                properties: {
+                  path: { type: "string" },
+                  gt: { type: "number" },
+                  gte: { type: "number" },
+                  lt: { type: "number" },
+                  lte: { type: "number" },
+                  eq: {},
+                  neq: {},
+                  minLength: { type: "number" },
+                  maxLength: { type: "number" },
+                  pattern: { type: "string" },
+                  notContains: { type: "array", items: { type: "string" } },
+                  maxStalenessSeconds: { type: "number" }
+                }
+              }
+            },
+            rejectRefusals: {
+              type: "boolean",
+              description: "Reject canonical LLM refusal strings (default: true)",
+              default: true
+            },
+            fallbacks: {
+              type: "array",
+              description: "Ordered fallback candidates for autonomous multi-seller failover routing (max 3)",
+              items: {
+                type: "object",
+                required: ["targetUrl", "paymentSignatureHeader"],
+                properties: {
+                  targetUrl: { type: "string" },
+                  sellerAgentId: { type: "string" },
+                  paymentSignatureHeader: { type: "string" },
+                  headers: { type: "object" }
+                }
+              }
+            },
+            spendPolicy: {
+              type: "object",
+              description: "Outbound spend firewall limits (maxPerCallAtomic, maxDailyWalletAtomic)",
+              properties: {
+                maxPerCallAtomic: { type: "string" },
+                maxDailyWalletAtomic: { type: "string" }
+              }
+            },
             buyerPrivateKey: {
               type: "string",
               description: "Optional buyer private key (defaults to BUYER_PRIVATE_KEY environment variable)"
@@ -160,6 +209,10 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       const minTrustScore = args?.minTrustScore ? Number(args.minTrustScore) : 50;
       const requiredFields = (args?.requiredFields as string[]) || undefined;
       const jsonSchema = (args?.jsonSchema as Record<string, unknown>) || undefined;
+      const invariants = (args?.invariants as any[]) || undefined;
+      const rejectRefusals = args?.rejectRefusals !== undefined ? Boolean(args.rejectRefusals) : true;
+      const fallbacks = (args?.fallbacks as any[]) || undefined;
+      const spendPolicy = (args?.spendPolicy as any) || undefined;
       const buyerPrivateKey = (args?.buyerPrivateKey as `0x${string}`) || DEFAULT_BUYER_KEY;
 
       const nullclearFetch = createNullClearFetch({
@@ -176,7 +229,11 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             sellerAgentId,
             minTrustScore,
             schema: jsonSchema,
-            requiredFields
+            requiredFields,
+            invariants,
+            rejectRefusals,
+            fallbacks,
+            spendPolicy
           }
         });
 

@@ -237,6 +237,9 @@ importers:
       viem:
         specifier: ^2.23.0
         version: 2.57.5(typescript@5.9.3)(zod@3.25.76)
+      zod:
+        specifier: ^3.24.2
+        version: 3.25.76
     devDependencies:
       tsup:
         specifier: ^8.3.6

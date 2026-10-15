@@ -3,6 +3,16 @@ import type { Env } from "../env.js";
 
 export const discoveryRouter = new Hono<Env>();
 
+// GET /health - Protocol health check & version indicator
+discoveryRouter.get("/health", (c) => {
+  return c.json({
+    status: "ok",
+    protocol: "NullClear",
+    version: "1.1.0",
+    timestamp: Date.now()
+  });
+});
+
 // GET / - Crisp, dark-mode technical documentation page in pure HTML/CSS
 discoveryRouter.get("/", (c) => {
   const html = `<!DOCTYPE html>

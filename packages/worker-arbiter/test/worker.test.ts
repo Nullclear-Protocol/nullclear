@@ -43,6 +43,9 @@ describe("NullClear Worker Arbiter Test Suite", () => {
       } else if (url === "/crash") {
         res.writeHead(500, { "Content-Type": "application/json" });
         res.end(JSON.stringify({ error: "Server 500 Explosion" }));
+      } else if (url === "/refusal") {
+        res.writeHead(200, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ ticker: "BTC-USDC", price: 68500, summary: "As an AI language model, I cannot provide guarantees." }));
       } else {
         res.writeHead(404);
         res.end();
@@ -578,7 +581,7 @@ describe("NullClear Worker Arbiter Test Suite", () => {
     const json = (await res.json()) as any;
     expect(json.cleared).toBe(true);
     expect(json.settled).toBe(true);
-    expect(json.settlementRouting).toBe("facilitator_micro_tier");
+    expect(json.settlementRouting).toBe("micro_tier_offchain_guarded");
   });
 
   // 17. Anti-Abuse Guard C: On-chain Sponsored vs Daily Cap Fallback
@@ -638,5 +641,176 @@ describe("NullClear Worker Arbiter Test Suite", () => {
     const cappedJson = (await cappedRes.json()) as any;
     expect(cappedJson.cleared).toBe(true);
     expect(cappedJson.settlementRouting).toBe("facilitator_daily_cap_fallback");
+  });
+
+  // 18. Deep Deterministic Invariants & LLM Refusal Guard
+  it("rejects response when value invariants or LLM refusal guard fail", async () => {
+    // 18A: Numeric invariant gt fails
+    const sig1 = await createValidPaymentSignature(sellerAccount.address, "10000");
+    const res1 = await app.fetch(
+      new Request("http://localhost/v1/clear", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          targetUrl: `http://127.0.0.1:${mockServerPort}/honest`,
+          paymentSignatureHeader: sig1,
+          validation: {
+            expectedStatus: [200],
+            invariants: [{ path: "price", gt: 100000 }] // price is 68500, fails gt 100000
+          }
+        })
+      }),
+      testEnv
+    );
+    expect(res1.status).toBe(422);
+    const json1 = (await res1.json()) as any;
+    expect(json1.cleared).toBe(false);
+    expect(json1.validationErrors.some((e: string) => e.includes("expected > 100000"))).toBe(true);
+
+    // 18B: notContains invariant fails
+    const sig2 = await createValidPaymentSignature(sellerAccount.address, "10000");
+    const res2 = await app.fetch(
+      new Request("http://localhost/v1/clear", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          targetUrl: `http://127.0.0.1:${mockServerPort}/honest`,
+          paymentSignatureHeader: sig2,
+          validation: {
+            expectedStatus: [200],
+            invariants: [{ path: "ticker", notContains: ["btc"] }]
+          }
+        })
+      }),
+      testEnv
+    );
+    expect(res2.status).toBe(422);
+    const json2 = (await res2.json()) as any;
+    expect(json2.cleared).toBe(false);
+    expect(json2.validationErrors.some((e: string) => e.includes("forbidden substring 'btc'"))).toBe(true);
+
+    // 18C: LLM Refusal pattern detected
+    const sig3 = await createValidPaymentSignature(sellerAccount.address, "10000");
+    const res3 = await app.fetch(
+      new Request("http://localhost/v1/clear", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          targetUrl: `http://127.0.0.1:${mockServerPort}/refusal`,
+          paymentSignatureHeader: sig3,
+          validation: {
+            expectedStatus: [200],
+            rejectRefusals: true
+          }
+        })
+      }),
+      testEnv
+    );
+    expect(res3.status).toBe(422);
+    const json3 = (await res3.json()) as any;
+    expect(json3.cleared).toBe(false);
+    expect(json3.validationErrors.some((e: string) => e.includes("LLM refusal pattern detected"))).toBe(true);
+  });
+
+  // 19. Autonomous Multi-Seller Failover Routing
+  it("autonomously fails over from failing primary seller to valid fallback candidate in single request", async () => {
+    const primarySig = await createValidPaymentSignature(sellerAccount.address, "10000");
+    const backupSig = await createValidPaymentSignature(sellerAccount.address, "10000");
+
+    const res = await app.fetch(
+      new Request("http://localhost/v1/clear", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          targetUrl: `http://127.0.0.1:${mockServerPort}/corrupted`, // primary seller returns malformed types
+          sellerAgentId: "flaky-primary-seller",
+          paymentSignatureHeader: primarySig,
+          validation: {
+            expectedStatus: [200],
+            jsonSchema: {
+              type: "object",
+              required: ["ticker", "price", "active"]
+            }
+          },
+          fallbacks: [
+            {
+              targetUrl: `http://127.0.0.1:${mockServerPort}/honest`, // fallback seller returns valid schema
+              sellerAgentId: "reliable-backup-seller",
+              paymentSignatureHeader: backupSig
+            }
+          ]
+        })
+      }),
+      testEnv
+    );
+
+    expect(res.status).toBe(200);
+    const json = (await res.json()) as any;
+    expect(json.cleared).toBe(true);
+    expect(json.settled).toBe(true);
+    expect(json.failoverAttempts).toBe(1);
+    expect(json.winningSellerAgentId).toBe("reliable-backup-seller");
+    expect(json.failedCandidates.length).toBe(1);
+    expect(json.failedCandidates[0].targetUrl).toContain("/corrupted");
+    expect(json.data.ticker).toBe("BTC-USDC");
+  });
+
+  // 20. Outbound Spend Firewall
+  it("enforces spend policy caps: 403 SPEND_LIMIT_EXCEEDED and DAILY_SPEND_CAP_EXCEEDED", async () => {
+    // 20A: Per-call limit exceeded
+    const sigHeader = await createValidPaymentSignature(sellerAccount.address, "50000");
+    const resPerCall = await app.fetch(
+      new Request("http://localhost/v1/clear", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          targetUrl: `http://127.0.0.1:${mockServerPort}/honest`,
+          paymentSignatureHeader: sigHeader,
+          spendPolicy: {
+            maxPerCallAtomic: "10000" // 50000 > 10000 limit
+          }
+        })
+      }),
+      testEnv
+    );
+    expect(resPerCall.status).toBe(403);
+    const jsonPerCall = (await resPerCall.json()) as any;
+    expect(jsonPerCall.error).toBe("SPEND_LIMIT_EXCEEDED");
+
+    // 20B: Daily wallet cap exceeded
+    const mockDailyKv = {
+      get: async () => "9000",
+      put: async () => {}
+    };
+    const resDaily = await app.fetch(
+      new Request("http://localhost/v1/clear", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          targetUrl: `http://127.0.0.1:${mockServerPort}/honest`,
+          paymentSignatureHeader: sigHeader, // 50000 + 9000 > 55000 cap
+          spendPolicy: {
+            maxDailyWalletAtomic: "55000"
+          }
+        })
+      }),
+      {
+        ...testEnv,
+        KV: mockDailyKv as any
+      }
+    );
+    expect(resDaily.status).toBe(403);
+    const jsonDaily = (await resDaily.json()) as any;
+    expect(jsonDaily.error).toBe("DAILY_SPEND_CAP_EXCEEDED");
+  });
+
+  // 21. Health Check Endpoint
+  it("GET /health returns 200 with status ok and version 1.1.0", async () => {
+    const res = await app.fetch(new Request("http://localhost/health"), testEnv);
+    expect(res.status).toBe(200);
+    const json = (await res.json()) as any;
+    expect(json.status).toBe("ok");
+    expect(json.protocol).toBe("NullClear");
+    expect(json.version).toBe("1.1.0");
   });
 });

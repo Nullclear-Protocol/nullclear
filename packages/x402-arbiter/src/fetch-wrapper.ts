@@ -2,7 +2,10 @@ import { z } from "zod";
 import {
   decodeBase64Json,
   type X402PaymentRequired,
-  type X402PaymentOption
+  type X402PaymentOption,
+  type InvariantRule,
+  type FallbackTarget,
+  type SpendPolicy
 } from "@nullclear/shared";
 import { signX402Payment, type SignerInput } from "./signer.js";
 
@@ -13,6 +16,8 @@ export class NullClearEscrowAbortedError extends Error {
   public score?: number;
   public upstreamStatus?: number;
   public reason?: string;
+  public failoverAttempts?: number;
+  public failedCandidates?: Array<{ targetUrl: string; sellerAgentId?: string; stage: string; reason: string }>;
 
   constructor(message: string, details: {
     stage: string;
@@ -21,6 +26,8 @@ export class NullClearEscrowAbortedError extends Error {
     score?: number;
     upstreamStatus?: number;
     reason?: string;
+    failoverAttempts?: number;
+    failedCandidates?: Array<{ targetUrl: string; sellerAgentId?: string; stage: string; reason: string }>;
   }) {
     super(message);
     this.name = "NullClearEscrowAbortedError";
@@ -92,6 +99,10 @@ export interface NullClearOptions {
   schema?: z.ZodTypeAny | Record<string, unknown>;
   requiredFields?: string[];
   sha256Match?: string;
+  invariants?: InvariantRule[];
+  rejectRefusals?: boolean;
+  fallbacks?: FallbackTarget[];
+  spendPolicy?: SpendPolicy;
 }
 
 export interface NullClearFetchConfig {
@@ -192,8 +203,12 @@ export function createNullClearFetch(config: NullClearFetchConfig) {
         expectedStatus: [200],
         jsonSchema,
         requiredFields: init?.nullclear?.requiredFields,
-        sha256Match: init?.nullclear?.sha256Match
-      }
+        sha256Match: init?.nullclear?.sha256Match,
+        rejectRefusals: init?.nullclear?.rejectRefusals ?? true,
+        invariants: init?.nullclear?.invariants
+      },
+      fallbacks: init?.nullclear?.fallbacks,
+      spendPolicy: init?.nullclear?.spendPolicy
     };
 
     const arbiterRes = await customFetch(`${arbiterUrl}/v1/clear`, {
@@ -236,7 +251,9 @@ export function createNullClearFetch(config: NullClearFetchConfig) {
         validationErrors: arbiterData.validationErrors || [],
         score: arbiterData.score,
         upstreamStatus: arbiterData.upstreamStatus,
-        reason: arbiterData.reason || arbiterData.error
+        reason: arbiterData.reason || arbiterData.error,
+        failoverAttempts: arbiterData.failoverAttempts,
+        failedCandidates: arbiterData.failedCandidates
       }
     );
   };

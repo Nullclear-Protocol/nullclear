@@ -1,4 +1,9 @@
-import type { KYAMandate } from "@nullclear/shared";
+import type {
+  KYAMandate,
+  ValidationConfig,
+  FallbackTarget,
+  SpendPolicy
+} from "@nullclear/shared";
 
 export interface NullClearClientConfig {
   arbiterUrl?: string;
@@ -14,12 +19,10 @@ export interface ClearRequest {
   paymentSignatureHeader: string;
   sellerAgentId?: string;
   minTrustScore?: number;
-  validation?: {
-    expectedStatus?: number[];
-    jsonSchema?: Record<string, unknown>;
-    requiredFields?: string[];
-    sha256Match?: string;
-  };
+  twoPhaseRelease?: boolean;
+  validation?: ValidationConfig;
+  fallbacks?: FallbackTarget[];
+  spendPolicy?: SpendPolicy;
 }
 
 export interface ClearResult<T = unknown> {
@@ -28,12 +31,21 @@ export interface ClearResult<T = unknown> {
   clearingId?: string;
   buyerCharged: string;
   clearingFee?: string;
+  settlementRouting?: string;
   transaction?: `0x${string}`;
   attestation?: unknown;
   data?: T;
   stage?: string;
   error?: string;
   validationErrors?: string[];
+  failoverAttempts?: number;
+  winningSellerAgentId?: string;
+  failedCandidates?: Array<{
+    targetUrl: string;
+    sellerAgentId?: string;
+    stage: string;
+    reason: string;
+  }>;
 }
 
 export class NullClearClient {

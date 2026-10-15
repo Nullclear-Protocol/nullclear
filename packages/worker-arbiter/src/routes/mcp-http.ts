@@ -30,7 +30,15 @@ const MCP_TOOLS = [
         sellerAgentId: { type: "string", description: "Seller's agent ID for reputation check and Sybil wash-trade gating" },
         minTrustScore: { type: "number", description: "Minimum acceptable trust score for seller (0-100, default 50)", default: 50 },
         requiredFields: { type: "array", items: { type: "string" }, description: "Field paths that must exist in response" },
-        jsonSchema: { type: "object", description: "JSON Schema draft-07 contract that response must strictly satisfy" }
+        jsonSchema: { type: "object", description: "JSON Schema draft-07 contract that response must strictly satisfy" },
+        invariants: {
+          type: "array",
+          description: "Deep value invariants (numeric bounds, regex, forbidden substrings, timestamp freshness)",
+          items: { type: "object" }
+        },
+        rejectRefusals: { type: "boolean", description: "Reject canonical LLM refusal strings (default: true)", default: true },
+        fallbacks: { type: "array", description: "Ordered fallback candidates for autonomous multi-seller failover routing (max 3)", items: { type: "object" } },
+        spendPolicy: { type: "object", description: "Outbound spend firewall limits (maxPerCallAtomic, maxDailyWalletAtomic)" }
       }
     }
   },
