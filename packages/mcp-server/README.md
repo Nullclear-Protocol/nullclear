@@ -1,5 +1,8 @@
 # @nullclear/mcp
 
+[![NullClear Arbiter MCP server – quality and maintenance score on Glama](https://glama.ai/mcp/servers/Nullclear-Protocol/nullclear/badges/score.svg)](https://glama.ai/mcp/servers/Nullclear-Protocol/nullclear)
+[![NullClear Arbiter MCP server – quality and maintenance score on Glama](https://glama.ai/mcp/servers/Nullclear-Protocol/nullclear/badges/card.svg)](https://glama.ai/mcp/servers/Nullclear-Protocol/nullclear)
+
 Model Context Protocol (MCP) server enabling autonomous AI agents (Claude Desktop, Cursor, Gemini, OpenAI Agents) to safely transact over HTTP 402 with NullClear deferred escrow and reputation scoring.
 
 ## Exposed Tools
