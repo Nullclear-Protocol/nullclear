@@ -9,22 +9,14 @@ import { mcpHttpRouter } from "./routes/mcp-http.js";
 import { sandboxRouter } from "./routes/sandbox.js";
 import { bazaarRouter } from "./routes/bazaar.js";
 import { a2aRouter } from "./routes/a2a.js";
+import { safepayRouter } from "./routes/safepay.js";
+import { safepayWebRouter } from "./routes/safepay-web.js";
 
 declare const process: any;
 
 const app = new Hono<Env>();
 
-// Canonical domain consolidation: 301 redirect nullclear.com to nullclear.dev
-app.use("*", async (c, next) => {
-  const url = new URL(c.req.url);
-  const hostname = url.hostname.toLowerCase();
-  if (hostname === "nullclear.com" || hostname === "www.nullclear.com") {
-    return c.redirect(`https://nullclear.dev${url.pathname}${url.search}`, 301);
-  }
-  await next();
-});
-
-// CORS middleware exposing NullClear attestation and x402 headers
+// CORS middleware exposing NullClear attestation, SafePay, and x402 headers
 app.use(
   "*",
   cors({
@@ -38,7 +30,9 @@ app.use(
       "PAYMENT-REQUIRED",
       "SIGN-IN-WITH-X",
       "X-NullClear-Escrow-Hold",
-      "X-NullClear-Clearing-Id"
+      "X-NullClear-Clearing-Id",
+      "X-Buyer-Address",
+      "X-Buyer-Signature"
     ],
     exposeHeaders: [
       "PAYMENT-RESPONSE",
@@ -46,10 +40,51 @@ app.use(
       "Payment-Required",
       "X-Payment-Response",
       "Pay-To",
-      "X-NullClear-Attestation"
+      "X-NullClear-Attestation",
+      "X-NullClear-Deliverable-SHA256",
+      "X-NullClear-Receipt-Signature"
     ]
   })
 );
+
+// Domain routing:
+// - On nullclear.com / www.nullclear.com:
+//   * Agent protocol discovery paths (/llms.txt, /openapi.json, /.well-known/*, /v1/*, /mcp, /a2a) 301-redirect to https://nullclear.dev
+//   * Human commercial routes (/, /deal/*, /for/*, /sitemap.xml, /robots.txt) render NullClear SafePay directly
+app.use("*", async (c, next) => {
+  const url = new URL(c.req.url);
+  const hostname = url.hostname.toLowerCase();
+  const p = url.pathname;
+
+  if (hostname === "nullclear.com" || hostname === "www.nullclear.com") {
+    const isAgentProtocolPath =
+      p === "/llms.txt" ||
+      p === "/llms-full.txt" ||
+      p === "/openapi.json" ||
+      p === "/api/v1/openapi.json" ||
+      p === "/agents.md" ||
+      p.startsWith("/.well-known/") ||
+      p.startsWith("/v1/") ||
+      p.startsWith("/mcp") ||
+      p.startsWith("/a2a");
+
+    if (isAgentProtocolPath) {
+      return c.redirect(`https://nullclear.dev${url.pathname}${url.search}`, 301);
+    }
+
+    if (
+      p === "/" ||
+      p === "/safepay" ||
+      p === "/sitemap.xml" ||
+      p === "/robots.txt" ||
+      p.startsWith("/deal/") ||
+      p.startsWith("/for/")
+    ) {
+      return safepayWebRouter.fetch(c.req.raw, c.env);
+    }
+  }
+  await next();
+});
 
 // Global Error Handler
 app.onError((err, c) => {
@@ -80,7 +115,13 @@ app.get("/v1/stats", async (c) => {
   });
 });
 
-// Route mountings
+// SafePay Backend API & Web Routes
+app.route("/api/safepay", safepayRouter);
+app.route("/safepay", safepayWebRouter);
+app.get("/deal/:dealId", (c) => safepayWebRouter.fetch(c.req.raw, c.env));
+app.get("/for/:vertical", (c) => safepayWebRouter.fetch(c.req.raw, c.env));
+
+// A2A & x402 Route mountings
 app.route("/v1/sandbox", sandboxRouter);
 app.route("/v1/bazaar", bazaarRouter);
 app.route("/v1/clear", clearRouter);
@@ -92,4 +133,5 @@ app.route("/", discoveryRouter);
 
 export default app;
 export { app };
+
 

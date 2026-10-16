@@ -1,0 +1,24 @@
+{
+  "name": "@nullclear/safepay-web",
+  "version": "1.1.2",
+  "private": true,
+  "description": "NullClear SafePay (nullclear.com) — Zero-Custody Cryptographic Deliverable Escrow Web Application & Client SDK",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsup src/index.ts --format esm --dts",
+    "typecheck": "tsc --noEmit",
+    "test": "echo \"Tests run via worker-arbiter & e2e suite\""
+  },
+  "dependencies": {
+    "@nullclear/shared": "workspace:*",
+    "viem": "^2.23.5",
+    "zod": "^3.24.2"
+  },
+  "devDependencies": {
+    "@types/node": "^20.17.0",
+    "tsup": "^8.4.0",
+    "typescript": "^5.7.3"
+  }
+}

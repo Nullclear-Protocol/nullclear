@@ -1,4 +1,14 @@
-import type { KYAMandate } from "@nullclear/shared";
+import type {
+  KYAMandate,
+  SafePayCreatorRole,
+  SafePayDealStatus,
+  SafePayFeePayer,
+  SafePayRedactedPreview,
+  SafePayVerificationMode,
+  SafePayVerificationSpec,
+  SignedSafePaySettlementReceipt,
+  X402PaymentSignaturePayload
+} from "@nullclear/shared";
 
 export interface Env {
   Bindings: {
@@ -18,6 +28,39 @@ export interface Env {
     MIN_ONCHAIN_ATOMIC?: string;
     MAX_DAILY_ONCHAIN_PER_WALLET?: string;
   };
+}
+
+export interface SafePayDealRecord {
+  id: string;
+  title: string;
+  description: string;
+  creatorRole: SafePayCreatorRole;
+  buyerAddress?: `0x${string}`;
+  sellerAddress?: `0x${string}`;
+  chainId: 8453 | 84532;
+  amountAtomic: string;
+  feePayer: SafePayFeePayer;
+  sellerNetAtomic: string;
+  protocolFeeAtomic: string;
+  totalBuyerSignAtomic: string;
+  status: SafePayDealStatus;
+  expiresAt: number;
+  verificationMode: SafePayVerificationMode;
+  verificationSpec: SafePayVerificationSpec;
+  sellerSignaturePayload?: X402PaymentSignaturePayload | null;
+  feeSignaturePayload?: X402PaymentSignaturePayload | null;
+  redactedPreview?: SafePayRedactedPreview | null;
+  encryptedDeliverable?: string | null;
+  deliverableMimeType?: string | null;
+  deliverableFilename?: string | null;
+  deliverableSha256?: string | null;
+  sellerTxHash?: `0x${string}` | null;
+  feeTxHash?: `0x${string}` | null;
+  receipt?: SignedSafePaySettlementReceipt | null;
+  validationErrors?: string[] | null;
+  createdAt: number;
+  updatedAt: number;
+  settledAt?: number | null;
 }
 
 export interface AgentStats {
@@ -91,6 +134,8 @@ export interface IArbiterStore {
   getAgent(agentId: string, chainId: number): Promise<StoredAgentRecord | null>;
   saveAgent(agent: StoredAgentRecord): Promise<void>;
   getProtocolStats(): Promise<ProtocolStats>;
+  saveSafePayDeal(deal: SafePayDealRecord): Promise<void>;
+  getSafePayDeal(dealId: string): Promise<SafePayDealRecord | null>;
   reset(): void;
 }
 
@@ -105,6 +150,7 @@ export class MemoryArbiterStore implements IArbiterStore {
   private usedNonces = new Set<string>();
   private kyaMandates = new Map<string, StoredKyaRecord>();
   private agents = new Map<string, StoredAgentRecord>();
+  private safepayDeals = new Map<string, SafePayDealRecord>();
 
   reset(): void {
     this.stats.clear();
@@ -113,6 +159,7 @@ export class MemoryArbiterStore implements IArbiterStore {
     this.usedNonces.clear();
     this.kyaMandates.clear();
     this.agents.clear();
+    this.safepayDeals.clear();
   }
 
   async hasUsedNonce(network: string, buyerAddress: string, nonce: string): Promise<boolean> {
@@ -238,6 +285,15 @@ export class MemoryArbiterStore implements IArbiterStore {
       totalAgentsIndexed,
       recentClearings
     };
+  }
+
+  async saveSafePayDeal(deal: SafePayDealRecord): Promise<void> {
+    this.safepayDeals.set(deal.id, { ...deal });
+  }
+
+  async getSafePayDeal(dealId: string): Promise<SafePayDealRecord | null> {
+    const found = this.safepayDeals.get(dealId);
+    return found ? { ...found } : null;
   }
 }
 
@@ -518,6 +574,155 @@ export class D1ArbiterStore implements IArbiterStore {
       voidedHallucinations,
       totalAgentsIndexed,
       recentClearings
+    };
+  }
+
+  private async ensureSafePayTable(): Promise<void> {
+    await this.db
+      .prepare(
+        `CREATE TABLE IF NOT EXISTS safepay_deals (
+          id TEXT PRIMARY KEY,
+          title TEXT NOT NULL,
+          description TEXT NOT NULL DEFAULT '',
+          creator_role TEXT NOT NULL DEFAULT 'seller',
+          buyer_address TEXT,
+          seller_address TEXT,
+          chain_id INTEGER NOT NULL DEFAULT 8453,
+          amount_atomic TEXT NOT NULL,
+          fee_payer TEXT NOT NULL DEFAULT 'seller',
+          seller_net_atomic TEXT NOT NULL,
+          protocol_fee_atomic TEXT NOT NULL,
+          total_buyer_sign_atomic TEXT NOT NULL,
+          status TEXT NOT NULL DEFAULT 'CREATED',
+          expires_at INTEGER NOT NULL,
+          verification_mode TEXT NOT NULL,
+          verification_spec_json TEXT NOT NULL,
+          seller_sig_payload_json TEXT,
+          fee_sig_payload_json TEXT,
+          redacted_preview_json TEXT,
+          encrypted_deliverable TEXT,
+          deliverable_mime_type TEXT,
+          deliverable_filename TEXT,
+          deliverable_sha256 TEXT,
+          seller_tx_hash TEXT,
+          fee_tx_hash TEXT,
+          receipt_json TEXT,
+          validation_errors_json TEXT,
+          created_at INTEGER NOT NULL,
+          updated_at INTEGER NOT NULL,
+          settled_at INTEGER
+        )`
+      )
+      .run();
+  }
+
+  async saveSafePayDeal(deal: SafePayDealRecord): Promise<void> {
+    await this.ensureSafePayTable();
+    await this.db
+      .prepare(
+        `INSERT INTO safepay_deals (
+          id, title, description, creator_role, buyer_address, seller_address, chain_id,
+          amount_atomic, fee_payer, seller_net_atomic, protocol_fee_atomic, total_buyer_sign_atomic,
+          status, expires_at, verification_mode, verification_spec_json,
+          seller_sig_payload_json, fee_sig_payload_json, redacted_preview_json,
+          encrypted_deliverable, deliverable_mime_type, deliverable_filename, deliverable_sha256,
+          seller_tx_hash, fee_tx_hash, receipt_json, validation_errors_json,
+          created_at, updated_at, settled_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(id) DO UPDATE SET
+          title = excluded.title,
+          description = excluded.description,
+          buyer_address = excluded.buyer_address,
+          seller_address = excluded.seller_address,
+          status = excluded.status,
+          seller_sig_payload_json = excluded.seller_sig_payload_json,
+          fee_sig_payload_json = excluded.fee_sig_payload_json,
+          redacted_preview_json = excluded.redacted_preview_json,
+          encrypted_deliverable = excluded.encrypted_deliverable,
+          deliverable_mime_type = excluded.deliverable_mime_type,
+          deliverable_filename = excluded.deliverable_filename,
+          deliverable_sha256 = excluded.deliverable_sha256,
+          seller_tx_hash = excluded.seller_tx_hash,
+          fee_tx_hash = excluded.fee_tx_hash,
+          receipt_json = excluded.receipt_json,
+          validation_errors_json = excluded.validation_errors_json,
+          updated_at = excluded.updated_at,
+          settled_at = excluded.settled_at`
+      )
+      .bind(
+        deal.id,
+        deal.title,
+        deal.description,
+        deal.creatorRole,
+        deal.buyerAddress || null,
+        deal.sellerAddress || null,
+        deal.chainId,
+        deal.amountAtomic,
+        deal.feePayer,
+        deal.sellerNetAtomic,
+        deal.protocolFeeAtomic,
+        deal.totalBuyerSignAtomic,
+        deal.status,
+        deal.expiresAt,
+        deal.verificationMode,
+        JSON.stringify(deal.verificationSpec),
+        deal.sellerSignaturePayload ? JSON.stringify(deal.sellerSignaturePayload) : null,
+        deal.feeSignaturePayload ? JSON.stringify(deal.feeSignaturePayload) : null,
+        deal.redactedPreview ? JSON.stringify(deal.redactedPreview) : null,
+        deal.encryptedDeliverable ?? null,
+        deal.deliverableMimeType ?? null,
+        deal.deliverableFilename ?? null,
+        deal.deliverableSha256 ?? null,
+        deal.sellerTxHash ?? null,
+        deal.feeTxHash ?? null,
+        deal.receipt ? JSON.stringify(deal.receipt) : null,
+        deal.validationErrors ? JSON.stringify(deal.validationErrors) : null,
+        deal.createdAt,
+        deal.updatedAt,
+        deal.settledAt ?? null
+      )
+      .run();
+  }
+
+  async getSafePayDeal(dealId: string): Promise<SafePayDealRecord | null> {
+    await this.ensureSafePayTable();
+    const row = await this.db
+      .prepare("SELECT * FROM safepay_deals WHERE id = ? LIMIT 1")
+      .bind(dealId)
+      .first<any>();
+    if (!row) return null;
+
+    return {
+      id: row.id,
+      title: row.title,
+      description: row.description || "",
+      creatorRole: row.creator_role || "seller",
+      buyerAddress: row.buyer_address || undefined,
+      sellerAddress: row.seller_address || undefined,
+      chainId: Number(row.chain_id) === 84532 ? 84532 : 8453,
+      amountAtomic: row.amount_atomic,
+      feePayer: row.fee_payer || "seller",
+      sellerNetAtomic: row.seller_net_atomic,
+      protocolFeeAtomic: row.protocol_fee_atomic,
+      totalBuyerSignAtomic: row.total_buyer_sign_atomic,
+      status: row.status,
+      expiresAt: Number(row.expires_at),
+      verificationMode: row.verification_mode,
+      verificationSpec: row.verification_spec_json ? JSON.parse(row.verification_spec_json) : {},
+      sellerSignaturePayload: row.seller_sig_payload_json ? JSON.parse(row.seller_sig_payload_json) : null,
+      feeSignaturePayload: row.fee_sig_payload_json ? JSON.parse(row.fee_sig_payload_json) : null,
+      redactedPreview: row.redacted_preview_json ? JSON.parse(row.redacted_preview_json) : null,
+      encryptedDeliverable: row.encrypted_deliverable ?? null,
+      deliverableMimeType: row.deliverable_mime_type ?? null,
+      deliverableFilename: row.deliverable_filename ?? null,
+      deliverableSha256: row.deliverable_sha256 ?? null,
+      sellerTxHash: row.seller_tx_hash ?? null,
+      feeTxHash: row.fee_tx_hash ?? null,
+      receipt: row.receipt_json ? JSON.parse(row.receipt_json) : null,
+      validationErrors: row.validation_errors_json ? JSON.parse(row.validation_errors_json) : null,
+      createdAt: Number(row.created_at),
+      updatedAt: Number(row.updated_at),
+      settledAt: row.settled_at ? Number(row.settled_at) : null
     };
   }
 }
