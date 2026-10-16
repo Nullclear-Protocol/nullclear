@@ -1,6 +1,6 @@
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
-  "name": "io.github.mithgalalfayez/nullclear",
+  "name": "io.github.Nullclear-Protocol/nullclear",
   "title": "NullClear Arbiter",
   "description": "Autonomous x402 payment schema-escrow arbiter, spend firewall, failover & ERC-8004 Sybil oracle",
   "version": "1.1.2",

@@ -1,7 +1,7 @@
 {
   "name": "@nullclear/mcp",
   "version": "1.1.2",
-  "mcpName": "io.github.mithgalalfayez/nullclear",
+  "mcpName": "io.github.Nullclear-Protocol/nullclear",
   "description": "Model Context Protocol server for autonomous agents using NullClear",
   "license": "MIT",
   "author": "NullClear Protocol <contact@nullclear.dev>",
