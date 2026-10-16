@@ -6,17 +6,18 @@ import {
 } from "@modelcontextprotocol/sdk/types.js";
 import { NullClearClient, createNullClearFetch, NullClearEscrowAbortedError } from "@nullclear/x402-arbiter";
 
-const ARBITER_URL = process.env.ARBITER_URL || "https://arbiter.nullclear.dev";
+const ARBITER_URL = process.env.ARBITER_URL || "https://api.nullclear.dev";
+const SANDBOX_TEST_KEY = "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80" as const;
 const DEFAULT_BUYER_KEY =
   (process.env.BUYER_PRIVATE_KEY as `0x${string}`) ||
-  "0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d"; // Deterministic test buyer key
+  SANDBOX_TEST_KEY; // Zero-config deterministic sandbox test key
 
 const client = new NullClearClient({ arbiterUrl: ARBITER_URL });
 
 const server = new Server(
   {
     name: "nullclear-mcp-server",
-    version: "1.0.0"
+    version: "1.1.1"
   },
   {
     capabilities: {
@@ -52,7 +53,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       {
         name: "nullclear_escrow_x402_call",
         description:
-          "Execute an x402-gated HTTP API call through NullClear deferred schema escrow. The arbiter guarantees payment is only settled if upstream returns valid data matching your schema contract. If the seller hallucinates or crashes, $0 is spent.",
+          "Execute an x402-gated HTTP API call through NullClear deferred schema escrow. The arbiter guarantees payment is only settled if upstream returns valid data matching your schema contract. If the seller hallucinates or crashes, $0 is spent. Users can test immediately against https://api.nullclear.dev/v1/sandbox/market-feed (or fail over from https://api.nullclear.dev/v1/sandbox/hallucinating-seller to https://api.nullclear.dev/v1/sandbox/market-feed) with zero wallet setup.",
         inputSchema: {
           type: "object",
           required: ["targetUrl"],

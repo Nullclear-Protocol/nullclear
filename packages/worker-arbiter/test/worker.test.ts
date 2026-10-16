@@ -813,4 +813,122 @@ describe("NullClear Worker Arbiter Test Suite", () => {
     expect(json.protocol).toBe("NullClear");
     expect(json.version).toBe("1.1.0");
   });
+
+  // 22. Live Sandbox 402 Seller Endpoints & Public Stats
+  it("GET /v1/sandbox/market-feed returns 402 without payment and 200 with payment", async () => {
+    // Without payment header
+    const res402 = await app.fetch(new Request("http://localhost/v1/sandbox/market-feed"), testEnv);
+    expect(res402.status).toBe(402);
+    expect(res402.headers.get("PAYMENT-REQUIRED")).toBeTruthy();
+    const json402 = (await res402.json()) as any;
+    expect(json402.error).toBe("Payment Required");
+    expect(json402.amount).toBe("1000");
+
+    // With payment signature
+    const sigHeader = await createValidPaymentSignature(sellerAccount.address, "1000");
+    const res200 = await app.fetch(
+      new Request("http://localhost/v1/sandbox/market-feed", {
+        headers: { "PAYMENT-SIGNATURE": sigHeader }
+      }),
+      testEnv
+    );
+    expect(res200.status).toBe(200);
+    const json200 = (await res200.json()) as any;
+    expect(json200.asset).toBe("ETH/USDC");
+    expect(json200.price).toBe(2645.50);
+    expect(json200.source).toBe("NullClear Verified Feed");
+  });
+
+  it("GET /v1/sandbox/hallucinating-seller returns 402 without payment, and refusal data with payment", async () => {
+    const res402 = await app.fetch(new Request("http://localhost/v1/sandbox/hallucinating-seller"), testEnv);
+    expect(res402.status).toBe(402);
+
+    const sigHeader = await createValidPaymentSignature(sellerAccount.address, "1000");
+    const res200 = await app.fetch(
+      new Request("http://localhost/v1/sandbox/hallucinating-seller", {
+        headers: { "PAYMENT-SIGNATURE": sigHeader }
+      }),
+      testEnv
+    );
+    expect(res200.status).toBe(200);
+    const json200 = (await res200.json()) as any;
+    expect(json200.price).toBe(-9999);
+    expect(json200.summary).toContain("As an AI language model");
+  });
+
+  it("POST /v1/clear against sandbox endpoints validates, settles, and reports in /v1/stats", async () => {
+    const sigHeader = await createValidPaymentSignature(sellerAccount.address, "1000");
+    const res = await app.fetch(
+      new Request("http://localhost/v1/clear", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          targetUrl: "http://localhost/v1/sandbox/market-feed",
+          paymentSignatureHeader: sigHeader,
+          sellerAgentId: "124595",
+          validation: {
+            expectedStatus: [200],
+            invariants: [{ path: "price", gt: 0 }]
+          }
+        })
+      }),
+      testEnv
+    );
+
+    expect(res.status).toBe(200);
+    const json = (await res.json()) as any;
+    expect(json.cleared).toBe(true);
+    expect(json.settled).toBe(true);
+    expect(json.settlementRouting).toBe("sandbox_simulated");
+    expect(json.data.price).toBe(2645.50);
+    expect(json.attestation).toBeDefined();
+
+    // Verify /v1/stats records this clearing
+    const statsRes = await app.fetch(new Request("http://localhost/v1/stats"), testEnv);
+    expect(statsRes.status).toBe(200);
+    const stats = (await statsRes.json()) as any;
+    expect(stats.totalClearings).toBeGreaterThanOrEqual(1);
+    expect(stats.validSettlements).toBeGreaterThanOrEqual(1);
+    expect(stats.recentClearings.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("POST /v1/clear voids hallucinating seller and successfully fails over to market feed", async () => {
+    const primarySig = await createValidPaymentSignature(sellerAccount.address, "1000");
+    const fallbackSig = await createValidPaymentSignature(sellerAccount.address, "1000");
+
+    const res = await app.fetch(
+      new Request("http://localhost/v1/clear", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          targetUrl: "http://localhost/v1/sandbox/hallucinating-seller",
+          paymentSignatureHeader: primarySig,
+          sellerAgentId: "124550",
+          validation: {
+            expectedStatus: [200],
+            rejectRefusals: true,
+            invariants: [{ path: "price", gt: 0 }]
+          },
+          fallbacks: [
+            {
+              targetUrl: "http://localhost/v1/sandbox/market-feed",
+              paymentSignatureHeader: fallbackSig,
+              sellerAgentId: "124595"
+            }
+          ]
+        })
+      }),
+      testEnv
+    );
+
+    expect(res.status).toBe(200);
+    const json = (await res.json()) as any;
+    expect(json.cleared).toBe(true);
+    expect(json.settled).toBe(true);
+    expect(json.failoverAttempts).toBe(1);
+    expect(json.failedCandidates.length).toBe(1);
+    expect(json.failedCandidates[0].sellerAgentId).toBe("124550");
+    expect(json.winningSellerAgentId).toBe("124595");
+    expect(json.data.price).toBe(2645.50);
+  });
 });

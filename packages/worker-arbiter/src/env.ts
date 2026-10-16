@@ -65,6 +65,21 @@ export interface ClearingRecord {
   createdAt: number;
 }
 
+export interface ProtocolStats {
+  totalClearings: number;
+  validSettlements: number;
+  voidedHallucinations: number;
+  totalAgentsIndexed: number;
+  recentClearings: Array<{
+    clearing_id: string;
+    seller_agent_id: string;
+    stage: string;
+    cleared: boolean;
+    amount_atomic: string;
+    created_at: number;
+  }>;
+}
+
 export interface IArbiterStore {
   hasUsedNonce(network: string, buyerAddress: string, nonce: string): Promise<boolean>;
   getAgentStats(agentId: string): Promise<AgentStats>;
@@ -75,6 +90,7 @@ export interface IArbiterStore {
   saveKyaMandate(mandate: StoredKyaRecord): Promise<void>;
   getAgent(agentId: string, chainId: number): Promise<StoredAgentRecord | null>;
   saveAgent(agent: StoredAgentRecord): Promise<void>;
+  getProtocolStats(): Promise<ProtocolStats>;
   reset(): void;
 }
 
@@ -196,6 +212,32 @@ export class MemoryArbiterStore implements IArbiterStore {
   async saveAgent(agent: StoredAgentRecord): Promise<void> {
     const key = `${agent.agentId}:${agent.chainId}`;
     this.agents.set(key, agent);
+  }
+
+  async getProtocolStats(): Promise<ProtocolStats> {
+    const totalClearings = this.clearings.length;
+    const validSettlements = this.clearings.filter((c) => c.status === "PASSED").length;
+    const voidedHallucinations = this.clearings.filter((c) => c.status !== "PASSED").length;
+    const totalAgentsIndexed = this.agents.size;
+    const recentClearings = this.clearings
+      .slice(-10)
+      .reverse()
+      .map((r) => ({
+        clearing_id: r.id,
+        seller_agent_id: r.sellerAgentId,
+        stage: r.status === "PASSED" ? "SETTLED" : r.status,
+        cleared: r.status === "PASSED",
+        amount_atomic: r.amount,
+        created_at: r.createdAt
+      }));
+
+    return {
+      totalClearings,
+      validSettlements,
+      voidedHallucinations,
+      totalAgentsIndexed,
+      recentClearings
+    };
   }
 }
 
@@ -440,6 +482,43 @@ export class D1ArbiterStore implements IArbiterStore {
       )
       .bind(agent.agentId, agent.chainId, agent.ownerAddress || null, agent.agentUri || null, agent.createdAt)
       .run();
+  }
+
+  async getProtocolStats(): Promise<ProtocolStats> {
+    const [totalClearingsRes, validRes, voidedRes, totalAgentsRes, recentRes] = await Promise.all([
+      this.db.prepare("SELECT COUNT(*) as count FROM clearings").first<{ count: number }>(),
+      this.db.prepare("SELECT COUNT(*) as count FROM clearings WHERE status = 'PASSED'").first<{ count: number }>(),
+      this.db.prepare("SELECT COUNT(*) as count FROM clearings WHERE status != 'PASSED'").first<{ count: number }>(),
+      this.db.prepare("SELECT COUNT(*) as count FROM agents").first<{ count: number }>(),
+      this.db.prepare("SELECT id, seller_agent_id, status, amount, created_at FROM clearings ORDER BY created_at DESC LIMIT 10").all<{
+        id: string;
+        seller_agent_id: string;
+        status: string;
+        amount: string;
+        created_at: number;
+      }>()
+    ]);
+
+    const totalClearings = Number(totalClearingsRes?.count || 0);
+    const validSettlements = Number(validRes?.count || 0);
+    const voidedHallucinations = Number(voidedRes?.count || 0);
+    const totalAgentsIndexed = Number(totalAgentsRes?.count || 0);
+    const recentClearings = (recentRes.results || []).map((r) => ({
+      clearing_id: r.id,
+      seller_agent_id: r.seller_agent_id,
+      stage: r.status === "PASSED" ? "SETTLED" : r.status,
+      cleared: r.status === "PASSED",
+      amount_atomic: r.amount,
+      created_at: r.created_at
+    }));
+
+    return {
+      totalClearings,
+      validSettlements,
+      voidedHallucinations,
+      totalAgentsIndexed,
+      recentClearings
+    };
   }
 }
 

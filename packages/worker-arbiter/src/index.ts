@@ -1,11 +1,12 @@
 import { Hono } from "hono";
 import { cors } from "hono/cors";
-import type { Env } from "./env.js";
+import { getArbiterStore, type Env } from "./env.js";
 import { clearRouter } from "./routes/clear.js";
 import { scoreRouter } from "./routes/score.js";
 import { kyaRouter } from "./routes/kya.js";
 import { discoveryRouter } from "./routes/discovery.js";
 import { mcpHttpRouter } from "./routes/mcp-http.js";
+import { sandboxRouter } from "./routes/sandbox.js";
 
 declare const process: any;
 
@@ -52,7 +53,15 @@ app.onError((err, c) => {
   );
 });
 
+// Public Stats Endpoint
+app.get("/v1/stats", async (c) => {
+  const store = getArbiterStore(c.env);
+  const stats = await store.getProtocolStats();
+  return c.json(stats);
+});
+
 // Route mountings
+app.route("/v1/sandbox", sandboxRouter);
 app.route("/v1/clear", clearRouter);
 app.route("/v1/score", scoreRouter);
 app.route("/v1/kya", kyaRouter);
@@ -61,3 +70,4 @@ app.route("/", discoveryRouter);
 
 export default app;
 export { app };
+

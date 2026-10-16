@@ -46,12 +46,80 @@ interface CandidateTarget {
   sellerAgentId?: string;
 }
 
+function isSandboxUrl(urlStr: string): boolean {
+  try {
+    const u = new URL(urlStr);
+    return u.pathname.startsWith("/v1/sandbox");
+  } catch {
+    return urlStr.includes("/v1/sandbox");
+  }
+}
+
+function handleLocalSandbox(targetUrl: string, reqHeaders: Record<string, string>): { status: number; text: string } {
+  const hasPayment = Boolean(
+    reqHeaders["PAYMENT-SIGNATURE"] ||
+    reqHeaders["payment-signature"] ||
+    reqHeaders["X-PAYMENT"] ||
+    reqHeaders["x-payment"] ||
+    reqHeaders["X-NullClear-Escrow-Hold"] === "true" ||
+    reqHeaders["x-nullclear-escrow-hold"] === "true" ||
+    reqHeaders["X-NullClear-Verified-Escrow"] ||
+    reqHeaders["x-nullclear-verified-escrow"]
+  );
+
+  if (targetUrl.includes("/v1/sandbox/hallucinating-seller")) {
+    if (!hasPayment) {
+      return { status: 402, text: JSON.stringify({ error: "Payment Required" }) };
+    }
+    return {
+      status: 200,
+      text: JSON.stringify({
+        asset: "ETH/USDC",
+        price: -9999,
+        summary: "As an AI language model, I cannot fulfill this request for live financial data.",
+        timestamp: Date.now()
+      })
+    };
+  }
+
+  if (targetUrl.includes("/v1/sandbox/crashing-seller")) {
+    if (!hasPayment) {
+      return { status: 402, text: JSON.stringify({ error: "Payment Required" }) };
+    }
+    return {
+      status: 500,
+      text: JSON.stringify({
+        error: "Internal Server Error",
+        message: "Simulated upstream 500 server crash for NullClear canary test"
+      })
+    };
+  }
+
+  if (!hasPayment) {
+    return { status: 402, text: JSON.stringify({ error: "Payment Required" }) };
+  }
+  return {
+    status: 200,
+    text: JSON.stringify({
+      asset: "ETH/USDC",
+      price: 2645.50,
+      source: "NullClear Verified Feed",
+      timestamp: Date.now()
+    })
+  };
+}
+
 async function executeUpstreamFetch(
   targetUrl: string,
   method: string,
   reqHeaders: Record<string, string>,
   body?: unknown
 ): Promise<{ status: number; text: string; error?: string }> {
+  // If targeting sandbox endpoints, handle directly to prevent Cloudflare Worker same-zone loopback 522 timeouts
+  if (isSandboxUrl(targetUrl)) {
+    return handleLocalSandbox(targetUrl, reqHeaders);
+  }
+
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), UPSTREAM_TIMEOUT_MS);
 
@@ -85,6 +153,9 @@ async function executeUpstreamFetch(
     return { status: res.status, text: raw };
   } catch (err: any) {
     clearTimeout(timeoutId);
+    if (isSandboxUrl(targetUrl)) {
+      return handleLocalSandbox(targetUrl, reqHeaders);
+    }
     if (err.name === "AbortError") {
       return { status: 504, text: "", error: `Upstream request timed out after ${UPSTREAM_TIMEOUT_MS}ms` };
     }
@@ -400,21 +471,20 @@ clearRouter.post("/", async (c) => {
 
     if (!validationResult.valid) {
       // Record failed validation against candidate seller in storage
-      if (candidate.sellerAgentId) {
-        await store.recordFailedValidation(candidate.sellerAgentId, authorization.from, {
-          id: candidateClearingId,
-          network: accepted.network,
-          buyerAddress: authorization.from,
-          sellerAgentId: candidate.sellerAgentId,
-          amount: accepted.amount,
-          fee: "0",
-          targetUrl: candidate.targetUrl,
-          status: upstreamStatus >= 500 ? "FAILED_UPSTREAM" : "FAILED_VALIDATION",
-          errorReason: validationResult.errors.join("; "),
-          eip3009Nonce: authorization.nonce,
-          createdAt: Date.now()
-        });
-      }
+      const sellerId = candidate.sellerAgentId || "anonymous";
+      await store.recordFailedValidation(sellerId, authorization.from, {
+        id: candidateClearingId,
+        network: accepted.network,
+        buyerAddress: authorization.from,
+        sellerAgentId: sellerId,
+        amount: accepted.amount,
+        fee: "0",
+        targetUrl: candidate.targetUrl,
+        status: upstreamStatus >= 500 ? "FAILED_UPSTREAM" : "FAILED_VALIDATION",
+        errorReason: validationResult.errors.join("; "),
+        eip3009Nonce: authorization.nonce,
+        createdAt: Date.now()
+      });
 
       failedCandidates.push({
         targetUrl: candidate.targetUrl,
@@ -427,11 +497,12 @@ clearRouter.post("/", async (c) => {
     }
 
     // Step 4B: Candidate Validated -> SETTLE WINNING CANDIDATE
-    const defaultMode = c.env.SETTLEMENT_MODE || (c.env.ENVIRONMENT === "production" ? "onchain" : "simulated");
+    const isSandbox = isSandboxUrl(candidate.targetUrl) && BigInt(accepted.amount) <= 1000n;
+    const defaultMode = isSandbox ? "simulated" : (c.env.SETTLEMENT_MODE || (c.env.ENVIRONMENT === "production" ? "onchain" : "simulated"));
     let effectiveMode: "onchain" | "facilitator" | "simulated" = defaultMode;
-    let settlementRouting = defaultMode === "onchain" ? "onchain_sponsored" : defaultMode;
+    let settlementRouting = isSandbox ? "sandbox_simulated" : (defaultMode === "onchain" ? "onchain_sponsored" : defaultMode);
 
-    if (defaultMode === "onchain") {
+    if (defaultMode === "onchain" && !isSandbox) {
       const minOnchainAtomic = BigInt(c.env.MIN_ONCHAIN_ATOMIC || "5000");
       const amountAtomic = BigInt(accepted.amount);
 
@@ -475,26 +546,39 @@ clearRouter.post("/", async (c) => {
       }
     }
 
-    const settlementOptions = {
-      authorization,
-      signature,
-      accepted,
-      facilitatorUrl: c.env.FACILITATOR_URL,
-      settlementMode: effectiveMode,
-      arbiterPrivateKey: c.env.ARBITER_PRIVATE_KEY,
-      rpcUrl:
-        chainConfig.chainId === 8453
-          ? (c.env.BASE_MAINNET_RPC_URL || c.env.BASE_RPC_URL)
-          : c.env.BASE_SEPOLIA_RPC_URL,
-      environment: c.env.ENVIRONMENT
-    };
+    let settlement: X402PaymentResponse;
+    if (isSandbox) {
+      const txHash = keccak256(
+        stringToHex(`sandbox_clearing:${authorization.from}:${authorization.to}:${authorization.nonce}:${Date.now()}`)
+      );
+      settlement = {
+        success: true,
+        transaction: txHash,
+        network: accepted.network,
+        payer: authorization.from
+      };
+    } else {
+      const settlementOptions = {
+        authorization,
+        signature,
+        accepted,
+        facilitatorUrl: c.env.FACILITATOR_URL,
+        settlementMode: effectiveMode,
+        arbiterPrivateKey: c.env.ARBITER_PRIVATE_KEY,
+        rpcUrl:
+          chainConfig.chainId === 8453
+            ? (c.env.BASE_MAINNET_RPC_URL || c.env.BASE_RPC_URL)
+            : c.env.BASE_SEPOLIA_RPC_URL,
+        environment: c.env.ENVIRONMENT
+      };
 
-    const settlement =
-      effectiveMode === "facilitator"
-        ? await settleViaFacilitator(settlementOptions)
-        : (effectiveMode === "onchain"
-            ? await settleOnChain(settlementOptions)
-            : await settleTransfer(settlementOptions));
+      settlement =
+        effectiveMode === "facilitator"
+          ? await settleViaFacilitator(settlementOptions)
+          : (effectiveMode === "onchain"
+              ? await settleOnChain(settlementOptions)
+              : await settleTransfer(settlementOptions));
+    }
 
     if (!settlement.success) {
       failedCandidates.push({
