@@ -187,91 +187,23 @@ async function main() {
     args: [arbiterAccount.address]
   });
 
+  const initialTreasuryBalance = await publicClient.readContract({
+    address: BASE_USDC_ADDRESS,
+    abi: ERC20_ABI,
+    functionName: "balanceOf",
+    args: [TREASURY_ADDRESS]
+  });
+
   console.log(`[1/4] Arbiter Base Balances:`);
-  console.log(`      ETH:  ${formatEther(ethBalance)} ETH`);
-  console.log(`      USDC: ${formatUnits(usdcBalance, 6)} USDC (${usdcBalance} atomic units)`);
+  console.log(`      ETH:              ${formatEther(ethBalance)} ETH`);
+  console.log(`      Arbiter USDC:     ${formatUnits(usdcBalance, 6)} USDC (${usdcBalance} atomic units)`);
+  console.log(`      Treasury USDC:    ${formatUnits(initialTreasuryBalance, 6)} USDC (${initialTreasuryBalance} atomic units)`);
 
-  // Step 2: If USDC balance < 0.15 USDC (150000 atomic), swap 0.00015 ETH via Uniswap V3 SwapRouter02
-  if (usdcBalance < 150000n) {
-    const ethToSwap = parseEther("0.00015");
-    console.log(`\n[2/4] USDC balance < 0.15 USDC. Swapping ${formatEther(ethToSwap)} ETH for Base USDC via SwapRouter02...`);
+  // Step 2: Zero ETH Swap Guard (Using existing buyer USDC balances)
+  console.log(`\n[2/4] 🛡️ Zero ETH Swap Guard: Using existing Buyer A, B, and C USDC balances. No ETH will be swapped.`);
 
-    const wethBalance = await publicClient.readContract({
-      address: WETH_ADDRESS,
-      abi: WETH_ABI,
-      functionName: "balanceOf",
-      args: [arbiterAccount.address]
-    });
-
-    if (wethBalance < ethToSwap) {
-      const needed = ethToSwap - wethBalance;
-      console.log(`      1. Wrapping ${formatEther(needed)} ETH to WETH...`);
-      const depositTx = await walletClient.writeContract({
-        address: WETH_ADDRESS,
-        abi: WETH_ABI,
-        functionName: "deposit",
-        value: needed
-      });
-      console.log(`         Deposit Tx: https://basescan.org/tx/${depositTx}`);
-      await publicClient.waitForTransactionReceipt({ hash: depositTx });
-    } else {
-      console.log(`      1. WETH already wrapped (${formatEther(wethBalance)} WETH available).`);
-    }
-
-    const allowance = await publicClient.readContract({
-      address: WETH_ADDRESS,
-      abi: ERC20_ABI,
-      functionName: "allowance",
-      args: [arbiterAccount.address, SWAP_ROUTER_02]
-    });
-
-    if (allowance < ethToSwap) {
-      console.log(`      2. Approving WETH to Uniswap V3 SwapRouter02...`);
-      const approveTx = await walletClient.writeContract({
-        address: WETH_ADDRESS,
-        abi: WETH_ABI,
-        functionName: "approve",
-        args: [SWAP_ROUTER_02, ethToSwap]
-      });
-      console.log(`         Approve Tx: https://basescan.org/tx/${approveTx}`);
-      await publicClient.waitForTransactionReceipt({ hash: approveTx });
-    } else {
-      console.log(`      2. WETH already approved to SwapRouter02 (${formatEther(allowance)} WETH allowance).`);
-    }
-
-    console.log(`      3. Executing exactInputSingle swap (WETH -> USDC, fee: 500)...`);
-    const swapTx = await walletClient.writeContract({
-      address: SWAP_ROUTER_02,
-      abi: SWAP_ROUTER_ABI,
-      functionName: "exactInputSingle",
-      args: [
-        {
-          tokenIn: WETH_ADDRESS,
-          tokenOut: BASE_USDC_ADDRESS,
-          fee: 500,
-          recipient: arbiterAccount.address,
-          amountIn: ethToSwap,
-          amountOutMinimum: 0n,
-          sqrtPriceLimitX96: 0n
-        }
-      ]
-    });
-    console.log(`         Swap Tx: https://basescan.org/tx/${swapTx}`);
-    await publicClient.waitForTransactionReceipt({ hash: swapTx });
-
-    const newUsdcBalance = await publicClient.readContract({
-      address: BASE_USDC_ADDRESS,
-      abi: ERC20_ABI,
-      functionName: "balanceOf",
-      args: [arbiterAccount.address]
-    });
-    console.log(`      ✅ Swap complete! New Arbiter USDC balance: ${formatUnits(newUsdcBalance, 6)} USDC (${newUsdcBalance} atomic)`);
-  } else {
-    console.log(`\n[2/4] ✅ Arbiter USDC balance (${formatUnits(usdcBalance, 6)} USDC) is sufficient (>= 0.15 USDC). No swap needed.`);
-  }
-
-  // Step 3: Derive 3 deterministic buyer wallets and fund each with 0.04 USDC (40000 atomic units)
-  console.log("\n[3/4] Deriving and funding 3 distinct buyer wallets on Base Mainnet...");
+  // Step 3: Derive 3 deterministic buyer wallets and check their 0.02 USDC balance
+  console.log("\n[3/4] Verifying 3 distinct buyer wallets on Base Mainnet...");
   const buyers = [
     { name: "Buyer A", ...deriveBuyer(1, arbiterPrivateKey) },
     { name: "Buyer B", ...deriveBuyer(2, arbiterPrivateKey) },
@@ -285,57 +217,74 @@ async function main() {
       functionName: "balanceOf",
       args: [buyer.account.address]
     });
-    console.log(`      ${buyer.name} (${buyer.account.address}): ${formatUnits(bBalance, 6)} USDC`);
-
-    if (bBalance < 20000n) {
-      const fundAmount = 40000n; // 0.04 USDC
-      console.log(`      Funding ${buyer.name} with ${formatUnits(fundAmount, 6)} USDC...`);
-      const transferTx = await walletClient.writeContract({
-        address: BASE_USDC_ADDRESS,
-        abi: ERC20_ABI,
-        functionName: "transfer",
-        args: [buyer.account.address, fundAmount]
-      });
-      console.log(`      Transfer Tx: https://basescan.org/tx/${transferTx}`);
-      await publicClient.waitForTransactionReceipt({ hash: transferTx });
-      console.log(`      ✅ ${buyer.name} funded!`);
-    } else {
-      console.log(`      ✅ ${buyer.name} already funded.`);
-    }
+    console.log(`      ${buyer.name} (${buyer.account.address}): ${formatUnits(bBalance, 6)} USDC (${bBalance} atomic units)`);
   }
 
-  // Step 4: Execute real x402 purchases against live api.nullclear.dev endpoints
-  console.log("\n[4/4] Executing Real On-Chain x402 Handshakes via PayAI Facilitator...");
+  // Step 4: Execute 6 real x402 purchases across the new live endpoints
+  console.log("\n[4/4] Executing Real On-Chain x402 Handshakes via PayAI Facilitator across new live endpoints...");
   const settlements: Array<{ buyer: string; endpoint: string; txHash?: string }> = [];
 
-  const endpoints = [
-    "https://api.nullclear.dev/v1/bazaar/audit?agentId=124595",
-    "https://api.nullclear.dev/v1/bazaar/token-security"
+  const calls = [
+    {
+      buyer: buyers[0],
+      endpoint: "https://api.nullclear.dev/v1/bazaar/market-oracle?symbol=ETH"
+    },
+    {
+      buyer: buyers[0],
+      endpoint: `https://api.nullclear.dev/v1/bazaar/wallet-risk?address=${EXPECTED_ARBITER}`
+    },
+    {
+      buyer: buyers[1],
+      endpoint: "https://api.nullclear.dev/v1/bazaar/verified-fetch?url=https://api.coinbase.com/v2/prices/BTC-USD/spot"
+    },
+    {
+      buyer: buyers[1],
+      endpoint: "https://api.nullclear.dev/v1/bazaar/market-oracle?symbol=BTC"
+    },
+    {
+      buyer: buyers[2],
+      endpoint: `https://api.nullclear.dev/v1/bazaar/wallet-risk?address=${EXPECTED_ARBITER}`
+    },
+    {
+      buyer: buyers[2],
+      endpoint: "https://api.nullclear.dev/v1/bazaar/verified-fetch?url=https://api.coinbase.com/v2/prices/ETH-USD/spot"
+    }
   ];
 
-  for (const buyer of buyers) {
-    for (const ep of endpoints) {
-      try {
-        const result = await executeX402Purchase(buyer, ep);
-        settlements.push({
-          buyer: buyer.name,
-          endpoint: ep,
-          txHash: result.txHash
-        });
-      } catch (err: any) {
-        console.error(`      ❌ Error during purchase:`, err.message);
-      }
+  for (const call of calls) {
+    try {
+      const result = await executeX402Purchase(call.buyer, call.endpoint);
+      settlements.push({
+        buyer: call.buyer.name,
+        endpoint: call.endpoint,
+        txHash: result.txHash
+      });
+    } catch (err: any) {
+      console.error(`      ❌ Error during purchase:`, err.message);
     }
   }
+
+  // Final Treasury Balance Check
+  const finalTreasuryBalance = await publicClient.readContract({
+    address: BASE_USDC_ADDRESS,
+    abi: ERC20_ABI,
+    functionName: "balanceOf",
+    args: [TREASURY_ADDRESS]
+  });
 
   // Summary
   console.log("\n==================================================================");
-  console.log("   🎉 ON-CHAIN X402 BOOTSTRAP COMPLETE: SETTLEMENT REPORT         ");
+  console.log("   🎉 ON-CHAIN X402 SETTLEMENT COMPLETE: REPORT                  ");
   console.log("==================================================================");
   for (const s of settlements) {
     console.log(`• ${s.buyer} -> ${s.endpoint}`);
     console.log(`  Tx: ${s.txHash ? `https://basescan.org/tx/${s.txHash}` : "Confirmed"}`);
   }
+
+  console.log(`\nCold Treasury Address: ${TREASURY_ADDRESS}`);
+  console.log(`Initial Treasury Balance: ${formatUnits(initialTreasuryBalance, 6)} USDC`);
+  console.log(`Final Treasury Balance:   ${formatUnits(finalTreasuryBalance, 6)} USDC (${finalTreasuryBalance} atomic units)`);
+  console.log(`Total Settlements Executed: ${settlements.length}/6`);
 
   // Fetch updated stats from api.nullclear.dev
   console.log("\nFetching live telemetry from https://api.nullclear.dev/v1/stats...");

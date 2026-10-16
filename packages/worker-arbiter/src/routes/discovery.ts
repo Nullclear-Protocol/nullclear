@@ -357,13 +357,13 @@ Available at \`/openapi.json\` with 100% schema definitions for all routes.
   return c.text(text);
 });
 
-// GET /.well-known/x402.json
-discoveryRouter.get("/.well-known/x402.json", (c) => {
+// GET /.well-known/x402 & /.well-known/x402.json
+const getX402Manifest = (c: any) => {
   const treasuryAddress = c.env?.TREASURY_WALLET_ADDRESS || "0xB586eFcCa41dF27ad3873BEcA54da0c30bf04d5c";
   const arbiterAddress = c.env?.ARBITER_WALLET_ADDRESS || "0xfd74fF802EA0E735514C070AF04E0D6528deD145";
   const agentId = c.env?.ERC8004_AGENT_ID || "124595";
 
-  return c.json({
+  return {
     x402Version: 2,
     protocolVersion: "1.1.2",
     service: "NullClear Arbiter",
@@ -440,6 +440,262 @@ discoveryRouter.get("/.well-known/x402.json", (c) => {
         path: "/v1/stats",
         method: "GET",
         description: "Public protocol telemetry and verified clearing history"
+      },
+      bazaarMarketOracle: {
+        path: "/v1/bazaar/market-oracle",
+        method: "GET",
+        payable: true,
+        amountAtomic: "10000",
+        extensions: {
+          bazaar: {
+            discoverable: true,
+            description: "Live cross-verified crypto price oracle (BTC, ETH, SOL, BASE tokens) with deterministic spread invariant check and cryptographic attestation.",
+            info: {
+              input: {
+                type: "http",
+                method: "GET",
+                queryParams: {
+                  symbol: { type: "string", example: "ETH", description: "Crypto asset ticker symbol (e.g. ETH, BTC, SOL)" }
+                }
+              },
+              output: {
+                type: "json",
+                example: {
+                  symbol: "ETH",
+                  pair: "ETH-USD",
+                  priceUsd: 2645.50,
+                  sourcesChecked: ["coinbase", "binance"],
+                  verified: true,
+                  invariantCheck: "PASSED",
+                  timestamp: 1729045678901
+                }
+              }
+            },
+            schema: {
+              $schema: "https://json-schema.org/draft/2020-12/schema",
+              type: "object",
+              properties: {
+                input: {
+                  type: "object",
+                  properties: { symbol: { type: "string" } }
+                },
+                output: {
+                  type: "object",
+                  required: ["symbol", "priceUsd", "verified", "invariantCheck"],
+                  properties: {
+                    symbol: { type: "string" },
+                    pair: { type: "string" },
+                    priceUsd: { type: "number" },
+                    source: { type: "string" },
+                    sourcesChecked: { type: "array", items: { type: "string" } },
+                    verified: { type: "boolean" },
+                    invariantCheck: { type: "string" },
+                    timestamp: { type: "integer" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      bazaarTokenSecurity: {
+        path: "/v1/bazaar/token-security",
+        method: "GET",
+        payable: true,
+        amountAtomic: "10000",
+        extensions: {
+          bazaar: {
+            discoverable: true,
+            description: "Live Base Mainnet (eip155:8453) ERC-20 token security, contract bytecode verification, liquidity & honeypot risk scanner for AI trading agents.",
+            info: {
+              input: {
+                type: "http",
+                method: "GET",
+                queryParams: {
+                  address: {
+                    type: "string",
+                    example: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+                    description: "Base ERC-20 token contract address"
+                  }
+                }
+              },
+              output: {
+                type: "json",
+                example: {
+                  tokenAddress: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+                  symbol: "USDC",
+                  name: "USD Coin",
+                  decimals: 6,
+                  isContract: true,
+                  verified: true,
+                  isHoneypot: false,
+                  buyTaxBps: 0,
+                  sellTaxBps: 0,
+                  liquidityUsd: 103137.73,
+                  x402Compatible: true,
+                  securityScore: 99,
+                  riskLevel: "low",
+                  timestamp: 1729045678901
+                }
+              }
+            },
+            schema: {
+              $schema: "https://json-schema.org/draft/2020-12/schema",
+              type: "object",
+              properties: {
+                input: {
+                  type: "object",
+                  properties: { address: { type: "string" }, tokenAddress: { type: "string" } }
+                },
+                output: {
+                  type: "object",
+                  required: ["tokenAddress", "symbol", "isContract", "verified", "securityScore", "x402Compatible"],
+                  properties: {
+                    tokenAddress: { type: "string" },
+                    symbol: { type: "string" },
+                    name: { type: "string" },
+                    decimals: { type: "integer" },
+                    isContract: { type: "boolean" },
+                    verified: { type: "boolean" },
+                    isHoneypot: { type: "boolean" },
+                    buyTaxBps: { type: "integer" },
+                    sellTaxBps: { type: "integer" },
+                    liquidityUsd: { type: "number" },
+                    x402Compatible: { type: "boolean" },
+                    securityScore: { type: "integer", minimum: 0, maximum: 100 },
+                    riskLevel: { type: "string", enum: ["low", "medium", "high"] },
+                    timestamp: { type: "integer" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      bazaarWalletRisk: {
+        path: "/v1/bazaar/wallet-risk",
+        method: "GET",
+        payable: true,
+        amountAtomic: "10000",
+        extensions: {
+          bazaar: {
+            discoverable: true,
+            description: "Live Base Mainnet wallet counterparty risk profiler: checks EOA vs smart contract status, nonce history, ETH/USDC balances, and ERC-8004 Sybil risk.",
+            info: {
+              input: {
+                type: "http",
+                method: "GET",
+                queryParams: {
+                  address: {
+                    type: "string",
+                    example: "0xfd74fF802EA0E735514C070AF04E0D6528deD145",
+                    description: "Base Mainnet wallet address to profile"
+                  }
+                }
+              },
+              output: {
+                type: "json",
+                example: {
+                  address: "0xfd74fF802EA0E735514C070AF04E0D6528deD145",
+                  isContract: false,
+                  ethBalance: "0.0027",
+                  usdcBalance: "0.24",
+                  transactionCount: 15,
+                  erc8004Registered: true,
+                  riskScore: 98,
+                  riskLevel: "low",
+                  timestamp: 1729045678901
+                }
+              }
+            },
+            schema: {
+              $schema: "https://json-schema.org/draft/2020-12/schema",
+              type: "object",
+              properties: {
+                input: {
+                  type: "object",
+                  properties: { address: { type: "string" } }
+                },
+                output: {
+                  type: "object",
+                  required: ["address", "isContract", "transactionCount", "riskScore", "riskLevel"],
+                  properties: {
+                    address: { type: "string" },
+                    isContract: { type: "boolean" },
+                    ethBalance: { type: "string" },
+                    usdcBalance: { type: "string" },
+                    transactionCount: { type: "integer" },
+                    erc8004Registered: { type: "boolean" },
+                    riskScore: { type: "integer", minimum: 0, maximum: 100 },
+                    riskLevel: { type: "string", enum: ["low", "medium", "high"] },
+                    timestamp: { type: "integer" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      bazaarVerifiedFetch: {
+        path: "/v1/bazaar/verified-fetch",
+        method: "GET",
+        payable: true,
+        amountAtomic: "10000",
+        extensions: {
+          bazaar: {
+            discoverable: true,
+            description: "Schema-verified HTTP fetch & anti-hallucination proxy: fetches any public JSON/web URL, enforces numeric invariants and LLM-refusal guards, and returns attested data.",
+            info: {
+              input: {
+                type: "http",
+                method: "GET",
+                queryParams: {
+                  url: {
+                    type: "string",
+                    example: "https://api.coinbase.com/v2/prices/BTC-USD/spot",
+                    description: "Target public HTTPS URL to fetch with schema & refusal validation"
+                  }
+                }
+              },
+              output: {
+                type: "json",
+                example: {
+                  targetUrl: "https://api.coinbase.com/v2/prices/BTC-USD/spot",
+                  upstreamStatus: 200,
+                  verified: true,
+                  refusalDetected: false,
+                  invariantsPassed: true,
+                  attestation: "0x...",
+                  timestamp: 1729045678901
+                }
+              }
+            },
+            schema: {
+              $schema: "https://json-schema.org/draft/2020-12/schema",
+              type: "object",
+              properties: {
+                input: {
+                  type: "object",
+                  properties: { url: { type: "string" } }
+                },
+                output: {
+                  type: "object",
+                  required: ["targetUrl", "upstreamStatus", "verified", "refusalDetected", "invariantsPassed", "attestation"],
+                  properties: {
+                    targetUrl: { type: "string" },
+                    upstreamStatus: { type: "integer" },
+                    verified: { type: "boolean" },
+                    data: {},
+                    refusalDetected: { type: "boolean" },
+                    invariantsPassed: { type: "boolean" },
+                    attestation: { type: "string" },
+                    timestamp: { type: "integer" }
+                  }
+                }
+              }
+            }
+          }
+        }
       },
       bazaarAudit: {
         path: "/v1/bazaar/audit",
@@ -541,80 +797,13 @@ discoveryRouter.get("/.well-known/x402.json", (c) => {
             }
           }
         }
-      },
-      bazaarTokenSecurity: {
-        path: "/v1/bazaar/token-security",
-        method: "GET",
-        payable: true,
-        amountAtomic: "10000",
-        extensions: {
-          bazaar: {
-            discoverable: true,
-            description: "Inspect Base token security, verified supply, liquidity risk, and x402 clearing compatibility on Base Mainnet (eip155:8453).",
-            info: {
-              input: {
-                type: "http",
-                method: "GET",
-                queryParams: {
-                  tokenAddress: {
-                    type: "string",
-                    example: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
-                    description: "Base ERC-20 token contract address"
-                  }
-                }
-              },
-              output: {
-                type: "json",
-                example: {
-                  tokenAddress: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
-                  symbol: "USDC",
-                  name: "USD Coin",
-                  decimals: 6,
-                  verified: true,
-                  isHoneypot: false,
-                  buyTaxBps: 0,
-                  sellTaxBps: 0,
-                  x402Compatible: true,
-                  securityScore: 99,
-                  riskLevel: "low",
-                  timestamp: 1729045678901
-                }
-              }
-            },
-            schema: {
-              $schema: "https://json-schema.org/draft/2020-12/schema",
-              type: "object",
-              properties: {
-                input: {
-                  type: "object",
-                  properties: { tokenAddress: { type: "string" } }
-                },
-                output: {
-                  type: "object",
-                  required: ["tokenAddress", "symbol", "verified", "securityScore", "x402Compatible"],
-                  properties: {
-                    tokenAddress: { type: "string" },
-                    symbol: { type: "string" },
-                    name: { type: "string" },
-                    decimals: { type: "integer" },
-                    verified: { type: "boolean" },
-                    isHoneypot: { type: "boolean" },
-                    buyTaxBps: { type: "integer" },
-                    sellTaxBps: { type: "integer" },
-                    x402Compatible: { type: "boolean" },
-                    securityScore: { type: "integer", minimum: 0, maximum: 100 },
-                    riskLevel: { type: "string", enum: ["low", "medium", "high"] },
-                    timestamp: { type: "integer" }
-                  }
-                }
-              }
-            }
-          }
-        }
       }
     }
-  });
-});
+  };
+};
+
+discoveryRouter.get("/.well-known/x402", (c) => c.json(getX402Manifest(c)));
+discoveryRouter.get("/.well-known/x402.json", (c) => c.json(getX402Manifest(c)));
 
 // A2A & ERC-8004 Agent Card JSON
 const getAgentCard = (c: any) => {
@@ -1152,6 +1341,197 @@ discoveryRouter.get("/openapi.json", (c) => {
           responses: {
             "200": { description: "Token security audit response" },
             "402": { description: "Payment Required" }
+          }
+        }
+      },
+      "/v1/bazaar/market-oracle": {
+        get: {
+          summary: "Live cross-verified crypto price oracle (BTC, ETH, SOL, BASE tokens) with deterministic spread invariant check and cryptographic attestation",
+          operationId: "bazaarMarketOracleGet",
+          security: [{ x402: [] }],
+          parameters: [
+            {
+              name: "symbol",
+              in: "query",
+              required: false,
+              description: "Crypto asset ticker symbol (e.g. ETH, BTC, SOL)",
+              schema: { type: "string", default: "ETH" }
+            },
+            {
+              name: "pair",
+              in: "query",
+              required: false,
+              description: "Trading pair (e.g. ETH-USD)",
+              schema: { type: "string" }
+            }
+          ],
+          responses: {
+            "200": {
+              description: "Real-time verified market oracle price with cryptographic attestation",
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "object",
+                    required: ["symbol", "priceUsd", "verified", "invariantCheck", "timestamp"],
+                    properties: {
+                      symbol: { type: "string" },
+                      pair: { type: "string" },
+                      priceUsd: { type: "number" },
+                      source: { type: "string" },
+                      sourcesChecked: { type: "array", items: { type: "string" } },
+                      verified: { type: "boolean" },
+                      invariantCheck: { type: "string" },
+                      timestamp: { type: "integer" },
+                      arbiterSignature: { type: "string" },
+                      _agentDirective: { type: "object" }
+                    }
+                  }
+                }
+              }
+            },
+            "402": {
+              description: "Payment Required: $0.01 USDC (10000 atomic units) on Base Mainnet"
+            }
+          }
+        }
+      },
+      "/v1/bazaar/wallet-risk": {
+        get: {
+          summary: "Live Base Mainnet wallet counterparty risk profiler: checks EOA vs smart contract status, nonce history, ETH/USDC balances, and ERC-8004 Sybil risk",
+          operationId: "bazaarWalletRiskGet",
+          security: [{ x402: [] }],
+          parameters: [
+            {
+              name: "address",
+              in: "query",
+              required: false,
+              description: "Base Mainnet wallet address to profile",
+              schema: { type: "string", default: "0xfd74fF802EA0E735514C070AF04E0D6528deD145" }
+            }
+          ],
+          responses: {
+            "200": {
+              description: "Real-time counterparty wallet risk profile",
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "object",
+                    required: ["address", "isContract", "transactionCount", "riskScore", "riskLevel", "timestamp"],
+                    properties: {
+                      address: { type: "string" },
+                      isContract: { type: "boolean" },
+                      ethBalance: { type: "string" },
+                      usdcBalance: { type: "string" },
+                      transactionCount: { type: "integer" },
+                      erc8004Registered: { type: "boolean" },
+                      riskScore: { type: "integer", minimum: 0, maximum: 100 },
+                      riskLevel: { type: "string", enum: ["low", "medium", "high"] },
+                      timestamp: { type: "integer" },
+                      arbiterSignature: { type: "string" },
+                      _agentDirective: { type: "object" }
+                    }
+                  }
+                }
+              }
+            },
+            "402": {
+              description: "Payment Required: $0.01 USDC (10000 atomic units) on Base Mainnet"
+            }
+          }
+        }
+      },
+      "/v1/bazaar/verified-fetch": {
+        get: {
+          summary: "Schema-verified HTTP fetch & anti-hallucination proxy (GET)",
+          operationId: "bazaarVerifiedFetchGet",
+          security: [{ x402: [] }],
+          parameters: [
+            {
+              name: "url",
+              in: "query",
+              required: true,
+              description: "Target public HTTPS URL to fetch with schema & refusal validation",
+              schema: { type: "string", example: "https://api.coinbase.com/v2/prices/BTC-USD/spot" }
+            }
+          ],
+          responses: {
+            "200": {
+              description: "Verified and attested fetch payload",
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "object",
+                    required: ["targetUrl", "upstreamStatus", "verified", "refusalDetected", "invariantsPassed", "attestation"],
+                    properties: {
+                      targetUrl: { type: "string" },
+                      upstreamStatus: { type: "integer" },
+                      verified: { type: "boolean" },
+                      data: {},
+                      refusalDetected: { type: "boolean" },
+                      invariantsPassed: { type: "boolean" },
+                      attestation: { type: "string" },
+                      timestamp: { type: "integer" },
+                      _agentDirective: { type: "object" }
+                    }
+                  }
+                }
+              }
+            },
+            "402": {
+              description: "Payment Required: $0.01 USDC (10000 atomic units) on Base Mainnet"
+            }
+          }
+        },
+        post: {
+          summary: "Schema-verified HTTP fetch & anti-hallucination proxy with invariants (POST)",
+          operationId: "bazaarVerifiedFetchPost",
+          security: [{ x402: [] }],
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  required: ["url"],
+                  properties: {
+                    url: { type: "string", description: "Target public HTTPS URL" },
+                    method: { type: "string", enum: ["GET", "POST"], default: "GET" },
+                    headers: { type: "object" },
+                    body: {},
+                    jsonSchema: { type: "object", description: "Optional Draft-07 JSON Schema" },
+                    invariants: { type: "array", items: { type: "object" } },
+                    rejectRefusals: { type: "boolean", default: true }
+                  }
+                }
+              }
+            }
+          },
+          responses: {
+            "200": {
+              description: "Verified and attested fetch payload",
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "object",
+                    required: ["targetUrl", "upstreamStatus", "verified", "refusalDetected", "invariantsPassed", "attestation"],
+                    properties: {
+                      targetUrl: { type: "string" },
+                      upstreamStatus: { type: "integer" },
+                      verified: { type: "boolean" },
+                      data: {},
+                      refusalDetected: { type: "boolean" },
+                      invariantsPassed: { type: "boolean" },
+                      attestation: { type: "string" },
+                      timestamp: { type: "integer" },
+                      _agentDirective: { type: "object" }
+                    }
+                  }
+                }
+              }
+            },
+            "402": {
+              description: "Payment Required: $0.01 USDC (10000 atomic units) on Base Mainnet"
+            }
           }
         }
       },
