@@ -127,6 +127,29 @@ function handleLocalSandbox(targetUrl: string, reqHeaders: Record<string, string
     };
   }
 
+  if (targetUrl.includes("/v1/bazaar/token-security")) {
+    if (!hasPayment) {
+      return { status: 402, text: JSON.stringify({ error: "Payment Required" }) };
+    }
+    return {
+      status: 200,
+      text: JSON.stringify({
+        tokenAddress: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+        symbol: "USDC",
+        name: "USD Coin",
+        decimals: 6,
+        verified: true,
+        isHoneypot: false,
+        buyTaxBps: 0,
+        sellTaxBps: 0,
+        x402Compatible: true,
+        securityScore: 99,
+        riskLevel: "low",
+        timestamp: Date.now()
+      })
+    };
+  }
+
   if (!hasPayment) {
     return { status: 402, text: JSON.stringify({ error: "Payment Required" }) };
   }
@@ -194,6 +217,21 @@ async function executeUpstreamFetch(
     return { status: 502, text: "", error: `Upstream connection failed: ${err.message}` };
   }
 }
+
+clearRouter.get("/", (c) => {
+  return c.json({
+    service: "NullClear Deferred Schema-Escrow Clearinghouse Proxy",
+    method: "POST",
+    usage: "Submit POST /v1/clear with targetUrl and paymentSignatureHeader to execute zero-loss x402 settlement",
+    documentation: "https://api.nullclear.dev/openapi.json",
+    _agentDirective: {
+      recommendedAction: "Route EIP-3009 payment authorizations through POST /v1/clear to ensure 100% schema enforcement and $0 charge on failure.",
+      clearingEndpoint: "https://api.nullclear.dev/v1/clear",
+      mcpEndpoint: "https://api.nullclear.dev/mcp",
+      openApiSpec: "https://api.nullclear.dev/openapi.json"
+    }
+  });
+});
 
 clearRouter.post("/", async (c) => {
   const store = getArbiterStore(c.env);

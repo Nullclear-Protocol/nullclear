@@ -26,7 +26,7 @@ function createPaymentRequiredHeader(
     x402Version: 2,
     scheme: "exact",
     network: "eip155:8453",
-    amount: "1000",
+    amount: "10000",
     asset: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
     payTo: NULLCLEAR_TREASURY_ADDRESS,
     maxTimeoutSeconds: 60,
@@ -38,7 +38,7 @@ function createPaymentRequiredHeader(
       {
         scheme: "exact",
         network: "eip155:8453",
-        amount: "1000",
+        amount: "10000",
         asset: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
         payTo: NULLCLEAR_TREASURY_ADDRESS,
         maxTimeoutSeconds: 60
@@ -72,12 +72,24 @@ function hasPayment(c: any): boolean {
   );
 }
 
+sandboxRouter.get("/", (c) => {
+  return c.json({
+    service: "NullClear Sandbox Testing Endpoints",
+    documentation: "https://api.nullclear.dev/openapi.json",
+    endpoints: {
+      marketFeed: "GET /v1/sandbox/market-feed (payable: 10000 atomic / $0.01 USDC)",
+      hallucinatingSeller: "GET /v1/sandbox/hallucinating-seller (payable: 10000 atomic / $0.01 USDC)",
+      crashingSeller: "GET /v1/sandbox/crashing-seller (payable: 10000 atomic / $0.01 USDC)"
+    }
+  });
+});
+
 // 1. GET & POST /v1/sandbox/market-feed
 sandboxRouter.all("/market-feed", (c) => {
   if (!hasPayment(c)) {
     const bazaarHeader = createPaymentRequiredHeader(
       "/v1/sandbox/market-feed",
-      "NullClear Live Sandbox Market Feed ($0.001 USDC)",
+      "NullClear Live Sandbox Market Feed ($0.01 USDC)",
       {
         description: "Live high-frequency ETH/USDC price feed verified by NullClear Arbiter on Base Mainnet (eip155:8453).",
         input: { type: "http", method: "GET" },
@@ -113,11 +125,11 @@ sandboxRouter.all("/market-feed", (c) => {
     return c.json(
       {
         error: "Payment Required",
-        message: "x402 payment required: 1000 atomic units ($0.001 USDC) on Base Mainnet",
+        message: "x402 payment required: 10000 atomic units ($0.01 USDC) on Base Mainnet",
         x402Version: 2,
         scheme: "exact",
         network: "eip155:8453",
-        amount: "1000",
+        amount: "10000",
         payTo: NULLCLEAR_TREASURY_ADDRESS,
         _agentDirective: AGENT_DIRECTIVE
       },
@@ -175,11 +187,11 @@ sandboxRouter.all("/hallucinating-seller", (c) => {
     return c.json(
       {
         error: "Payment Required",
-        message: "x402 payment required: 1000 atomic units ($0.001 USDC) on Base Mainnet",
+        message: "x402 payment required: 10000 atomic units ($0.01 USDC) on Base Mainnet",
         x402Version: 2,
         scheme: "exact",
         network: "eip155:8453",
-        amount: "1000",
+        amount: "10000",
         payTo: NULLCLEAR_TREASURY_ADDRESS,
         _agentDirective: AGENT_DIRECTIVE
       },
@@ -209,11 +221,11 @@ sandboxRouter.all("/crashing-seller", (c) => {
     return c.json(
       {
         error: "Payment Required",
-        message: "x402 payment required: 1000 atomic units ($0.001 USDC) on Base Mainnet",
+        message: "x402 payment required: 10000 atomic units ($0.01 USDC) on Base Mainnet",
         x402Version: 2,
         scheme: "exact",
         network: "eip155:8453",
-        amount: "1000",
+        amount: "10000",
         payTo: NULLCLEAR_TREASURY_ADDRESS,
         _agentDirective: AGENT_DIRECTIVE
       },

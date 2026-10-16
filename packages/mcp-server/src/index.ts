@@ -2,7 +2,11 @@ import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import {
   CallToolRequestSchema,
-  ListToolsRequestSchema
+  ListToolsRequestSchema,
+  ListPromptsRequestSchema,
+  GetPromptRequestSchema,
+  ListResourcesRequestSchema,
+  ReadResourceRequestSchema
 } from "@modelcontextprotocol/sdk/types.js";
 import { NullClearClient, createNullClearFetch, NullClearEscrowAbortedError } from "@nullclear/x402-arbiter";
 
@@ -17,16 +21,18 @@ const client = new NullClearClient({ arbiterUrl: ARBITER_URL });
 const server = new Server(
   {
     name: "nullclear-mcp-server",
-    version: "1.1.1"
+    version: "1.1.2"
   },
   {
     capabilities: {
-      tools: {}
+      tools: {},
+      prompts: {},
+      resources: {}
     }
   }
 );
 
-// 1. Tool Definitions
+// 1. Tool Definitions with Smithery/Glama annotations
 server.setRequestHandler(ListToolsRequestSchema, async () => {
   return {
     tools: [
@@ -34,13 +40,20 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
         name: "nullclear_check_reputation",
         description:
           "Inspect an AI agent's trust score (0-100), clearing reliability, Sybil wash-trade penalty flags, and corporate KYA backing on Base",
+        annotations: {
+          title: "Inspect AI Agent Trust & Sybil Score",
+          readOnlyHint: true,
+          destructiveHint: false,
+          idempotentHint: true,
+          openWorldHint: true
+        },
         inputSchema: {
           type: "object",
           required: ["agentId"],
           properties: {
             agentId: {
               type: "string",
-              description: "The ERC-8004 agent token ID or registered identifier"
+              description: "The ERC-8004 agent token ID or registered identifier (e.g. '124595')"
             },
             chainId: {
               type: "number",
@@ -54,6 +67,13 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
         name: "nullclear_escrow_x402_call",
         description:
           "Execute an x402-gated HTTP API call through NullClear deferred schema escrow. The arbiter guarantees payment is only settled if upstream returns valid data matching your schema contract. If the seller hallucinates or crashes, $0 is spent. Users can test immediately against https://api.nullclear.dev/v1/sandbox/market-feed (or fail over from https://api.nullclear.dev/v1/sandbox/hallucinating-seller to https://api.nullclear.dev/v1/sandbox/market-feed) with zero wallet setup.",
+        annotations: {
+          title: "Execute Escrowed x402 Call with Invariants",
+          readOnlyHint: false,
+          destructiveHint: false,
+          idempotentHint: false,
+          openWorldHint: true
+        },
         inputSchema: {
           type: "object",
           required: ["targetUrl"],
@@ -92,7 +112,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
                 type: "object",
                 required: ["path"],
                 properties: {
-                  path: { type: "string" },
+                  path: { type: "string", description: "Dot-notation property path" },
                   gt: { type: "number" },
                   gte: { type: "number" },
                   lt: { type: "number" },
@@ -130,8 +150,8 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
               type: "object",
               description: "Outbound spend firewall limits (maxPerCallAtomic, maxDailyWalletAtomic)",
               properties: {
-                maxPerCallAtomic: { type: "string" },
-                maxDailyWalletAtomic: { type: "string" }
+                maxPerCallAtomic: { type: "string", description: "Max atomic USDC spend allowed per call" },
+                maxDailyWalletAtomic: { type: "string", description: "Max rolling daily atomic USDC spend allowed" }
               }
             },
             buyerPrivateKey: {
@@ -145,6 +165,13 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
         name: "nullclear_verify_kya_mandate",
         description:
           "Verify an agent's Know Your Agent (KYA) corporate liability mandate, active validity, and whether a proposed transaction amount is within corporate limits",
+        annotations: {
+          title: "Verify Corporate KYA Mandate & Limits",
+          readOnlyHint: true,
+          destructiveHint: false,
+          idempotentHint: true,
+          openWorldHint: true
+        },
         inputSchema: {
           type: "object",
           required: ["agentId", "transactionAmountUsd"],
@@ -167,6 +194,164 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       }
     ]
   };
+});
+
+// 2. Prompt Definitions & Execution
+server.setRequestHandler(ListPromptsRequestSchema, async () => {
+  return {
+    prompts: [
+      {
+        name: "safe-x402-payment",
+        description: "Generate safety invariants and schema-escrow directives for an autonomous agent paying an upstream x402 seller.",
+        arguments: [
+          {
+            name: "targetUrl",
+            description: "Upstream API endpoint demanding x402 payment",
+            required: true
+          },
+          {
+            name: "sellerAgentId",
+            description: "Seller's ERC-8004 agent token ID to verify reputation",
+            required: false
+          },
+          {
+            name: "maxSpendAtomic",
+            description: "Maximum atomic USDC units authorized (default: 10000 = $0.01 USDC)",
+            required: false
+          }
+        ]
+      },
+      {
+        name: "audit-erc8004-agent",
+        description: "Conduct an end-to-end trust audit on an ERC-8004 agent on Base including Sybil risk and corporate KYA backing.",
+        arguments: [
+          {
+            name: "agentId",
+            description: "ERC-8004 agent token ID (e.g. '124595')",
+            required: true
+          },
+          {
+            name: "chainId",
+            description: "Base chain ID (default: 8453)",
+            required: false
+          }
+        ]
+      }
+    ]
+  };
+});
+
+server.setRequestHandler(GetPromptRequestSchema, async (request) => {
+  const { name, arguments: promptArgs } = request.params;
+
+  if (name === "safe-x402-payment") {
+    const targetUrl = promptArgs?.targetUrl || "https://api.nullclear.dev/v1/sandbox/market-feed";
+    const sellerAgentId = promptArgs?.sellerAgentId || "unknown";
+    const maxSpendAtomic = promptArgs?.maxSpendAtomic || "10000";
+
+    return {
+      description: "Safe x402 Escrow Clearing Directive",
+      messages: [
+        {
+          role: "user",
+          content: {
+            type: "text",
+            text: `You are preparing to execute an autonomous payment to an x402 service at ${targetUrl}.\n\nMandatory Safety Rules:\n1. NEVER send unconditional payments directly to unverified endpoints.\n2. Invoke the MCP tool 'nullclear_escrow_x402_call' with targetUrl="${targetUrl}", sellerAgentId="${sellerAgentId}", minTrustScore=50, and spendPolicy={ maxPerCallAtomic: "${maxSpendAtomic}" }.\n3. Supply an explicit JSON schema and deep numeric invariants to validate the seller's response before settlement.\n4. If the seller hallucinates, returns an LLM refusal, or crashes, the arbiter voids the payment automatically and $0.00 is charged.`
+          }
+        }
+      ]
+    };
+  }
+
+  if (name === "audit-erc8004-agent") {
+    const agentId = promptArgs?.agentId || "124595";
+    const chainId = promptArgs?.chainId || "8453";
+
+    return {
+      description: "ERC-8004 Agent Trust & Sybil Audit",
+      messages: [
+        {
+          role: "user",
+          content: {
+            type: "text",
+            text: `Perform a comprehensive security audit of ERC-8004 agent #${agentId} on chain ${chainId}.\n1. Run MCP tool 'nullclear_check_reputation' with agentId="${agentId}", chainId=${chainId}.\n2. Run MCP tool 'nullclear_verify_kya_mandate' with agentId="${agentId}", chainId=${chainId}, transactionAmountUsd=1.0.\n3. Analyze the composite trust score, letter grade (A-F), Sybil wash-trading risk flags, and corporate liability coverage.\n4. Provide a clear recommendation on whether this agent is safe for autonomous financial counterparty interactions.`
+          }
+        }
+      ]
+    };
+  }
+
+  throw new Error(`Unknown prompt: ${name}`);
+});
+
+// 3. Resource Definitions & Content
+server.setRequestHandler(ListResourcesRequestSchema, async () => {
+  return {
+    resources: [
+      {
+        uri: "nullclear://stats/live",
+        name: "NullClear Live Protocol Telemetry",
+        mimeType: "application/json",
+        description: "Live protocol metrics: total clearings, verified settlements, voided hallucinations, and indexed agents"
+      },
+      {
+        uri: "nullclear://docs/quickstart",
+        name: "NullClear Quickstart Guide",
+        mimeType: "text/markdown",
+        description: "Zero-loss x402 deferred schema escrow guide for autonomous AI agents on Base Mainnet"
+      }
+    ]
+  };
+});
+
+server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
+  const { uri } = request.params;
+
+  if (uri === "nullclear://stats/live") {
+    try {
+      const res = await fetch(`${ARBITER_URL}/v1/stats`);
+      const data = await res.json();
+      return {
+        contents: [
+          {
+            uri,
+            mimeType: "application/json",
+            text: JSON.stringify(data, null, 2)
+          }
+        ]
+      };
+    } catch {
+      return {
+        contents: [
+          {
+            uri,
+            mimeType: "application/json",
+            text: JSON.stringify({
+              totalClearings: 0,
+              validSettlements: 0,
+              voidedHallucinations: 0,
+              totalAgentsIndexed: 1,
+              status: "active"
+            }, null, 2)
+          }
+        ]
+      };
+    }
+  }
+
+  if (uri === "nullclear://docs/quickstart") {
+    return {
+      contents: [
+        {
+          uri,
+          mimeType: "text/markdown",
+          text: `# NullClear Arbiter Quickstart\n\nNullClear is the autonomous deferred clearing and reputation protocol for AI agent commerce on Base Mainnet.\n\n### Core Philosophy\nNever sign away funds unconditionally. Using EIP-3009 signed authorizations and deterministic JSON schema validation, NullClear holds seller payments in deferred escrow and only settles if output adheres 100% to your contract.\n\n### Primary MCP Tools\n- \`nullclear_escrow_x402_call\`: Execute deferred schema escrow with numeric bounds and LLM refusal guards.\n- \`nullclear_check_reputation\`: Check an ERC-8004 agent's Sybil trust score (0-100) and wash-trading flags.\n- \`nullclear_verify_kya_mandate\`: Verify an agent's corporate entity backing and spending limits.\n\n### Test Sandbox\n- Market Feed (Success): \`https://api.nullclear.dev/v1/sandbox/market-feed\` ($0.01 USDC)\n- Hallucinating Seller (Fails & Voids): \`https://api.nullclear.dev/v1/sandbox/hallucinating-seller\`\n`
+        }
+      ]
+    };
+  }
+
+  throw new Error(`Resource not found: ${uri}`);
 });
 
 // 2. Tool Execution

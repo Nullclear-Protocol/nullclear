@@ -805,13 +805,13 @@ describe("NullClear Worker Arbiter Test Suite", () => {
   });
 
   // 21. Health Check Endpoint
-  it("GET /health returns 200 with status ok and version 1.1.0", async () => {
+  it("GET /health returns 200 with status ok and version 1.1.2", async () => {
     const res = await app.fetch(new Request("http://localhost/health"), testEnv);
     expect(res.status).toBe(200);
     const json = (await res.json()) as any;
     expect(json.status).toBe("ok");
     expect(json.protocol).toBe("NullClear");
-    expect(json.version).toBe("1.1.1");
+    expect(json.version).toBe("1.1.2");
   });
 
   // 22. Live Sandbox 402 Seller Endpoints & Public Stats
@@ -822,10 +822,10 @@ describe("NullClear Worker Arbiter Test Suite", () => {
     expect(res402.headers.get("PAYMENT-REQUIRED")).toBeTruthy();
     const json402 = (await res402.json()) as any;
     expect(json402.error).toBe("Payment Required");
-    expect(json402.amount).toBe("1000");
+    expect(json402.amount).toBe("10000");
 
     // With payment signature
-    const sigHeader = await createValidPaymentSignature(sellerAccount.address, "1000");
+    const sigHeader = await createValidPaymentSignature(sellerAccount.address, "10000");
     const res200 = await app.fetch(
       new Request("http://localhost/v1/sandbox/market-feed", {
         headers: { "PAYMENT-SIGNATURE": sigHeader }

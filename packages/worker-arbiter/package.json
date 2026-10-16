@@ -1,6 +1,6 @@
 {
   "name": "@nullclear/worker-arbiter",
-  "version": "1.1.1",
+  "version": "1.1.2",
   "description": "NullClear Arbiter Cloudflare Worker for x402 Deferred Escrow Clearing and Reputation",
   "type": "module",
   "main": "./dist/index.js",

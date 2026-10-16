@@ -8,7 +8,7 @@ discoveryRouter.get("/health", (c) => {
   return c.json({
     status: "ok",
     protocol: "NullClear",
-    version: "1.1.1",
+    version: "1.1.2",
     timestamp: Date.now()
   });
 });
@@ -359,7 +359,7 @@ discoveryRouter.get("/.well-known/x402.json", (c) => {
 
   return c.json({
     x402Version: 2,
-    protocolVersion: "1.1.1",
+    protocolVersion: "1.1.2",
     service: "NullClear Arbiter",
     description: "Autonomous non-custodial schema escrow, deep value invariant verification, and reputation clearinghouse on Base Mainnet",
     erc8004AgentId: agentId,
@@ -439,7 +439,7 @@ discoveryRouter.get("/.well-known/x402.json", (c) => {
         path: "/v1/bazaar/audit",
         method: "GET",
         payable: true,
-        amountAtomic: "1000",
+        amountAtomic: "10000",
         extensions: {
           bazaar: {
             discoverable: true,
@@ -493,7 +493,7 @@ discoveryRouter.get("/.well-known/x402.json", (c) => {
         path: "/v1/bazaar/verify",
         method: "POST",
         payable: true,
-        amountAtomic: "1000",
+        amountAtomic: "10000",
         extensions: {
           bazaar: {
             discoverable: true,
@@ -536,11 +536,81 @@ discoveryRouter.get("/.well-known/x402.json", (c) => {
           }
         }
       },
+      bazaarTokenSecurity: {
+        path: "/v1/bazaar/token-security",
+        method: "GET",
+        payable: true,
+        amountAtomic: "10000",
+        extensions: {
+          bazaar: {
+            discoverable: true,
+            description: "Inspect Base token security, verified supply, liquidity risk, and x402 clearing compatibility on Base Mainnet (eip155:8453).",
+            info: {
+              input: {
+                type: "http",
+                method: "GET",
+                queryParams: {
+                  tokenAddress: {
+                    type: "string",
+                    example: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+                    description: "Base ERC-20 token contract address"
+                  }
+                }
+              },
+              output: {
+                type: "json",
+                example: {
+                  tokenAddress: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+                  symbol: "USDC",
+                  name: "USD Coin",
+                  decimals: 6,
+                  verified: true,
+                  isHoneypot: false,
+                  buyTaxBps: 0,
+                  sellTaxBps: 0,
+                  x402Compatible: true,
+                  securityScore: 99,
+                  riskLevel: "low",
+                  timestamp: 1729045678901
+                }
+              }
+            },
+            schema: {
+              $schema: "https://json-schema.org/draft/2020-12/schema",
+              type: "object",
+              properties: {
+                input: {
+                  type: "object",
+                  properties: { tokenAddress: { type: "string" } }
+                },
+                output: {
+                  type: "object",
+                  required: ["tokenAddress", "symbol", "verified", "securityScore", "x402Compatible"],
+                  properties: {
+                    tokenAddress: { type: "string" },
+                    symbol: { type: "string" },
+                    name: { type: "string" },
+                    decimals: { type: "integer" },
+                    verified: { type: "boolean" },
+                    isHoneypot: { type: "boolean" },
+                    buyTaxBps: { type: "integer" },
+                    sellTaxBps: { type: "integer" },
+                    x402Compatible: { type: "boolean" },
+                    securityScore: { type: "integer", minimum: 0, maximum: 100 },
+                    riskLevel: { type: "string", enum: ["low", "medium", "high"] },
+                    timestamp: { type: "integer" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
       sandboxMarketFeed: {
         path: "/v1/sandbox/market-feed",
         method: "GET",
         payable: true,
-        amountAtomic: "1000",
+        amountAtomic: "10000",
         extensions: {
           bazaar: {
             discoverable: true,
@@ -580,7 +650,7 @@ discoveryRouter.get("/.well-known/x402.json", (c) => {
         path: "/v1/sandbox/hallucinating-seller",
         method: "GET",
         payable: true,
-        amountAtomic: "1000",
+        amountAtomic: "10000",
         extensions: {
           bazaar: {
             discoverable: true,
@@ -756,8 +826,13 @@ discoveryRouter.get("/openapi.json", (c) => {
     openapi: "3.1.0",
     info: {
       title: "NullClear Arbiter API",
-      version: "1.1.1",
-      description: "Non-custodial deferred clearing, deep invariant validation, and reputation protocol for x402 AI Agents on Base Mainnet"
+      version: "1.1.2",
+      description: "Non-custodial deferred clearing, deep invariant validation, and reputation protocol for x402 AI Agents on Base Mainnet",
+      contact: {
+        name: "NullClear Protocol",
+        email: "contact@nullclear.dev",
+        url: "https://nullclear.dev"
+      }
     },
     servers: [
       {
@@ -765,11 +840,46 @@ discoveryRouter.get("/openapi.json", (c) => {
         description: "Production Arbiter API"
       }
     ],
+    components: {
+      securitySchemes: {
+        x402: {
+          type: "apiKey",
+          name: "PAYMENT-SIGNATURE",
+          in: "header",
+          description: "x402 payment signature header containing EIP-3009 transfer authorization"
+        }
+      }
+    },
     paths: {
       "/v1/clear": {
+        get: {
+          summary: "Get clearing proxy protocol status and usage instructions",
+          operationId: "getClearStatus",
+          security: [],
+          responses: {
+            "200": {
+              description: "Protocol clearinghouse proxy information",
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "object",
+                    properties: {
+                      service: { type: "string" },
+                      method: { type: "string" },
+                      usage: { type: "string" },
+                      documentation: { type: "string" },
+                      _agentDirective: { type: "object" }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
         post: {
           summary: "Execute deferred escrow clearing with deep invariants, failover routing, and spend firewall",
           operationId: "clearPayment",
+          security: [],
           requestBody: {
             required: true,
             content: {
@@ -876,9 +986,22 @@ discoveryRouter.get("/openapi.json", (c) => {
         get: {
           summary: "Retrieve composite trust score and Sybil wash-trade analysis for an agent",
           operationId: "getTrustScore",
+          security: [],
           parameters: [
-            { name: "chainId", in: "path", required: true, schema: { type: "string" } },
-            { name: "agentId", in: "path", required: true, schema: { type: "string" } }
+            {
+              name: "chainId",
+              in: "path",
+              required: true,
+              description: "EVM chain ID (e.g. 8453 for Base Mainnet)",
+              schema: { type: "string", default: "8453", example: "8453" }
+            },
+            {
+              name: "agentId",
+              in: "path",
+              required: true,
+              description: "ERC-8004 Agent token ID on specified chain",
+              schema: { type: "string", default: "124595", example: "124595" }
+            }
           ],
           responses: {
             "200": {
@@ -914,6 +1037,7 @@ discoveryRouter.get("/openapi.json", (c) => {
         get: {
           summary: "Public protocol telemetry and verified clearing history",
           operationId: "getProtocolStats",
+          security: [],
           responses: {
             "200": {
               description: "Live protocol metrics",
@@ -939,30 +1063,196 @@ discoveryRouter.get("/openapi.json", (c) => {
       "/v1/bazaar/audit": {
         get: {
           summary: "x402 Bazaar payable oracle for agent reputation audits",
-          operationId: "bazaarAudit",
+          operationId: "bazaarAuditGet",
+          security: [{ x402: [] }],
           parameters: [
-            { name: "agentId", in: "query", schema: { type: "string", default: "124595" } }
+            {
+              name: "agentId",
+              in: "query",
+              required: false,
+              description: "ERC-8004 Agent Token ID on Base Mainnet",
+              schema: { type: "string", default: "124595" }
+            }
           ],
           responses: {
+            "200": {
+              description: "Agent reputation audit response",
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "object",
+                    properties: {
+                      agentId: { type: "string" },
+                      trustScore: { type: "integer" },
+                      grade: { type: "string" },
+                      sybilRisk: { type: "string" },
+                      escrowReady: { type: "boolean" },
+                      timestamp: { type: "integer" },
+                      _agentDirective: { type: "object" }
+                    }
+                  }
+                }
+              }
+            },
+            "402": {
+              description: "Payment Required: $0.01 USDC (10000 atomic units) on Base Mainnet with x402 v2 payment headers"
+            }
+          }
+        },
+        post: {
+          summary: "x402 Bazaar payable oracle for agent reputation audits (POST)",
+          operationId: "bazaarAuditPost",
+          security: [{ x402: [] }],
+          requestBody: {
+            required: false,
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    agentId: { type: "string", default: "124595" }
+                  }
+                }
+              }
+            }
+          },
+          responses: {
             "200": { description: "Agent reputation audit response" },
-            "402": { description: "Payment Required (includes extensions.bazaar discovery)" }
+            "402": { description: "Payment Required" }
           }
         }
       },
       "/v1/bazaar/verify": {
+        get: {
+          summary: "x402 Bazaar payable oracle verification status (probe)",
+          operationId: "bazaarVerifyGet",
+          security: [{ x402: [] }],
+          responses: {
+            "200": { description: "Verification response" },
+            "402": { description: "Payment Required" }
+          }
+        },
         post: {
           summary: "x402 Bazaar payable oracle for agent schema compatibility verification",
           operationId: "bazaarVerify",
+          security: [{ x402: [] }],
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  required: ["agentId", "schema"],
+                  properties: {
+                    agentId: { type: "string", description: "ERC-8004 agent token ID" },
+                    schema: { type: "object", description: "JSON schema to verify against seller output" }
+                  }
+                }
+              }
+            }
+          },
           responses: {
-            "200": { description: "Verification response" },
+            "200": {
+              description: "Verification response",
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "object",
+                    properties: {
+                      verified: { type: "boolean" },
+                      agentId: { type: "string" },
+                      escrowSupported: { type: "boolean" },
+                      timestamp: { type: "integer" }
+                    }
+                  }
+                }
+              }
+            },
             "402": { description: "Payment Required (includes extensions.bazaar discovery)" }
+          }
+        }
+      },
+      "/v1/bazaar/token-security": {
+        get: {
+          summary: "x402 Bazaar payable oracle for Base token security and x402 clearing compatibility",
+          operationId: "bazaarTokenSecurityGet",
+          security: [{ x402: [] }],
+          parameters: [
+            {
+              name: "tokenAddress",
+              in: "query",
+              required: false,
+              description: "Base ERC-20 token contract address (default: native USDC)",
+              schema: { type: "string", default: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913" }
+            }
+          ],
+          responses: {
+            "200": {
+              description: "Token security audit response",
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "object",
+                    properties: {
+                      tokenAddress: { type: "string" },
+                      symbol: { type: "string" },
+                      name: { type: "string" },
+                      decimals: { type: "integer" },
+                      verified: { type: "boolean" },
+                      isHoneypot: { type: "boolean" },
+                      buyTaxBps: { type: "integer" },
+                      sellTaxBps: { type: "integer" },
+                      x402Compatible: { type: "boolean" },
+                      securityScore: { type: "integer" },
+                      riskLevel: { type: "string" },
+                      timestamp: { type: "integer" }
+                    }
+                  }
+                }
+              }
+            },
+            "402": { description: "Payment Required: $0.01 USDC (10000 atomic units) on Base Mainnet" }
+          }
+        },
+        post: {
+          summary: "x402 Bazaar payable oracle for Base token security (POST)",
+          operationId: "bazaarTokenSecurityPost",
+          security: [{ x402: [] }],
+          responses: {
+            "200": { description: "Token security audit response" },
+            "402": { description: "Payment Required" }
           }
         }
       },
       "/v1/sandbox/market-feed": {
         get: {
           summary: "Zero-config sandbox verified ETH/USDC price feed",
-          operationId: "sandboxMarketFeed",
+          operationId: "sandboxMarketFeedGet",
+          security: [{ x402: [] }],
+          responses: {
+            "200": {
+              description: "Live price feed",
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "object",
+                    properties: {
+                      asset: { type: "string" },
+                      price: { type: "number" },
+                      source: { type: "string" },
+                      timestamp: { type: "integer" }
+                    }
+                  }
+                }
+              }
+            },
+            "402": { description: "Payment Required: $0.01 USDC (10000 atomic units) on Base Mainnet" }
+          }
+        },
+        post: {
+          summary: "Zero-config sandbox verified ETH/USDC price feed (POST)",
+          operationId: "sandboxMarketFeedPost",
+          security: [{ x402: [] }],
           responses: {
             "200": { description: "Live price feed" },
             "402": { description: "Payment Required" }
@@ -972,7 +1262,32 @@ discoveryRouter.get("/openapi.json", (c) => {
       "/v1/sandbox/hallucinating-seller": {
         get: {
           summary: "Zero-config sandbox hallucinating seller for failover and refusal testing",
-          operationId: "sandboxHallucinatingSeller",
+          operationId: "sandboxHallucinatingSellerGet",
+          security: [{ x402: [] }],
+          responses: {
+            "200": {
+              description: "Refusal test data",
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "object",
+                    properties: {
+                      asset: { type: "string" },
+                      price: { type: "number" },
+                      summary: { type: "string" },
+                      timestamp: { type: "integer" }
+                    }
+                  }
+                }
+              }
+            },
+            "402": { description: "Payment Required: $0.01 USDC (10000 atomic units) on Base Mainnet" }
+          }
+        },
+        post: {
+          summary: "Zero-config sandbox hallucinating seller (POST)",
+          operationId: "sandboxHallucinatingSellerPost",
+          security: [{ x402: [] }],
           responses: {
             "200": { description: "Refusal test data" },
             "402": { description: "Payment Required" }
@@ -980,11 +1295,79 @@ discoveryRouter.get("/openapi.json", (c) => {
         }
       },
       "/v1/kya/attest": {
+        get: {
+          summary: "KYA attestation service status and format guide",
+          operationId: "getKyaAttestInfo",
+          security: [],
+          responses: {
+            "200": {
+              description: "Attestation guide",
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "object",
+                    properties: {
+                      service: { type: "string" },
+                      method: { type: "string" },
+                      usage: { type: "string" },
+                      documentation: { type: "string" }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
         post: {
           summary: "Register and attest a corporate liability KYA mandate",
           operationId: "attestKyaMandate",
+          security: [],
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  required: ["mandate", "chainId"],
+                  properties: {
+                    chainId: { type: "integer", default: 8453, description: "EVM chain ID" },
+                    signature: { type: "string" },
+                    signerAddress: { type: "string" },
+                    mandate: {
+                      type: "object",
+                      required: ["agentId", "corporateEntity", "agentWallet"],
+                      properties: {
+                        agentId: { type: "string" },
+                        corporateEntity: { type: "string" },
+                        agentWallet: { type: "string" },
+                        entityRegistrationNumber: { type: "string" },
+                        jurisdiction: { type: "string" },
+                        maxTxLimitUsd: { type: "number" },
+                        liabilityCoverageUsd: { type: "number" },
+                        validUntil: { type: "integer" }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
           responses: {
-            "200": { description: "Mandate recorded" },
+            "200": {
+              description: "Mandate recorded",
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "object",
+                    properties: {
+                      success: { type: "boolean" },
+                      message: { type: "string" },
+                      data: { type: "object" }
+                    }
+                  }
+                }
+              }
+            },
             "400": { description: "Invalid mandate parameters" }
           }
         }
@@ -993,20 +1376,72 @@ discoveryRouter.get("/openapi.json", (c) => {
         get: {
           summary: "Retrieve active KYA corporate mandate for an agent",
           operationId: "getKyaMandate",
+          security: [],
           parameters: [
-            { name: "chainId", in: "path", required: true, schema: { type: "string" } },
-            { name: "agentId", in: "path", required: true, schema: { type: "string" } }
+            {
+              name: "chainId",
+              in: "path",
+              required: true,
+              description: "EVM chain ID (e.g. 8453 for Base Mainnet)",
+              schema: { type: "string", default: "8453", example: "8453" }
+            },
+            {
+              name: "agentId",
+              in: "path",
+              required: true,
+              description: "ERC-8004 agent token ID",
+              schema: { type: "string", default: "124595", example: "124595" }
+            }
           ],
           responses: {
-            "200": { description: "KYA corporate mandate record" },
+            "200": {
+              description: "KYA corporate mandate record or status",
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "object",
+                    properties: {
+                      success: { type: "boolean" },
+                      registered: { type: "boolean" },
+                      active: { type: "boolean" },
+                      data: { type: "object" }
+                    }
+                  }
+                }
+              }
+            },
             "404": { description: "No mandate found" }
           }
         }
       },
       "/v1/kya/verify": {
+        get: {
+          summary: "KYA verification service status and usage guide",
+          operationId: "getKyaVerifyInfo",
+          security: [],
+          responses: {
+            "200": {
+              description: "Verification guide",
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "object",
+                    properties: {
+                      service: { type: "string" },
+                      method: { type: "string" },
+                      usage: { type: "string" },
+                      documentation: { type: "string" }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
         post: {
           summary: "Verify an agent's corporate liability mandate and transaction spending limits",
           operationId: "verifyKyaMandate",
+          security: [],
           requestBody: {
             required: true,
             content: {

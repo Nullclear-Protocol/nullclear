@@ -3,7 +3,7 @@
   "name": "io.github.mithgalalfayez/nullclear",
   "title": "NullClear Arbiter",
   "description": "Autonomous x402 payment schema-escrow arbiter, spend firewall, failover & ERC-8004 Sybil oracle",
-  "version": "1.1.1",
+  "version": "1.1.2",
   "websiteUrl": "https://nullclear.dev",
   "repository": {
     "url": "https://github.com/Nullclear-Protocol/nullclear",
@@ -14,7 +14,7 @@
     {
       "registryType": "npm",
       "identifier": "@nullclear/mcp",
-      "version": "1.1.1",
+      "version": "1.1.2",
       "transport": {
         "type": "stdio"
       }

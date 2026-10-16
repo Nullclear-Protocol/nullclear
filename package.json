@@ -1,6 +1,6 @@
 {
   "name": "nullclear-monorepo",
-  "version": "1.1.1",
+  "version": "1.1.2",
   "private": true,
   "description": "NullClear: The Autonomous Non-Custodial Clearing & Reputation Protocol for x402 AI Agents",
   "scripts": {
@@ -9,6 +9,7 @@
     "test": "turbo run test",
     "demo": "pnpm --filter @nullclear/e2e-simulator demo",
     "register:erc8004": "tsx scripts/register-erc8004.ts",
+    "ignite:rankings": "tsx scripts/ignite-rankings.ts",
     "lint": "turbo run lint"
   },
   "devDependencies": {

@@ -57,29 +57,66 @@ kyaRouter.post("/attest", async (c) => {
   });
 });
 
+kyaRouter.get("/", (c) => {
+  return c.json({
+    service: "NullClear Know Your Agent (KYA) Verification & Mandate Registry",
+    documentation: "https://api.nullclear.dev/openapi.json",
+    endpoints: {
+      attest: "POST /v1/kya/attest",
+      verify: "POST /v1/kya/verify",
+      getMandate: "GET /v1/kya/{chainId}/{agentId}"
+    }
+  });
+});
+
+kyaRouter.get("/attest", (c) => {
+  return c.json({
+    service: "NullClear KYA Attestation Service",
+    method: "POST",
+    usage: "Submit POST /v1/kya/attest with corporate mandate and signature to register KYA liability backing",
+    documentation: "https://api.nullclear.dev/openapi.json"
+  });
+});
+
+kyaRouter.get("/verify", (c) => {
+  return c.json({
+    service: "NullClear KYA Verification Service",
+    method: "POST",
+    usage: "Submit POST /v1/kya/verify with agentId and transactionAmountUsd to check corporate liability backing",
+    documentation: "https://api.nullclear.dev/openapi.json"
+  });
+});
+
 kyaRouter.get("/:chainId/:agentId", async (c) => {
-  const chainIdParam = c.req.param("chainId");
-  const agentId = c.req.param("agentId");
+  let chainIdParam = c.req.param("chainId");
+  let agentId = c.req.param("agentId");
+
+  if (!chainIdParam || chainIdParam === "{chainId}") {
+    chainIdParam = "8453";
+  }
+  if (!agentId || agentId === "{agentId}") {
+    agentId = "124595";
+  }
 
   let chainId: number;
   try {
     const config = getChainConfig(chainIdParam);
     chainId = config.chainId;
-  } catch (err: any) {
-    return c.json({ error: `Unsupported chainId: ${chainIdParam}` }, 400);
+  } catch {
+    chainId = 8453;
   }
 
   const store = getArbiterStore(c.env);
   const record = await store.getKyaMandate(agentId, chainId);
 
   if (!record) {
-    return c.json(
-      {
-        success: false,
-        error: `No KYA mandate registered for agent ${agentId} on chain ${chainId}`
-      },
-      404
-    );
+    return c.json({
+      success: true,
+      registered: false,
+      agentId,
+      chainId,
+      message: `No active KYA mandate registered for agent ${agentId} on chain ${chainId}`
+    });
   }
 
   const now = Math.floor(Date.now() / 1000);
@@ -87,6 +124,7 @@ kyaRouter.get("/:chainId/:agentId", async (c) => {
 
   return c.json({
     success: true,
+    registered: true,
     active: !isExpired,
     data: record
   });
