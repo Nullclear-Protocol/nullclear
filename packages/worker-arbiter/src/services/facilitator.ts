@@ -215,14 +215,42 @@ export async function settleViaFacilitator(options: SettlementOptions): Promise<
         ? facilitatorUrl
         : `${facilitatorUrl.replace(/\/$/, "")}/settle`;
 
+      const paymentRequirements = {
+        scheme: accepted.scheme || "exact",
+        network: accepted.network,
+        amount: String(accepted.amount),
+        payTo: accepted.payTo,
+        asset: accepted.asset,
+        maxTimeoutSeconds: accepted.maxTimeoutSeconds || 300,
+        extra: accepted.extra || { name: "USD Coin", version: "2" }
+      };
+
+      const normalizedAuth: EIP3009Authorization = {
+        from: authorization.from,
+        to: authorization.to,
+        value: String(authorization.value),
+        validAfter: String(authorization.validAfter),
+        validBefore: String(authorization.validBefore),
+        nonce: authorization.nonce
+      };
+
+      const requestBody = {
+        x402Version: 2,
+        paymentPayload: {
+          x402Version: 2,
+          accepted: paymentRequirements,
+          payload: {
+            signature,
+            authorization: normalizedAuth
+          }
+        },
+        paymentRequirements
+      };
+
       const res = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          authorization,
-          signature,
-          network: accepted.network
-        })
+        body: JSON.stringify(requestBody)
       });
 
       if (!res.ok) {
@@ -231,14 +259,41 @@ export async function settleViaFacilitator(options: SettlementOptions): Promise<
           success: false,
           network: accepted.network,
           payer: authorization.from,
-          errorReason: `Facilitator settlement failed: ${res.status} ${errorText}`
+          errorReason: `Facilitator settlement failed: HTTP ${res.status} ${errorText}`
         };
       }
 
-      const data = (await res.json()) as { txHash?: `0x${string}`; success?: boolean };
+      const data = (await res.json()) as {
+        success?: boolean;
+        transaction?: `0x${string}`;
+        txHash?: `0x${string}`;
+        errorReason?: string;
+        network?: "eip155:8453" | "eip155:84532";
+        payer?: `0x${string}`;
+      };
+
+      if (data.success === false) {
+        return {
+          success: false,
+          network: accepted.network,
+          payer: authorization.from,
+          errorReason: data.errorReason || "Facilitator rejected settlement"
+        };
+      }
+
+      const txHash = data.transaction || data.txHash;
+      if (!txHash) {
+        return {
+          success: false,
+          network: accepted.network,
+          payer: authorization.from,
+          errorReason: data.errorReason || "Facilitator response missing transaction hash"
+        };
+      }
+
       return {
         success: true,
-        transaction: data.txHash,
+        transaction: txHash,
         network: accepted.network,
         payer: authorization.from
       };
@@ -277,13 +332,74 @@ export async function settleViaFacilitator(options: SettlementOptions): Promise<
 }
 
 /**
+ * Verifies EIP-3009 payment signature via upstream PayAI Facilitator (/verify)
+ */
+export async function verifyViaFacilitator(options: SettlementOptions): Promise<{ isValid: boolean; invalidReason?: string }> {
+  const { authorization, signature, accepted, facilitatorUrl } = options;
+  if (!facilitatorUrl) {
+    return { isValid: false, invalidReason: "FACILITATOR_URL_MISSING" };
+  }
+
+  try {
+    const endpoint = facilitatorUrl.endsWith("/verify")
+      ? facilitatorUrl
+      : `${facilitatorUrl.replace(/\/settle\/?$/, "").replace(/\/$/, "")}/verify`;
+
+    const paymentRequirements = {
+      scheme: accepted.scheme || "exact",
+      network: accepted.network,
+      amount: String(accepted.amount),
+      payTo: accepted.payTo,
+      asset: accepted.asset,
+      maxTimeoutSeconds: accepted.maxTimeoutSeconds || 300,
+      extra: accepted.extra || { name: "USD Coin", version: "2" }
+    };
+
+    const normalizedAuth: EIP3009Authorization = {
+      from: authorization.from,
+      to: authorization.to,
+      value: String(authorization.value),
+      validAfter: String(authorization.validAfter),
+      validBefore: String(authorization.validBefore),
+      nonce: authorization.nonce
+    };
+
+    const res = await fetch(endpoint, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        x402Version: 2,
+        paymentPayload: {
+          x402Version: 2,
+          accepted: paymentRequirements,
+          payload: {
+            signature,
+            authorization: normalizedAuth
+          }
+        },
+        paymentRequirements
+      })
+    });
+
+    if (!res.ok) {
+      return { isValid: false, invalidReason: `HTTP_${res.status}` };
+    }
+
+    const data = (await res.json()) as { isValid: boolean; invalidReason?: string };
+    return { isValid: Boolean(data.isValid), invalidReason: data.invalidReason };
+  } catch (err: any) {
+    return { isValid: false, invalidReason: err.message || String(err) };
+  }
+}
+
+/**
  * Executes EIP-3009 settlement via:
  * 1. Direct on-chain USDC contract call (when settlementMode === "onchain")
  * 2. Facilitator HTTP proxy (when settlementMode === "facilitator")
  * 3. Deterministic simulation (strictly for development / test environments)
  */
 export async function settleTransfer(options: SettlementOptions): Promise<X402PaymentResponse> {
-  const { settlementMode = "facilitator", environment = "development" } = options;
+  const { settlementMode = "facilitator", environment = "development", arbiterPrivateKey } = options;
 
   if (settlementMode === "onchain") {
     const onchainResult = await settleOnChain(options);
@@ -298,7 +414,29 @@ export async function settleTransfer(options: SettlementOptions): Promise<X402Pa
   }
 
   if (settlementMode === "facilitator") {
-    return settleViaFacilitator(options);
+    const facResult = await settleViaFacilitator(options);
+    if (facResult.success) {
+      return facResult;
+    }
+    // Fallback to direct on-chain settlement if PayAI returns 5xx or connection error and arbiter private key is available
+    if (
+      arbiterPrivateKey &&
+      arbiterPrivateKey.startsWith("0x") &&
+      facResult.errorReason &&
+      (facResult.errorReason.includes("50") ||
+        facResult.errorReason.includes("502") ||
+        facResult.errorReason.includes("503") ||
+        facResult.errorReason.includes("504") ||
+        facResult.errorReason.includes("500") ||
+        facResult.errorReason.includes("Facilitator connection error") ||
+        facResult.errorReason.includes("fetch failed"))
+    ) {
+      const onchainResult = await settleOnChain(options);
+      if (onchainResult.success) {
+        return onchainResult;
+      }
+    }
+    return facResult;
   }
 
   if (environment === "production") {

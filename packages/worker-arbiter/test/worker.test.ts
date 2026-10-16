@@ -822,10 +822,10 @@ describe("NullClear Worker Arbiter Test Suite", () => {
     expect(res402.headers.get("PAYMENT-REQUIRED")).toBeTruthy();
     const json402 = (await res402.json()) as any;
     expect(json402.error).toBe("Payment Required");
-    expect(json402.amount).toBe("10000");
+    expect(json402.amount).toBe("1000");
 
     // With payment signature
-    const sigHeader = await createValidPaymentSignature(sellerAccount.address, "10000");
+    const sigHeader = await createValidPaymentSignature(sellerAccount.address, "1000");
     const res200 = await app.fetch(
       new Request("http://localhost/v1/sandbox/market-feed", {
         headers: { "PAYMENT-SIGNATURE": sigHeader }
@@ -930,5 +930,48 @@ describe("NullClear Worker Arbiter Test Suite", () => {
     expect(json.failedCandidates[0].sellerAgentId).toBe("124550");
     expect(json.winningSellerAgentId).toBe("124595");
     expect(json.data.price).toBe(2645.50);
+  });
+
+  // 12. Bazaar Endpoints
+  it("GET /v1/bazaar/audit returns 402 without payment and 200 with simulated test payment", async () => {
+    const res402 = await app.fetch(new Request("http://localhost/v1/bazaar/audit?agentId=124595"), testEnv);
+    expect(res402.status).toBe(402);
+    expect(res402.headers.get("PAYMENT-REQUIRED")).toBeTruthy();
+    const json402 = (await res402.json()) as any;
+    expect(json402.amount).toBe("10000");
+
+    const testSig = await createValidPaymentSignature(sellerAccount.address, "10000");
+    const res200 = await app.fetch(
+      new Request("http://localhost/v1/bazaar/audit?agentId=124595", {
+        headers: { "PAYMENT-SIGNATURE": testSig }
+      }),
+      testEnv
+    );
+    expect(res200.status).toBe(200);
+    expect(res200.headers.get("PAYMENT-RESPONSE")).toBeTruthy();
+    expect(res200.headers.get("X-PAYMENT-RESPONSE")).toBeTruthy();
+    const json200 = (await res200.json()) as any;
+    expect(json200.agentId).toBe("124595");
+    expect(json200.trustScore).toBeDefined();
+    expect(json200.settlementTransaction).toBeDefined();
+  });
+
+  it("GET /v1/bazaar/token-security returns 402 without payment and 200 with payment", async () => {
+    const res402 = await app.fetch(new Request("http://localhost/v1/bazaar/token-security"), testEnv);
+    expect(res402.status).toBe(402);
+    expect(res402.headers.get("PAYMENT-REQUIRED")).toBeTruthy();
+
+    const testSig = await createValidPaymentSignature(sellerAccount.address, "10000");
+    const res200 = await app.fetch(
+      new Request("http://localhost/v1/bazaar/token-security", {
+        headers: { "PAYMENT-SIGNATURE": testSig }
+      }),
+      testEnv
+    );
+    expect(res200.status).toBe(200);
+    expect(res200.headers.get("PAYMENT-RESPONSE")).toBeTruthy();
+    const json200 = (await res200.json()) as any;
+    expect(json200.symbol).toBe("USDC");
+    expect(json200.x402Compatible).toBe(true);
   });
 });

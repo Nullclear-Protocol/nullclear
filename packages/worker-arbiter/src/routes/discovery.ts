@@ -20,7 +20,13 @@ discoveryRouter.get("/", (c) => {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>NullClear | Non-Custodial Clearing & Reputation Protocol</title>
+  <title>NullClear — x402 Schema-Escrow Clearinghouse & ERC-8004 Reputation Oracle</title>
+  <meta name="description" content="Non-custodial x402 payment clearinghouse, deep invariant & LLM-refusal firewall, and ERC-8004 Sybil reputation oracle on Base Mainnet (Agent #124595).">
+  <meta property="og:title" content="NullClear — x402 Schema-Escrow Clearinghouse & ERC-8004 Reputation Oracle">
+  <meta property="og:description" content="Non-custodial x402 payment clearinghouse, deep invariant & LLM-refusal firewall, and ERC-8004 Sybil reputation oracle on Base Mainnet (Agent #124595).">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://nullclear.dev">
+  <link rel="icon" href="https://nullclear.dev/favicon.ico">
   <style>
     :root {
       --bg: #090a0f;
@@ -605,81 +611,6 @@ discoveryRouter.get("/.well-known/x402.json", (c) => {
             }
           }
         }
-      },
-      sandboxMarketFeed: {
-        path: "/v1/sandbox/market-feed",
-        method: "GET",
-        payable: true,
-        amountAtomic: "10000",
-        extensions: {
-          bazaar: {
-            discoverable: true,
-            description: "Live high-frequency ETH/USDC price feed verified by NullClear Arbiter on Base Mainnet (eip155:8453).",
-            info: {
-              input: { type: "http", method: "GET" },
-              output: {
-                type: "json",
-                example: {
-                  asset: "ETH/USDC",
-                  price: 2645.50,
-                  source: "NullClear Verified Feed",
-                  timestamp: 1729045678901
-                }
-              }
-            },
-            schema: {
-              $schema: "https://json-schema.org/draft/2020-12/schema",
-              type: "object",
-              properties: {
-                output: {
-                  type: "object",
-                  required: ["asset", "price", "source", "timestamp"],
-                  properties: {
-                    asset: { type: "string" },
-                    price: { type: "number", minimum: 0 },
-                    source: { type: "string" },
-                    timestamp: { type: "integer" }
-                  }
-                }
-              }
-            }
-          }
-        }
-      },
-      sandboxHallucinatingSeller: {
-        path: "/v1/sandbox/hallucinating-seller",
-        method: "GET",
-        payable: true,
-        amountAtomic: "10000",
-        extensions: {
-          bazaar: {
-            discoverable: true,
-            description: "Synthetic failing seller returning invalid data & LLM refusal strings to verify NullClear schema-escrow failover protection.",
-            info: {
-              input: { type: "http", method: "GET" },
-              output: {
-                type: "json",
-                example: {
-                  error: "As an AI language model, I cannot provide market predictions.",
-                  corrupted: true
-                }
-              }
-            },
-            schema: {
-              $schema: "https://json-schema.org/draft/2020-12/schema",
-              type: "object",
-              properties: {
-                output: {
-                  type: "object",
-                  properties: {
-                    error: { type: "string" },
-                    corrupted: { type: "boolean" }
-                  }
-                }
-              }
-            }
-          }
-        }
       }
     }
   });
@@ -825,9 +756,9 @@ discoveryRouter.get("/openapi.json", (c) => {
   return c.json({
     openapi: "3.1.0",
     info: {
-      title: "NullClear Arbiter API",
+      title: "NullClear",
       version: "1.1.2",
-      description: "Non-custodial deferred clearing, deep invariant validation, and reputation protocol for x402 AI Agents on Base Mainnet",
+      description: "Non-custodial x402 payment clearinghouse, schema & LLM-refusal escrow firewall, and ERC-8004 Sybil reputation oracle on Base Mainnet.",
       contact: {
         name: "NullClear Protocol",
         email: "contact@nullclear.dev",
@@ -1220,76 +1151,6 @@ discoveryRouter.get("/openapi.json", (c) => {
           security: [{ x402: [] }],
           responses: {
             "200": { description: "Token security audit response" },
-            "402": { description: "Payment Required" }
-          }
-        }
-      },
-      "/v1/sandbox/market-feed": {
-        get: {
-          summary: "Zero-config sandbox verified ETH/USDC price feed",
-          operationId: "sandboxMarketFeedGet",
-          security: [{ x402: [] }],
-          responses: {
-            "200": {
-              description: "Live price feed",
-              content: {
-                "application/json": {
-                  schema: {
-                    type: "object",
-                    properties: {
-                      asset: { type: "string" },
-                      price: { type: "number" },
-                      source: { type: "string" },
-                      timestamp: { type: "integer" }
-                    }
-                  }
-                }
-              }
-            },
-            "402": { description: "Payment Required: $0.01 USDC (10000 atomic units) on Base Mainnet" }
-          }
-        },
-        post: {
-          summary: "Zero-config sandbox verified ETH/USDC price feed (POST)",
-          operationId: "sandboxMarketFeedPost",
-          security: [{ x402: [] }],
-          responses: {
-            "200": { description: "Live price feed" },
-            "402": { description: "Payment Required" }
-          }
-        }
-      },
-      "/v1/sandbox/hallucinating-seller": {
-        get: {
-          summary: "Zero-config sandbox hallucinating seller for failover and refusal testing",
-          operationId: "sandboxHallucinatingSellerGet",
-          security: [{ x402: [] }],
-          responses: {
-            "200": {
-              description: "Refusal test data",
-              content: {
-                "application/json": {
-                  schema: {
-                    type: "object",
-                    properties: {
-                      asset: { type: "string" },
-                      price: { type: "number" },
-                      summary: { type: "string" },
-                      timestamp: { type: "integer" }
-                    }
-                  }
-                }
-              }
-            },
-            "402": { description: "Payment Required: $0.01 USDC (10000 atomic units) on Base Mainnet" }
-          }
-        },
-        post: {
-          summary: "Zero-config sandbox hallucinating seller (POST)",
-          operationId: "sandboxHallucinatingSellerPost",
-          security: [{ x402: [] }],
-          responses: {
-            "200": { description: "Refusal test data" },
             "402": { description: "Payment Required" }
           }
         }

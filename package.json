@@ -10,6 +10,7 @@
     "demo": "pnpm --filter @nullclear/e2e-simulator demo",
     "register:erc8004": "tsx scripts/register-erc8004.ts",
     "ignite:rankings": "tsx scripts/ignite-rankings.ts",
+    "bootstrap:volume": "tsx scripts/bootstrap-real-volume.ts",
     "lint": "turbo run lint"
   },
   "devDependencies": {

@@ -33,9 +33,15 @@ export async function signX402Payment(
     const account = privateKeyToAccount(signer as `0x${string}`);
     accountAddress = account.address;
     signTypedDataFn = (params) => account.signTypedData(params);
-  } else if (typeof signer === "object" && signer !== null && "signTypedData" in signer && "account" in signer && signer.account) {
-    const rawAccount = (signer as any).account;
-    accountAddress = typeof rawAccount === "string" ? (rawAccount as `0x${string}`) : rawAccount.address;
+  } else if (typeof signer === "object" && signer !== null && "signTypedData" in signer) {
+    if ("account" in signer && (signer as any).account) {
+      const rawAccount = (signer as any).account;
+      accountAddress = typeof rawAccount === "string" ? (rawAccount as `0x${string}`) : rawAccount.address;
+    } else if ("address" in signer && (signer as any).address) {
+      accountAddress = (signer as any).address;
+    } else {
+      throw new Error("Signer object missing address");
+    }
     signTypedDataFn = (params) => (signer as any).signTypedData(params);
   } else {
     throw new Error("Invalid signer provided to signX402Payment: must be private key or viem account/wallet client");
@@ -81,10 +87,15 @@ export async function signX402Payment(
     }
   });
 
+  const acceptedOption: X402PaymentOption = {
+    ...option,
+    extra: option.extra || { name: "USD Coin", version: "2" }
+  };
+
   const payload: X402PaymentSignaturePayload = {
     x402Version: 2,
     resource: resourceUrl ? { url: resourceUrl } : undefined,
-    accepted: option,
+    accepted: acceptedOption,
     payload: {
       signature,
       authorization
