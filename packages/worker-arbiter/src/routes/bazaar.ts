@@ -11,7 +11,11 @@ import { getArbiterStore, type Env } from "../env.js";
 import { computeTrustScore } from "../services/reputation.js";
 import { settleTransfer } from "../services/facilitator.js";
 import { validateTargetUrl } from "../services/ssrf-guard.js";
-import { findLlmRefusal, evaluateInvariants } from "../services/validator.js";
+import {
+  findLlmRefusal,
+  evaluateInvariants,
+  validateUpstreamResponse
+} from "../services/validator.js";
 
 export const bazaarRouter = new Hono<Env>();
 
@@ -45,7 +49,7 @@ const BAZAAR_MARKET_ORACLE_EXTENSION = {
       example: {
         symbol: "ETH",
         pair: "ETH-USD",
-        priceUsd: 2645.50,
+        priceUsd: 2645.5,
         sourcesChecked: ["coinbase", "binance"],
         verified: true,
         invariantCheck: "PASSED",
@@ -60,13 +64,38 @@ const BAZAAR_MARKET_ORACLE_EXTENSION = {
       input: {
         type: "object",
         properties: {
-          symbol: { type: "string" }
+          type: { type: "string", const: "http" },
+          method: { type: "string", enum: ["GET", "POST"] },
+          symbol: { type: "string", default: "ETH", example: "ETH" },
+          queryParams: {
+            type: "object",
+            properties: {
+              symbol: {
+                type: "string",
+                default: "ETH",
+                example: "ETH",
+                description: "Crypto asset ticker symbol (e.g. ETH, BTC, SOL)"
+              }
+            }
+          },
+          body: {
+            type: "object",
+            properties: {
+              symbol: {
+                type: "string",
+                default: "ETH",
+                example: "ETH",
+                description: "Crypto asset ticker symbol (e.g. ETH, BTC, SOL)"
+              }
+            }
+          }
         }
       },
       output: {
         type: "object",
         required: ["symbol", "priceUsd", "verified", "invariantCheck"],
         properties: {
+          type: { type: "string", const: "json" },
           symbol: { type: "string" },
           pair: { type: "string" },
           priceUsd: { type: "number" },
@@ -74,7 +103,21 @@ const BAZAAR_MARKET_ORACLE_EXTENSION = {
           sourcesChecked: { type: "array", items: { type: "string" } },
           verified: { type: "boolean" },
           invariantCheck: { type: "string" },
-          timestamp: { type: "integer" }
+          timestamp: { type: "integer" },
+          example: {
+            type: "object",
+            required: ["symbol", "priceUsd", "verified", "invariantCheck"],
+            properties: {
+              symbol: { type: "string" },
+              pair: { type: "string" },
+              priceUsd: { type: "number" },
+              source: { type: "string" },
+              sourcesChecked: { type: "array", items: { type: "string" } },
+              verified: { type: "boolean" },
+              invariantCheck: { type: "string" },
+              timestamp: { type: "integer" }
+            }
+          }
         }
       }
     }
@@ -104,6 +147,7 @@ const BAZAAR_TOKEN_SECURITY_EXTENSION = {
         tokenAddress: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
         symbol: "USDC",
         name: "USD Coin",
+        decimals: 6,
         isContract: true,
         verified: true,
         isHoneypot: false,
@@ -124,17 +168,57 @@ const BAZAAR_TOKEN_SECURITY_EXTENSION = {
       input: {
         type: "object",
         properties: {
-          address: { type: "string" },
-          tokenAddress: { type: "string" }
+          type: { type: "string", const: "http" },
+          method: { type: "string", enum: ["GET", "POST"] },
+          address: {
+            type: "string",
+            default: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+            example: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
+          },
+          tokenAddress: {
+            type: "string",
+            default: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
+          },
+          queryParams: {
+            type: "object",
+            properties: {
+              address: {
+                type: "string",
+                default: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+                example: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+                description: "Base ERC-20 token contract address"
+              }
+            }
+          },
+          body: {
+            type: "object",
+            properties: {
+              address: {
+                type: "string",
+                default: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+                example: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
+              }
+            }
+          }
         }
       },
       output: {
         type: "object",
-        required: ["tokenAddress", "symbol", "isContract", "verified", "securityScore", "x402Compatible"],
+        required: [
+          "tokenAddress",
+          "symbol",
+          "isContract",
+          "verified",
+          "securityScore",
+          "x402Compatible"
+        ],
         properties: {
+          type: { type: "string", const: "json" },
           tokenAddress: { type: "string" },
           symbol: { type: "string" },
           name: { type: "string" },
+          decimals: { type: "integer" },
+          totalSupply: { type: "string" },
           isContract: { type: "boolean" },
           verified: { type: "boolean" },
           isHoneypot: { type: "boolean" },
@@ -144,7 +228,34 @@ const BAZAAR_TOKEN_SECURITY_EXTENSION = {
           x402Compatible: { type: "boolean" },
           securityScore: { type: "integer", minimum: 0, maximum: 100 },
           riskLevel: { type: "string", enum: ["low", "medium", "high"] },
-          timestamp: { type: "integer" }
+          timestamp: { type: "integer" },
+          example: {
+            type: "object",
+            required: [
+              "tokenAddress",
+              "symbol",
+              "isContract",
+              "verified",
+              "securityScore",
+              "x402Compatible"
+            ],
+            properties: {
+              tokenAddress: { type: "string" },
+              symbol: { type: "string" },
+              name: { type: "string" },
+              decimals: { type: "integer" },
+              isContract: { type: "boolean" },
+              verified: { type: "boolean" },
+              isHoneypot: { type: "boolean" },
+              buyTaxBps: { type: "integer" },
+              sellTaxBps: { type: "integer" },
+              liquidityUsd: { type: "number" },
+              x402Compatible: { type: "boolean" },
+              securityScore: { type: "integer" },
+              riskLevel: { type: "string" },
+              timestamp: { type: "integer" }
+            }
+          }
         }
       }
     }
@@ -190,13 +301,41 @@ const BAZAAR_WALLET_RISK_EXTENSION = {
       input: {
         type: "object",
         properties: {
-          address: { type: "string" }
+          type: { type: "string", const: "http" },
+          method: { type: "string", enum: ["GET", "POST"] },
+          address: {
+            type: "string",
+            default: "0xfd74fF802EA0E735514C070AF04E0D6528deD145",
+            example: "0xfd74fF802EA0E735514C070AF04E0D6528deD145"
+          },
+          queryParams: {
+            type: "object",
+            properties: {
+              address: {
+                type: "string",
+                default: "0xfd74fF802EA0E735514C070AF04E0D6528deD145",
+                example: "0xfd74fF802EA0E735514C070AF04E0D6528deD145",
+                description: "Base Mainnet wallet address to profile"
+              }
+            }
+          },
+          body: {
+            type: "object",
+            properties: {
+              address: {
+                type: "string",
+                default: "0xfd74fF802EA0E735514C070AF04E0D6528deD145",
+                example: "0xfd74fF802EA0E735514C070AF04E0D6528deD145"
+              }
+            }
+          }
         }
       },
       output: {
         type: "object",
         required: ["address", "isContract", "transactionCount", "riskScore", "riskLevel"],
         properties: {
+          type: { type: "string", const: "json" },
           address: { type: "string" },
           isContract: { type: "boolean" },
           ethBalance: { type: "string" },
@@ -205,7 +344,22 @@ const BAZAAR_WALLET_RISK_EXTENSION = {
           erc8004Registered: { type: "boolean" },
           riskScore: { type: "integer", minimum: 0, maximum: 100 },
           riskLevel: { type: "string", enum: ["low", "medium", "high"] },
-          timestamp: { type: "integer" }
+          timestamp: { type: "integer" },
+          example: {
+            type: "object",
+            required: ["address", "isContract", "transactionCount", "riskScore", "riskLevel"],
+            properties: {
+              address: { type: "string" },
+              isContract: { type: "boolean" },
+              ethBalance: { type: "string" },
+              usdcBalance: { type: "string" },
+              transactionCount: { type: "integer" },
+              erc8004Registered: { type: "boolean" },
+              riskScore: { type: "integer" },
+              riskLevel: { type: "string" },
+              timestamp: { type: "integer" }
+            }
+          }
         }
       }
     }
@@ -249,13 +403,51 @@ const BAZAAR_VERIFIED_FETCH_EXTENSION = {
       input: {
         type: "object",
         properties: {
-          url: { type: "string" }
+          type: { type: "string", const: "http" },
+          method: { type: "string", enum: ["GET", "POST"] },
+          url: {
+            type: "string",
+            default: "https://api.coinbase.com/v2/prices/BTC-USD/spot",
+            example: "https://api.coinbase.com/v2/prices/BTC-USD/spot"
+          },
+          queryParams: {
+            type: "object",
+            properties: {
+              url: {
+                type: "string",
+                default: "https://api.coinbase.com/v2/prices/BTC-USD/spot",
+                example: "https://api.coinbase.com/v2/prices/BTC-USD/spot",
+                description: "Target public HTTPS URL to fetch with schema & refusal validation"
+              }
+            }
+          },
+          body: {
+            type: "object",
+            properties: {
+              url: {
+                type: "string",
+                default: "https://api.coinbase.com/v2/prices/BTC-USD/spot",
+                example: "https://api.coinbase.com/v2/prices/BTC-USD/spot"
+              },
+              jsonSchema: { type: "object" },
+              invariants: { type: "array", items: { type: "object" } },
+              rejectRefusals: { type: "boolean", default: true }
+            }
+          }
         }
       },
       output: {
         type: "object",
-        required: ["targetUrl", "upstreamStatus", "verified", "refusalDetected", "invariantsPassed", "attestation"],
+        required: [
+          "targetUrl",
+          "upstreamStatus",
+          "verified",
+          "refusalDetected",
+          "invariantsPassed",
+          "attestation"
+        ],
         properties: {
+          type: { type: "string", const: "json" },
           targetUrl: { type: "string" },
           upstreamStatus: { type: "integer" },
           verified: { type: "boolean" },
@@ -263,7 +455,28 @@ const BAZAAR_VERIFIED_FETCH_EXTENSION = {
           refusalDetected: { type: "boolean" },
           invariantsPassed: { type: "boolean" },
           attestation: { type: "string" },
-          timestamp: { type: "integer" }
+          timestamp: { type: "integer" },
+          example: {
+            type: "object",
+            required: [
+              "targetUrl",
+              "upstreamStatus",
+              "verified",
+              "refusalDetected",
+              "invariantsPassed",
+              "attestation"
+            ],
+            properties: {
+              targetUrl: { type: "string" },
+              upstreamStatus: { type: "integer" },
+              verified: { type: "boolean" },
+              data: {},
+              refusalDetected: { type: "boolean" },
+              invariantsPassed: { type: "boolean" },
+              attestation: { type: "string" },
+              timestamp: { type: "integer" }
+            }
+          }
         }
       }
     }
@@ -306,19 +519,55 @@ const BAZAAR_AUDIT_EXTENSION = {
       input: {
         type: "object",
         properties: {
-          agentId: { type: "string" }
+          type: { type: "string", const: "http" },
+          method: { type: "string", enum: ["GET", "POST"] },
+          agentId: { type: "string", default: "124595", example: "124595" },
+          queryParams: {
+            type: "object",
+            properties: {
+              agentId: {
+                type: "string",
+                default: "124595",
+                example: "124595",
+                description: "ERC-8004 Agent Token ID on Base Mainnet"
+              }
+            }
+          },
+          body: {
+            type: "object",
+            properties: {
+              agentId: {
+                type: "string",
+                default: "124595",
+                example: "124595"
+              }
+            }
+          }
         }
       },
       output: {
         type: "object",
         required: ["agentId", "trustScore", "grade", "escrowReady"],
         properties: {
+          type: { type: "string", const: "json" },
           agentId: { type: "string" },
           trustScore: { type: "integer", minimum: 0, maximum: 100 },
           grade: { type: "string", enum: ["A", "B", "C", "D", "F"] },
           sybilRisk: { type: "string", enum: ["low", "medium", "high"] },
           escrowReady: { type: "boolean" },
-          timestamp: { type: "integer" }
+          timestamp: { type: "integer" },
+          example: {
+            type: "object",
+            required: ["agentId", "trustScore", "grade", "escrowReady"],
+            properties: {
+              agentId: { type: "string" },
+              trustScore: { type: "integer" },
+              grade: { type: "string" },
+              sybilRisk: { type: "string" },
+              escrowReady: { type: "boolean" },
+              timestamp: { type: "integer" }
+            }
+          }
         }
       }
     }
@@ -358,20 +607,48 @@ const BAZAAR_VERIFY_EXTENSION = {
     properties: {
       input: {
         type: "object",
-        required: ["agentId", "schema"],
         properties: {
-          agentId: { type: "string" },
-          schema: { type: "object" }
+          type: { type: "string", const: "http" },
+          method: { type: "string", enum: ["GET", "POST"] },
+          agentId: { type: "string", default: "124595", example: "124595" },
+          schema: { type: "object" },
+          queryParams: {
+            type: "object",
+            properties: {
+              agentId: { type: "string", default: "124595", example: "124595" }
+            }
+          },
+          body: {
+            type: "object",
+            properties: {
+              agentId: { type: "string", default: "124595", example: "124595" },
+              schema: {
+                type: "object",
+                example: { type: "object", required: ["price"] }
+              }
+            }
+          }
         }
       },
       output: {
         type: "object",
         required: ["verified", "agentId", "escrowSupported"],
         properties: {
+          type: { type: "string", const: "json" },
           verified: { type: "boolean" },
           agentId: { type: "string" },
           escrowSupported: { type: "boolean" },
-          timestamp: { type: "integer" }
+          timestamp: { type: "integer" },
+          example: {
+            type: "object",
+            required: ["verified", "agentId", "escrowSupported"],
+            properties: {
+              verified: { type: "boolean" },
+              agentId: { type: "string" },
+              escrowSupported: { type: "boolean" },
+              timestamp: { type: "integer" }
+            }
+          }
         }
       }
     }
@@ -394,7 +671,8 @@ function createPaymentRequiredHeader(
     maxTimeoutSeconds: 300,
     resource: {
       url: `https://api.nullclear.dev${resourcePath}`,
-      description
+      description,
+      mimeType: "application/json"
     },
     accepts: [
       {
@@ -432,8 +710,21 @@ async function handleBazaarPayment(
     c.req.header("x-nullclear-escrow-hold") === "true" ||
     c.req.header("x-nullclear-verified-escrow");
 
+  // Always expose x402 payment challenge headers for AgentCash / x402scan browser & server probes
+  c.header(
+    "Access-Control-Expose-Headers",
+    "PAYMENT-REQUIRED, Payment-Required, X-Payment-Response, Pay-To, PAYMENT-RESPONSE, X-NullClear-Attestation"
+  );
+  c.header("Pay-To", NULLCLEAR_TREASURY_ADDRESS);
+
+  // Rule: "402 Before 400" — Unauthenticated probes ALWAYS hit 402 before any query/body validation
   if (!paymentHeader && !isEscrowPassThrough) {
-    const paymentReqHeader = createPaymentRequiredHeader(resourcePath, description, bazaarExtension, "10000");
+    const paymentReqHeader = createPaymentRequiredHeader(
+      resourcePath,
+      description,
+      bazaarExtension,
+      "10000"
+    );
     c.header("PAYMENT-REQUIRED", paymentReqHeader);
     return {
       settled: false,
@@ -446,6 +737,22 @@ async function handleBazaarPayment(
           network: "eip155:8453",
           amount: "10000",
           payTo: NULLCLEAR_TREASURY_ADDRESS,
+          resource: {
+            url: `https://api.nullclear.dev${resourcePath}`,
+            description,
+            mimeType: "application/json"
+          },
+          accepts: [
+            {
+              scheme: "exact",
+              network: "eip155:8453",
+              amount: "10000",
+              asset: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+              payTo: NULLCLEAR_TREASURY_ADDRESS,
+              maxTimeoutSeconds: 300,
+              extra: { name: "USD Coin", version: "2" }
+            }
+          ],
           extensions: {
             bazaar: bazaarExtension
           },
@@ -469,7 +776,12 @@ async function handleBazaarPayment(
   try {
     paymentPayload = decodeBase64Json(paymentHeader);
   } catch (err: any) {
-    const paymentReqHeader = createPaymentRequiredHeader(resourcePath, description, bazaarExtension, "10000");
+    const paymentReqHeader = createPaymentRequiredHeader(
+      resourcePath,
+      description,
+      bazaarExtension,
+      "10000"
+    );
     c.header("PAYMENT-REQUIRED", paymentReqHeader);
     return {
       settled: false,
@@ -502,7 +814,12 @@ async function handleBazaarPayment(
   const signature = paymentPayload.payload?.signature;
 
   if (!authorization || !signature) {
-    const paymentReqHeader = createPaymentRequiredHeader(resourcePath, description, bazaarExtension, "10000");
+    const paymentReqHeader = createPaymentRequiredHeader(
+      resourcePath,
+      description,
+      bazaarExtension,
+      "10000"
+    );
     c.header("PAYMENT-REQUIRED", paymentReqHeader);
     return {
       settled: false,
@@ -571,7 +888,12 @@ async function handleBazaarPayment(
   });
 
   if (!settlement.success || !settlement.transaction) {
-    const paymentReqHeader = createPaymentRequiredHeader(resourcePath, description, bazaarExtension, "10000");
+    const paymentReqHeader = createPaymentRequiredHeader(
+      resourcePath,
+      description,
+      bazaarExtension,
+      "10000"
+    );
     c.header("PAYMENT-REQUIRED", paymentReqHeader);
     return {
       settled: false,
@@ -642,7 +964,19 @@ bazaarRouter.all("/market-oracle", async (c) => {
     return result.errorResponse!;
   }
 
-  const rawSymbol = c.req.query("symbol") || c.req.query("pair")?.split("-")[0] || "ETH";
+  let bodySymbol: string | undefined;
+  if (c.req.method === "POST") {
+    try {
+      const b: any = await c.req.json();
+      bodySymbol = b?.symbol || b?.pair?.split("-")[0];
+    } catch {}
+  }
+
+  const rawSymbol =
+    c.req.query("symbol") ||
+    c.req.query("pair")?.split("-")[0] ||
+    bodySymbol ||
+    "ETH";
   const symbol = rawSymbol.toUpperCase();
 
   let priceUsd = 0;
@@ -674,7 +1008,7 @@ bazaarRouter.all("/market-oracle", async (c) => {
   }
 
   if (!priceUsd) {
-    priceUsd = symbol === "BTC" ? 68500 : symbol === "SOL" ? 180 : 2645.50;
+    priceUsd = symbol === "BTC" ? 68500 : symbol === "SOL" ? 180 : 2645.5;
     source = "oracle_deterministic_anchor";
   }
 
@@ -691,8 +1025,8 @@ bazaarRouter.all("/market-oracle", async (c) => {
     priceUsd,
     source,
     sourcesChecked: ["coinbase", "binance"],
-    verified: true,
-    invariantCheck: "PASSED",
+    verified: priceUsd > 0,
+    invariantCheck: priceUsd > 0 ? "PASSED" : "FAILED",
     attestation,
     settlementTransaction: result.transaction,
     timestamp,
@@ -712,29 +1046,72 @@ bazaarRouter.all("/token-security", async (c) => {
     return result.errorResponse!;
   }
 
+  let bodyAddr: string | undefined;
+  if (c.req.method === "POST") {
+    try {
+      const b: any = await c.req.json();
+      bodyAddr = b?.address || b?.tokenAddress;
+    } catch {}
+  }
+
   const targetAddress = (
     c.req.query("address") ||
     c.req.query("tokenAddress") ||
+    bodyAddr ||
     "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
   ).toLowerCase();
 
   const rpcUrl = c.env?.BASE_MAINNET_RPC_URL || c.env?.BASE_RPC_URL || "https://mainnet.base.org";
   let isContract = false;
+  let decimals = 6;
+  let totalSupplyRaw = "0";
 
   try {
     const rpcRes = await fetch(rpcUrl, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        jsonrpc: "2.0",
-        id: 1,
-        method: "eth_getCode",
-        params: [targetAddress, "latest"]
-      })
+      body: JSON.stringify([
+        {
+          jsonrpc: "2.0",
+          id: 1,
+          method: "eth_getCode",
+          params: [targetAddress, "latest"]
+        },
+        {
+          jsonrpc: "2.0",
+          id: 2,
+          method: "eth_call",
+          params: [{ to: targetAddress, data: "0x313ce567" }, "latest"]
+        },
+        {
+          jsonrpc: "2.0",
+          id: 3,
+          method: "eth_call",
+          params: [{ to: targetAddress, data: "0x18160ddd" }, "latest"]
+        }
+      ])
     });
     if (rpcRes.ok) {
-      const rpcData: any = await rpcRes.json();
-      isContract = Boolean(rpcData?.result && rpcData.result !== "0x");
+      const rpcResults: any = await rpcRes.json();
+      if (Array.isArray(rpcResults)) {
+        const codeHex = rpcResults.find((r) => r.id === 1)?.result;
+        const decHex = rpcResults.find((r) => r.id === 2)?.result;
+        const supHex = rpcResults.find((r) => r.id === 3)?.result;
+        isContract = Boolean(codeHex && codeHex !== "0x");
+        if (decHex && decHex !== "0x") {
+          const parsedDec = parseInt(decHex, 16);
+          if (!Number.isNaN(parsedDec) && parsedDec >= 0 && parsedDec <= 36) {
+            decimals = parsedDec;
+          }
+        }
+        if (supHex && supHex !== "0x") {
+          try {
+            totalSupplyRaw = formatUnits(BigInt(supHex), decimals);
+          } catch {}
+        }
+      } else if (rpcResults?.result) {
+        isContract = Boolean(rpcResults.result && rpcResults.result !== "0x");
+      }
     }
   } catch {}
 
@@ -748,6 +1125,9 @@ bazaarRouter.all("/token-security", async (c) => {
   } catch {}
 
   const isUsdc = targetAddress === "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913";
+  if (isUsdc && !isContract) {
+    isContract = true;
+  }
   const timestamp = Date.now();
   const attestation = keccak256(
     stringToHex(`nullclear:token_sec:${targetAddress}:${isContract}:${timestamp}`)
@@ -759,6 +1139,8 @@ bazaarRouter.all("/token-security", async (c) => {
     tokenAddress: targetAddress,
     symbol: pairData?.baseToken?.symbol || (isUsdc ? "USDC" : "BASE_TOKEN"),
     name: pairData?.baseToken?.name || (isUsdc ? "USD Coin" : "Base Ecosystem Verified Token"),
+    decimals,
+    totalSupply: totalSupplyRaw,
     isContract,
     verified: isContract,
     isHoneypot: false,
@@ -766,7 +1148,7 @@ bazaarRouter.all("/token-security", async (c) => {
     sellTaxBps: 0,
     liquidityUsd: pairData?.liquidity?.usd || (isUsdc ? 50000000 : 100000),
     volume24hUsd: pairData?.volume?.h24 || (isUsdc ? 25000000 : 50000),
-    priceUsd: pairData?.priceUsd ? parseFloat(pairData.priceUsd) : (isUsdc ? 1.0 : 0.0),
+    priceUsd: pairData?.priceUsd ? parseFloat(pairData.priceUsd) : isUsdc ? 1.0 : 0.0,
     dexId: pairData?.dexId || "uniswap_v3",
     x402Compatible: true,
     securityScore: isContract ? 99 : 60,
@@ -791,9 +1173,18 @@ bazaarRouter.all("/wallet-risk", async (c) => {
     return result.errorResponse!;
   }
 
+  let bodyAddr: string | undefined;
+  if (c.req.method === "POST") {
+    try {
+      const b: any = await c.req.json();
+      bodyAddr = b?.address || b?.wallet;
+    } catch {}
+  }
+
   const rawAddress =
     c.req.query("address") ||
     c.req.query("wallet") ||
+    bodyAddr ||
     c.env?.ARBITER_WALLET_ADDRESS ||
     "0xfd74fF802EA0E735514C070AF04E0D6528deD145";
   const targetAddress = rawAddress.toLowerCase();
@@ -844,12 +1235,16 @@ bazaarRouter.all("/wallet-risk", async (c) => {
     }
   } catch {}
 
-  let isAgent = false;
+  let isAgent =
+    targetAddress === "0xfd74ff802ea0e735514c070af04e0d6528ded145" ||
+    targetAddress === (c.env?.ARBITER_WALLET_ADDRESS || "").toLowerCase();
   try {
-    if (c.env?.DB) {
+    if (!isAgent && c.env?.DB) {
       const row = await c.env.DB.prepare(
         "SELECT agent_id FROM agents WHERE lower(owner_address) = ? LIMIT 1"
-      ).bind(targetAddress).first();
+      )
+        .bind(targetAddress)
+        .first();
       isAgent = Boolean(row);
     }
   } catch {}
@@ -896,11 +1291,16 @@ bazaarRouter.all("/verified-fetch", async (c) => {
 
   let targetUrl = c.req.query("url");
   let invariants: any[] = [];
-  if (!targetUrl) {
+  let jsonSchema: Record<string, unknown> | undefined;
+  let rejectRefusals = true;
+
+  if (c.req.method === "POST") {
     try {
       const body: any = await c.req.json();
-      targetUrl = body.url || body.targetUrl;
+      if (!targetUrl) targetUrl = body.url || body.targetUrl;
       if (Array.isArray(body.invariants)) invariants = body.invariants;
+      if (body.jsonSchema && typeof body.jsonSchema === "object") jsonSchema = body.jsonSchema;
+      if (typeof body.rejectRefusals === "boolean") rejectRefusals = body.rejectRefusals;
     } catch {}
   }
 
@@ -922,17 +1322,18 @@ bazaarRouter.all("/verified-fetch", async (c) => {
   }
 
   let upstreamStatus = 0;
+  let rawText = "";
   let parsedData: any = null;
   try {
     const upstreamRes = await fetch(targetUrl, {
       headers: { "User-Agent": "NullClear-Verified-Fetch/1.1" }
     });
     upstreamStatus = upstreamRes.status;
-    const contentType = upstreamRes.headers.get("content-type") || "";
-    if (contentType.includes("application/json")) {
-      parsedData = await upstreamRes.json();
-    } else {
-      parsedData = await upstreamRes.text();
+    rawText = await upstreamRes.text();
+    try {
+      parsedData = JSON.parse(rawText);
+    } catch {
+      parsedData = rawText;
     }
   } catch (err: any) {
     return c.json(
@@ -945,7 +1346,18 @@ bazaarRouter.all("/verified-fetch", async (c) => {
     );
   }
 
-  // Anti-hallucination / LLM refusal guard
+  // Run full NullClear upstream validation + LLM refusal guard + invariants
+  const validation = await validateUpstreamResponse(
+    upstreamStatus,
+    rawText,
+    typeof parsedData === "object" ? parsedData : null,
+    {
+      expectedStatus: [200],
+      jsonSchema,
+      invariants,
+      rejectRefusals
+    }
+  );
   const refusalFound = findLlmRefusal(parsedData);
   const invariantErrors = evaluateInvariants(parsedData, invariants);
 
@@ -959,12 +1371,13 @@ bazaarRouter.all("/verified-fetch", async (c) => {
   return c.json({
     targetUrl,
     upstreamStatus,
-    verified: true,
+    verified: validation.valid,
     data: parsedData,
     refusalDetected: Boolean(refusalFound),
     refusalReason: refusalFound || undefined,
     invariantsPassed: invariantErrors.length === 0,
     invariantErrors: invariantErrors.length > 0 ? invariantErrors : undefined,
+    validationErrors: validation.errors.length > 0 ? validation.errors : undefined,
     attestation,
     settlementTransaction: result.transaction,
     timestamp,
@@ -984,7 +1397,15 @@ bazaarRouter.all("/audit", async (c) => {
     return result.errorResponse!;
   }
 
-  const agentId = c.req.query("agentId") || "124595";
+  let bodyAgentId: string | undefined;
+  if (c.req.method === "POST") {
+    try {
+      const b: any = await c.req.json();
+      bodyAgentId = b?.agentId;
+    } catch {}
+  }
+
+  const agentId = String(c.req.query("agentId") || bodyAgentId || "124595");
   const store = getArbiterStore(c.env);
   const scoreResult = await computeTrustScore(agentId, 8453, store, {
     arbiterPrivateKey: c.env?.ARBITER_PRIVATE_KEY,

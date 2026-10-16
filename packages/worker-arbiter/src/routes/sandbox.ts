@@ -86,38 +86,96 @@ sandboxRouter.get("/", (c) => {
 
 // 1. GET & POST /v1/sandbox/market-feed
 sandboxRouter.all("/market-feed", async (c) => {
+  c.header(
+    "Access-Control-Expose-Headers",
+    "PAYMENT-REQUIRED, Payment-Required, X-Payment-Response, Pay-To, PAYMENT-RESPONSE, X-NullClear-Attestation"
+  );
+  c.header("Pay-To", NULLCLEAR_TREASURY_ADDRESS);
+
   if (!hasPayment(c)) {
-    const bazaarHeader = createPaymentRequiredHeader(
-      "/v1/sandbox/market-feed",
-      "NullClear Verified Market Feed & Schema Canary ($0.01 USDC)",
-      {
-        description: "NullClear Verified Market Feed & Schema Canary ($0.01 USDC) with live cross-verified spot price on Base Mainnet (eip155:8453).",
-        input: { type: "http", method: "GET" },
+    const bazaarExtension = {
+      discoverable: true,
+      description:
+        "NullClear Verified Market Feed & Schema Canary ($0.01 USDC) with live cross-verified spot price on Base Mainnet (eip155:8453).",
+      info: {
+        input: {
+          type: "http",
+          method: "GET",
+          queryParams: {
+            asset: {
+              type: "string",
+              example: "ETH",
+              description: "Asset symbol (default ETH)"
+            }
+          }
+        },
         output: {
           type: "json",
           example: {
             asset: "ETH/USDC",
-            price: 2645.50,
+            price: 2645.5,
             source: "NullClear Verified Feed",
             timestamp: 1729045678901
           }
-        },
-        schema: {
-          $schema: "https://json-schema.org/draft/2020-12/schema",
-          type: "object",
-          properties: {
-            output: {
-              type: "object",
-              required: ["asset", "price", "source", "timestamp"],
-              properties: {
-                asset: { type: "string" },
-                price: { type: "number" },
-                source: { type: "string" },
-                timestamp: { type: "integer" }
+        }
+      },
+      schema: {
+        $schema: "https://json-schema.org/draft/2020-12/schema",
+        type: "object",
+        properties: {
+          input: {
+            type: "object",
+            properties: {
+              type: { type: "string", const: "http" },
+              method: { type: "string", enum: ["GET", "POST"] },
+              asset: { type: "string", default: "ETH", example: "ETH" },
+              queryParams: {
+                type: "object",
+                properties: {
+                  asset: { type: "string", default: "ETH", example: "ETH" }
+                }
+              },
+              body: {
+                type: "object",
+                properties: {
+                  asset: { type: "string", default: "ETH", example: "ETH" }
+                }
+              }
+            }
+          },
+          output: {
+            type: "object",
+            required: ["asset", "price", "source", "timestamp"],
+            properties: {
+              type: { type: "string", const: "json" },
+              asset: { type: "string" },
+              price: { type: "number" },
+              source: { type: "string" },
+              timestamp: { type: "integer" },
+              example: {
+                type: "object",
+                required: ["asset", "price", "source", "timestamp"],
+                properties: {
+                  asset: { type: "string" },
+                  price: { type: "number" },
+                  source: { type: "string" },
+                  timestamp: { type: "integer" }
+                }
               }
             }
           }
         }
+      }
+    };
+
+    const bazaarHeader = createPaymentRequiredHeader(
+      "/v1/sandbox/market-feed",
+      "NullClear Verified Market Feed & Schema Canary ($0.01 USDC)",
+      {
+        description: bazaarExtension.description,
+        input: bazaarExtension.info.input,
+        output: bazaarExtension.info.output,
+        schema: bazaarExtension.schema
       }
     );
 
@@ -131,6 +189,24 @@ sandboxRouter.all("/market-feed", async (c) => {
         network: "eip155:8453",
         amount: "1000",
         payTo: NULLCLEAR_TREASURY_ADDRESS,
+        resource: {
+          url: "https://api.nullclear.dev/v1/sandbox/market-feed",
+          description: bazaarExtension.description,
+          mimeType: "application/json"
+        },
+        accepts: [
+          {
+            scheme: "exact",
+            network: "eip155:8453",
+            amount: "1000",
+            asset: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+            payTo: NULLCLEAR_TREASURY_ADDRESS,
+            maxTimeoutSeconds: 60
+          }
+        ],
+        extensions: {
+          bazaar: bazaarExtension
+        },
         _agentDirective: AGENT_DIRECTIVE
       },
       402

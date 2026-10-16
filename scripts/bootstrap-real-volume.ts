@@ -210,6 +210,7 @@ async function main() {
     { name: "Buyer C", ...deriveBuyer(3, arbiterPrivateKey) }
   ];
 
+  const buyerBalances = new Map<string, bigint>();
   for (const buyer of buyers) {
     const bBalance = await publicClient.readContract({
       address: BASE_USDC_ADDRESS,
@@ -217,10 +218,11 @@ async function main() {
       functionName: "balanceOf",
       args: [buyer.account.address]
     });
+    buyerBalances.set(buyer.account.address, bBalance);
     console.log(`      ${buyer.name} (${buyer.account.address}): ${formatUnits(bBalance, 6)} USDC (${bBalance} atomic units)`);
   }
 
-  // Step 4: Execute 6 real x402 purchases across the new live endpoints
+  // Step 4: Execute real x402 purchases across the new live endpoints
   console.log("\n[4/4] Executing Real On-Chain x402 Handshakes via PayAI Facilitator across new live endpoints...");
   const settlements: Array<{ buyer: string; endpoint: string; txHash?: string }> = [];
 
@@ -252,8 +254,14 @@ async function main() {
   ];
 
   for (const call of calls) {
+    const rem = buyerBalances.get(call.buyer.account.address) ?? 0n;
+    if (rem < 10000n) {
+      console.log(`  ℹ️ Skipping ${call.buyer.name} -> ${call.endpoint} (remaining balance: ${formatUnits(rem, 6)} USDC)`);
+      continue;
+    }
     try {
       const result = await executeX402Purchase(call.buyer, call.endpoint);
+      buyerBalances.set(call.buyer.account.address, rem - 10000n);
       settlements.push({
         buyer: call.buyer.name,
         endpoint: call.endpoint,

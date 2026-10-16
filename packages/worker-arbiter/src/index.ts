@@ -8,6 +8,7 @@ import { discoveryRouter } from "./routes/discovery.js";
 import { mcpHttpRouter } from "./routes/mcp-http.js";
 import { sandboxRouter } from "./routes/sandbox.js";
 import { bazaarRouter } from "./routes/bazaar.js";
+import { a2aRouter } from "./routes/a2a.js";
 
 declare const process: any;
 
@@ -33,11 +34,20 @@ app.use(
       "Content-Type",
       "Authorization",
       "PAYMENT-SIGNATURE",
+      "X-PAYMENT",
       "PAYMENT-REQUIRED",
+      "SIGN-IN-WITH-X",
       "X-NullClear-Escrow-Hold",
       "X-NullClear-Clearing-Id"
     ],
-    exposeHeaders: ["PAYMENT-RESPONSE", "PAYMENT-REQUIRED", "X-NullClear-Attestation"]
+    exposeHeaders: [
+      "PAYMENT-RESPONSE",
+      "PAYMENT-REQUIRED",
+      "Payment-Required",
+      "X-Payment-Response",
+      "Pay-To",
+      "X-NullClear-Attestation"
+    ]
   })
 );
 
@@ -77,6 +87,7 @@ app.route("/v1/clear", clearRouter);
 app.route("/v1/score", scoreRouter);
 app.route("/v1/kya", kyaRouter);
 app.route("/mcp", mcpHttpRouter);
+app.route("/a2a", a2aRouter);
 app.route("/", discoveryRouter);
 
 export default app;

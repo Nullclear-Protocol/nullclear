@@ -805,6 +805,54 @@ const getX402Manifest = (c: any) => {
 discoveryRouter.get("/.well-known/x402", (c) => c.json(getX402Manifest(c)));
 discoveryRouter.get("/.well-known/x402.json", (c) => c.json(getX402Manifest(c)));
 
+// Favicon & Logo SVG endpoints (eliminates FAVICON_MISSING in @agentcash/discovery)
+const BRAND_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128">
+  <rect width="128" height="128" rx="24" fill="#090a0f"/>
+  <path d="M64 16L24 34v30c0 26.5 17.1 50.8 40 58 22.9-7.2 40-31.5 40-58V34L64 16z" fill="#0f172a" stroke="#38bdf8" stroke-width="6"/>
+  <path d="M48 64l11 11 21-22" fill="none" stroke="#34d399" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>`;
+
+const serveSvgIcon = (c: any) => {
+  c.header("Content-Type", "image/svg+xml; charset=utf-8");
+  c.header("Cache-Control", "public, max-age=86400");
+  return c.body(BRAND_SVG);
+};
+
+discoveryRouter.get("/favicon.ico", serveSvgIcon);
+discoveryRouter.get("/favicon.svg", serveSvgIcon);
+discoveryRouter.get("/favicon.png", serveSvgIcon);
+discoveryRouter.get("/logo.png", serveSvgIcon);
+discoveryRouter.get("/opengraph-image.png", serveSvgIcon);
+
+// GET /agents.md & /.well-known/agents.md - Machine-readable bootstrap guide for autonomous agents
+const getAgentsMd = () => `# NullClear Protocol — Autonomous Agent Bootstrap Guide (v1.1.2)
+
+- **ERC-8004 Official Identity**: Agent \`#124595\` on Base Mainnet (\`eip155:8453\`)
+- **OpenAPI Discovery Contract**: \`https://api.nullclear.dev/openapi.json\`
+- **A2A JSON-RPC 2.0 Endpoint**: \`POST https://api.nullclear.dev/a2a\`
+- **Remote MCP Endpoint**: \`https://api.nullclear.dev/mcp\` (\`@nullclear/mcp\`)
+- **Schema-Escrow Clearinghouse Proxy**: \`POST https://api.nullclear.dev/v1/clear\`
+- **Treasury Receiver (Base Mainnet USDC)**: \`0xB586eFcCa41dF27ad3873BEcA54da0c30bf04d5c\`
+
+## 1. Native x402 Payable Intelligence Suite (\`$0.01 USDC\` / \`10000\` atomic units on Base)
+Any \`AgentCash\`, \`x402-fetch\`, or \`Coinbase AgentKit\` buyer agent can call these endpoints directly using standard HTTP 402 \`PAYMENT-SIGNATURE\` headers:
+1. \`GET https://api.nullclear.dev/v1/bazaar/market-oracle?symbol=ETH\` — Live cross-verified crypto spot price (Coinbase + Binance) with deterministic spread invariant verification and cryptographic attestation.
+2. \`GET https://api.nullclear.dev/v1/bazaar/token-security?address=0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913\` — Live Base Mainnet ERC-20 contract bytecode, decimals, supply, DexScreener liquidity, and honeypot scanner.
+3. \`GET https://api.nullclear.dev/v1/bazaar/wallet-risk?address=0xfd74fF802EA0E735514C070AF04E0D6528deD145\` — Live Base Mainnet wallet counterparty & Sybil risk profiler (EOA vs contract, ETH/USDC balances, tx nonce count, ERC-8004 registration).
+4. \`GET / POST https://api.nullclear.dev/v1/bazaar/verified-fetch?url=https://api.coinbase.com/v2/prices/BTC-USD/spot\` — Anti-hallucination HTTP proxy that fetches any public HTTPS JSON endpoint, enforces LLM-refusal guards and numeric invariants, and returns signed attestations.
+5. \`GET / POST https://api.nullclear.dev/v1/bazaar/audit?agentId=124595\` — ERC-8004 agent Sybil reputation score, wash-trading cluster audit, and x402 escrow readiness check.
+6. \`POST https://api.nullclear.dev/v1/bazaar/verify\` — Verify an agent's JSON schema contract compatibility on Base Mainnet.
+
+## 2. Mode 1: Non-Custodial Schema-Escrow Clearinghouse (\`POST /v1/clear\`)
+When paying third-party x402 merchants, route your signed EIP-3009 authorization through \`POST https://api.nullclear.dev/v1/clear\`. NullClear validates HTTP status, Draft-07 JSON Schema, deterministic invariants (\`gt\`, \`lt\`, \`maxStalenessSeconds\`), and LLM refusal traps (\`rejectRefusals: true\`) BEFORE settling on-chain. If upstream fails or hallucinates, the signature is shredded in memory (\`$0.00\` charged).
+
+## 3. Native A2A JSON-RPC 2.0 (\`POST /a2a\`)
+Send JSON-RPC 2.0 requests with \`method: "message/send"\`, \`"tasks/send"\`, \`"agent/authenticatedExtendedCard"\`, \`"skills/list"\`, or \`"reputation/check"\` to \`https://api.nullclear.dev/a2a\`.
+`;
+
+discoveryRouter.get("/agents.md", (c) => c.text(getAgentsMd()));
+discoveryRouter.get("/.well-known/agents.md", (c) => c.text(getAgentsMd()));
+
 // A2A & ERC-8004 Agent Card JSON
 const getAgentCard = (c: any) => {
   const agentWallet = c.env?.ARBITER_WALLET_ADDRESS || "0xfd74fF802EA0E735514C070AF04E0D6528deD145";
@@ -814,7 +862,11 @@ const getAgentCard = (c: any) => {
   return {
     type: "https://eips.ethereum.org/EIPS/eip-8004#registration-v1",
     name: "NullClear Arbiter",
+    version: "1.1.2",
+    protocolVersion: "0.2.1",
     description: "Autonomous non-custodial clearing, reputation scoring, and KYA arbiter for AI commerce on Base Mainnet",
+    url: "https://api.nullclear.dev/a2a",
+    documentationUrl: "https://api.nullclear.dev/agents.md",
     image: "https://nullclear.dev/logo.png",
     active: true,
     x402Support: true,
@@ -822,14 +874,19 @@ const getAgentCard = (c: any) => {
     treasuryWallet,
     supportedTrust: ["reputation", "validation", "x402-escrow", "crypto-economic"],
     mcpEndpoint: "https://api.nullclear.dev/mcp",
+    a2aEndpoint: "https://api.nullclear.dev/a2a",
+    defaultInputModes: ["application/json", "text/plain"],
+    defaultOutputModes: ["application/json", "text/plain"],
     services: [
       { name: "web", endpoint: "https://nullclear.dev" },
       { name: "api", endpoint: "https://api.nullclear.dev" },
       { name: "mcp", endpoint: "https://api.nullclear.dev/mcp" },
-      { name: "a2a", endpoint: "https://api.nullclear.dev/.well-known/agent-card.json" },
+      { name: "a2a", endpoint: "https://api.nullclear.dev/a2a" },
+      { name: "agentCard", endpoint: "https://api.nullclear.dev/.well-known/agent-card.json" },
       { name: "x402", endpoint: "https://api.nullclear.dev/.well-known/x402.json" },
       { name: "erc8004", endpoint: "https://api.nullclear.dev/.well-known/erc-8004.json" },
       { name: "llms", endpoint: "https://api.nullclear.dev/llms.txt" },
+      { name: "agentsMd", endpoint: "https://api.nullclear.dev/agents.md" },
       { name: "openapi", endpoint: "https://api.nullclear.dev/openapi.json" }
     ],
     registrations: [
@@ -840,16 +897,25 @@ const getAgentCard = (c: any) => {
     ],
     skills: [
       {
+        id: "nullclear-x402-escrow",
         name: "nullclear-x402-escrow",
         description: "Deferred schema-escrow clearing for x402 payments with deep invariant verification and autonomous multi-seller failover.",
         endpoint: "https://api.nullclear.dev/v1/clear",
         tags: ["x402", "escrow", "invariants", "reputation", "erc8004"]
       },
       {
+        id: "nullclear-reputation-oracle",
         name: "nullclear-reputation-oracle",
         description: "ERC-8004 on-chain trust score, Sybil wash-trade audit, and corporate KYA verification on Base.",
         endpoint: "https://api.nullclear.dev/v1/score/8453/{agentId}",
         tags: ["erc8004", "reputation", "sybil", "oracle"]
+      },
+      {
+        id: "nullclear-bazaar-oracles",
+        name: "nullclear-bazaar-oracles",
+        description: "5 live x402 payable Base Mainnet intelligence endpoints ($0.01 USDC): market-oracle, token-security, wallet-risk, verified-fetch, and audit.",
+        endpoint: "https://api.nullclear.dev/openapi.json",
+        tags: ["x402", "bazaar", "defi", "oracle", "security"]
       }
     ],
     capabilities: [
@@ -861,7 +927,8 @@ const getAgentCard = (c: any) => {
       "deep_value_invariants",
       "llm_refusal_guard",
       "autonomous_failover_routing",
-      "outbound_spend_firewall"
+      "outbound_spend_firewall",
+      "a2a_jsonrpc"
     ]
   };
 };
@@ -900,7 +967,7 @@ discoveryRouter.get("/.well-known/mcp.json", (c) => {
   return c.json({
     name: "NullClear MCP Server",
     package: "@nullclear/mcp",
-    version: "1.1.1",
+    version: "1.1.2",
     transport: "streamable-http",
     url: "https://api.nullclear.dev/mcp",
     description: "Model Context Protocol tools for safe x402 calls, deep invariant evaluation, reputation checks, and KYA verification",
@@ -940,793 +1007,1241 @@ discoveryRouter.get("/.well-known/ai-plugin.json", (c) => {
   });
 });
 
-// GET /openapi.json - Complete OpenAPI 3.1.0 Specification
-discoveryRouter.get("/openapi.json", (c) => {
-  return c.json({
-    openapi: "3.1.0",
-    info: {
-      title: "NullClear",
-      version: "1.1.2",
-      description: "Non-custodial x402 payment clearinghouse, schema & LLM-refusal escrow firewall, and ERC-8004 Sybil reputation oracle on Base Mainnet.",
-      contact: {
-        name: "NullClear Protocol",
-        email: "contact@nullclear.dev",
-        url: "https://nullclear.dev"
+const FIXED_PAYMENT_INFO = {
+  price: {
+    mode: "fixed",
+    currency: "USD",
+    amount: "0.01"
+  },
+  protocols: [{ x402: {} }]
+};
+
+const getOpenApiSpec = () => ({
+  openapi: "3.1.0",
+  info: {
+    title: "NullClear",
+    version: "1.1.2",
+    description:
+      "Non-custodial x402 payment clearinghouse, schema & LLM-refusal escrow firewall, and ERC-8004 Sybil reputation & DeFi intelligence oracle on Base Mainnet (Agent #124595).",
+    "x-guidance":
+      "NullClear provides two modes for autonomous AI agents on Base Mainnet (eip155:8453): (1) Direct x402 Payable Intelligence Oracles ($0.01 USDC / 10000 atomic units per call via PayAI Facilitator): call GET /v1/bazaar/market-oracle?symbol=ETH for cross-verified crypto spot prices, GET /v1/bazaar/token-security?address=0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913 for Base ERC-20 contract & liquidity scanning, GET /v1/bazaar/wallet-risk?address=0xfd74fF802EA0E735514C070AF04E0D6528deD145 for wallet counterparty & Sybil profiling, GET/POST /v1/bazaar/verified-fetch?url=https://api.coinbase.com/v2/prices/BTC-USD/spot for schema-verified anti-hallucination HTTP fetching, or GET /v1/bazaar/audit?agentId=124595 for ERC-8004 reputation audits. All paid endpoints return HTTP 402 with a PAYMENT-REQUIRED header first before any parameter rejection. (2) Non-Custodial Schema-Escrow Proxy: use POST /v1/clear (free to call; holds your signed EIP-3009 header in memory and only settles if the upstream response satisfies your JSON schema, numeric invariants, and LLM-refusal checks; voids with $0.00 charged on upstream failure).",
+    contact: {
+      name: "NullClear Protocol",
+      email: "contact@nullclear.dev",
+      url: "https://nullclear.dev"
+    }
+  },
+  "x-discovery": {
+    ownershipProofs: []
+  },
+  servers: [
+    {
+      url: "https://api.nullclear.dev",
+      description: "Production Arbiter & x402 Bazaar API"
+    }
+  ],
+  components: {
+    securitySchemes: {
+      x402: {
+        type: "apiKey",
+        name: "PAYMENT-SIGNATURE",
+        in: "header",
+        description: "x402 payment signature header containing EIP-3009 transfer authorization"
+      },
+      siwx: {
+        type: "apiKey",
+        name: "SIGN-IN-WITH-X",
+        in: "header",
+        description: "Sign-In-With-X wallet identity header"
       }
-    },
-    servers: [
-      {
-        url: "https://api.nullclear.dev",
-        description: "Production Arbiter API"
-      }
-    ],
-    components: {
-      securitySchemes: {
-        x402: {
-          type: "apiKey",
-          name: "PAYMENT-SIGNATURE",
-          in: "header",
-          description: "x402 payment signature header containing EIP-3009 transfer authorization"
+    }
+  },
+  paths: {
+    "/v1/bazaar/market-oracle": {
+      get: {
+        operationId: "bazaarMarketOracleGet",
+        summary:
+          "Market Oracle - Live cross-verified crypto spot price (BTC, ETH, SOL, BASE tokens) with spread invariant check and attestation",
+        tags: ["Bazaar Oracles"],
+        "x-payment-info": FIXED_PAYMENT_INFO,
+        parameters: [
+          {
+            name: "symbol",
+            in: "query",
+            required: false,
+            description: "Crypto asset ticker symbol (e.g. ETH, BTC, SOL)",
+            schema: { type: "string", default: "ETH", example: "ETH" }
+          },
+          {
+            name: "pair",
+            in: "query",
+            required: false,
+            description: "Optional trading pair (e.g. ETH-USD)",
+            schema: { type: "string", default: "ETH-USD", example: "ETH-USD" }
+          }
+        ],
+        responses: {
+          "200": {
+            description: "Real-time verified market oracle price with cryptographic attestation",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  required: ["symbol", "priceUsd", "verified", "invariantCheck", "timestamp"],
+                  properties: {
+                    symbol: { type: "string", example: "ETH" },
+                    pair: { type: "string", example: "ETH-USD" },
+                    priceUsd: { type: "number", example: 2645.5 },
+                    source: { type: "string", example: "coinbase" },
+                    sourcesChecked: { type: "array", items: { type: "string" } },
+                    verified: { type: "boolean", example: true },
+                    invariantCheck: { type: "string", example: "PASSED" },
+                    attestation: { type: "string" },
+                    settlementTransaction: { type: "string" },
+                    timestamp: { type: "integer" },
+                    _agentDirective: { type: "object" }
+                  }
+                }
+              }
+            }
+          },
+          "402": {
+            description: "Payment Required"
+          }
         }
-      }
-    },
-    paths: {
-      "/v1/clear": {
-        get: {
-          summary: "Get clearing proxy protocol status and usage instructions",
-          operationId: "getClearStatus",
-          security: [],
-          responses: {
-            "200": {
-              description: "Protocol clearinghouse proxy information",
-              content: {
-                "application/json": {
-                  schema: {
-                    type: "object",
-                    properties: {
-                      service: { type: "string" },
-                      method: { type: "string" },
-                      usage: { type: "string" },
-                      documentation: { type: "string" },
-                      _agentDirective: { type: "object" }
-                    }
+      },
+      post: {
+        operationId: "bazaarMarketOraclePost",
+        summary: "Market Oracle (POST) - Live cross-verified crypto spot price with attestation",
+        tags: ["Bazaar Oracles"],
+        "x-payment-info": FIXED_PAYMENT_INFO,
+        requestBody: {
+          required: false,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                properties: {
+                  symbol: {
+                    type: "string",
+                    default: "ETH",
+                    example: "ETH",
+                    description: "Crypto asset ticker symbol (e.g. ETH, BTC, SOL)"
                   }
                 }
               }
             }
           }
         },
-        post: {
-          summary: "Execute deferred escrow clearing with deep invariants, failover routing, and spend firewall",
-          operationId: "clearPayment",
-          security: [],
-          requestBody: {
-            required: true,
+        responses: {
+          "200": {
+            description: "Real-time verified market oracle price with cryptographic attestation",
             content: {
               "application/json": {
                 schema: {
                   type: "object",
-                  required: ["targetUrl", "paymentSignatureHeader"],
+                  required: ["symbol", "priceUsd", "verified", "invariantCheck", "timestamp"],
                   properties: {
-                    targetUrl: { type: "string", description: "Upstream API endpoint demanding x402 payment" },
-                    method: { type: "string", enum: ["GET", "POST", "PUT", "DELETE"], default: "GET" },
-                    headers: { type: "object", additionalProperties: { type: "string" } },
-                    body: { description: "Optional request body forwarded upstream" },
-                    paymentSignatureHeader: { type: "string", description: "Base64 encoded X402PaymentSignaturePayload" },
-                    sellerAgentId: { type: "string", description: "Seller's ERC-8004 agent token ID" },
-                    minTrustScore: { type: "number", default: 50, description: "Minimum acceptable seller trust score (0-100)" },
-                    validation: {
-                      type: "object",
-                      properties: {
-                        expectedStatus: { type: "array", items: { type: "integer" }, default: [200] },
-                        jsonSchema: { type: "object", description: "Draft-07 JSON Schema response must satisfy" },
-                        requiredFields: { type: "array", items: { type: "string" } },
-                        invariants: {
-                          type: "array",
-                          description: "Deep semantic and numeric bounds invariants",
-                          items: {
-                            type: "object",
-                            required: ["path"],
-                            properties: {
-                              path: { type: "string", description: "Dot-notation property path (e.g. 'price')" },
-                              gt: { type: "number" },
-                              gte: { type: "number" },
-                              lt: { type: "number" },
-                              lte: { type: "number" },
-                              eq: {},
-                              neq: {},
-                              minLength: { type: "number" },
-                              maxLength: { type: "number" },
-                              pattern: { type: "string", description: "Regex pattern string" },
-                              notContains: { type: "array", items: { type: "string" } },
-                              maxStalenessSeconds: { type: "number", description: "Max age in seconds vs current time" }
+                    symbol: { type: "string", example: "ETH" },
+                    pair: { type: "string", example: "ETH-USD" },
+                    priceUsd: { type: "number", example: 2645.5 },
+                    source: { type: "string", example: "coinbase" },
+                    sourcesChecked: { type: "array", items: { type: "string" } },
+                    verified: { type: "boolean", example: true },
+                    invariantCheck: { type: "string", example: "PASSED" },
+                    attestation: { type: "string" },
+                    settlementTransaction: { type: "string" },
+                    timestamp: { type: "integer" }
+                  }
+                }
+              }
+            }
+          },
+          "402": {
+            description: "Payment Required"
+          }
+        }
+      }
+    },
+    "/v1/bazaar/token-security": {
+      get: {
+        operationId: "bazaarTokenSecurityGet",
+        summary:
+          "Token Security - Live Base Mainnet ERC-20 contract bytecode, decimals, supply, DexScreener liquidity, and honeypot scanner",
+        tags: ["Bazaar Oracles"],
+        "x-payment-info": FIXED_PAYMENT_INFO,
+        parameters: [
+          {
+            name: "address",
+            in: "query",
+            required: false,
+            description: "Base ERC-20 token contract address (default: native USDC)",
+            schema: {
+              type: "string",
+              default: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+              example: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
+            }
+          }
+        ],
+        responses: {
+          "200": {
+            description: "Token security audit response",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  required: [
+                    "tokenAddress",
+                    "symbol",
+                    "isContract",
+                    "verified",
+                    "securityScore",
+                    "x402Compatible"
+                  ],
+                  properties: {
+                    tokenAddress: { type: "string" },
+                    symbol: { type: "string", example: "USDC" },
+                    name: { type: "string", example: "USD Coin" },
+                    decimals: { type: "integer", example: 6 },
+                    totalSupply: { type: "string" },
+                    isContract: { type: "boolean", example: true },
+                    verified: { type: "boolean", example: true },
+                    isHoneypot: { type: "boolean", example: false },
+                    buyTaxBps: { type: "integer", example: 0 },
+                    sellTaxBps: { type: "integer", example: 0 },
+                    liquidityUsd: { type: "number" },
+                    volume24hUsd: { type: "number" },
+                    priceUsd: { type: "number" },
+                    x402Compatible: { type: "boolean", example: true },
+                    securityScore: { type: "integer", example: 99 },
+                    riskLevel: { type: "string", example: "low" },
+                    attestation: { type: "string" },
+                    settlementTransaction: { type: "string" },
+                    timestamp: { type: "integer" }
+                  }
+                }
+              }
+            }
+          },
+          "402": { description: "Payment Required" }
+        }
+      },
+      post: {
+        operationId: "bazaarTokenSecurityPost",
+        summary: "Token Security (POST) - Live Base Mainnet ERC-20 security & liquidity scanner",
+        tags: ["Bazaar Oracles"],
+        "x-payment-info": FIXED_PAYMENT_INFO,
+        requestBody: {
+          required: false,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                properties: {
+                  address: {
+                    type: "string",
+                    default: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+                    example: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+                    description: "Base ERC-20 token contract address"
+                  }
+                }
+              }
+            }
+          }
+        },
+        responses: {
+          "200": {
+            description: "Token security audit response",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  required: [
+                    "tokenAddress",
+                    "symbol",
+                    "isContract",
+                    "verified",
+                    "securityScore",
+                    "x402Compatible"
+                  ],
+                  properties: {
+                    tokenAddress: { type: "string" },
+                    symbol: { type: "string" },
+                    name: { type: "string" },
+                    decimals: { type: "integer" },
+                    isContract: { type: "boolean" },
+                    verified: { type: "boolean" },
+                    liquidityUsd: { type: "number" },
+                    x402Compatible: { type: "boolean" },
+                    securityScore: { type: "integer" },
+                    riskLevel: { type: "string" },
+                    timestamp: { type: "integer" }
+                  }
+                }
+              }
+            }
+          },
+          "402": { description: "Payment Required" }
+        }
+      }
+    },
+    "/v1/bazaar/wallet-risk": {
+      get: {
+        operationId: "bazaarWalletRiskGet",
+        summary:
+          "Wallet Risk - Live Base Mainnet wallet counterparty risk profiler (EOA vs contract, ETH/USDC balances, nonce, ERC-8004 Sybil risk)",
+        tags: ["Bazaar Oracles"],
+        "x-payment-info": FIXED_PAYMENT_INFO,
+        parameters: [
+          {
+            name: "address",
+            in: "query",
+            required: false,
+            description: "Base Mainnet wallet address to profile",
+            schema: {
+              type: "string",
+              default: "0xfd74fF802EA0E735514C070AF04E0D6528deD145",
+              example: "0xfd74fF802EA0E735514C070AF04E0D6528deD145"
+            }
+          }
+        ],
+        responses: {
+          "200": {
+            description: "Real-time counterparty wallet risk profile",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  required: [
+                    "address",
+                    "isContract",
+                    "transactionCount",
+                    "riskScore",
+                    "riskLevel",
+                    "timestamp"
+                  ],
+                  properties: {
+                    address: { type: "string" },
+                    isContract: { type: "boolean" },
+                    ethBalance: { type: "string" },
+                    usdcBalance: { type: "string" },
+                    transactionCount: { type: "integer" },
+                    erc8004Registered: { type: "boolean" },
+                    riskScore: { type: "integer", minimum: 0, maximum: 100 },
+                    riskLevel: { type: "string", enum: ["low", "medium", "high"] },
+                    attestation: { type: "string" },
+                    settlementTransaction: { type: "string" },
+                    timestamp: { type: "integer" },
+                    _agentDirective: { type: "object" }
+                  }
+                }
+              }
+            }
+          },
+          "402": {
+            description: "Payment Required"
+          }
+        }
+      },
+      post: {
+        operationId: "bazaarWalletRiskPost",
+        summary: "Wallet Risk (POST) - Live Base Mainnet wallet counterparty risk profiler",
+        tags: ["Bazaar Oracles"],
+        "x-payment-info": FIXED_PAYMENT_INFO,
+        requestBody: {
+          required: false,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                properties: {
+                  address: {
+                    type: "string",
+                    default: "0xfd74fF802EA0E735514C070AF04E0D6528deD145",
+                    example: "0xfd74fF802EA0E735514C070AF04E0D6528deD145",
+                    description: "Base Mainnet wallet address to profile"
+                  }
+                }
+              }
+            }
+          }
+        },
+        responses: {
+          "200": {
+            description: "Real-time counterparty wallet risk profile",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  required: ["address", "isContract", "transactionCount", "riskScore", "riskLevel"],
+                  properties: {
+                    address: { type: "string" },
+                    isContract: { type: "boolean" },
+                    ethBalance: { type: "string" },
+                    usdcBalance: { type: "string" },
+                    transactionCount: { type: "integer" },
+                    erc8004Registered: { type: "boolean" },
+                    riskScore: { type: "integer" },
+                    riskLevel: { type: "string" },
+                    timestamp: { type: "integer" }
+                  }
+                }
+              }
+            }
+          },
+          "402": { description: "Payment Required" }
+        }
+      }
+    },
+    "/v1/bazaar/verified-fetch": {
+      get: {
+        operationId: "bazaarVerifiedFetchGet",
+        summary:
+          "Verified Fetch - Schema-verified HTTP fetch & anti-hallucination proxy with LLM-refusal and invariant guards",
+        tags: ["Bazaar Oracles"],
+        "x-payment-info": FIXED_PAYMENT_INFO,
+        parameters: [
+          {
+            name: "url",
+            in: "query",
+            required: false,
+            description: "Target public HTTPS URL to fetch with schema & refusal validation",
+            schema: {
+              type: "string",
+              default: "https://api.coinbase.com/v2/prices/BTC-USD/spot",
+              example: "https://api.coinbase.com/v2/prices/BTC-USD/spot"
+            }
+          }
+        ],
+        responses: {
+          "200": {
+            description: "Verified and attested fetch payload",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  required: [
+                    "targetUrl",
+                    "upstreamStatus",
+                    "verified",
+                    "refusalDetected",
+                    "invariantsPassed",
+                    "attestation"
+                  ],
+                  properties: {
+                    targetUrl: { type: "string" },
+                    upstreamStatus: { type: "integer" },
+                    verified: { type: "boolean" },
+                    data: {},
+                    refusalDetected: { type: "boolean" },
+                    invariantsPassed: { type: "boolean" },
+                    attestation: { type: "string" },
+                    settlementTransaction: { type: "string" },
+                    timestamp: { type: "integer" },
+                    _agentDirective: { type: "object" }
+                  }
+                }
+              }
+            }
+          },
+          "402": {
+            description: "Payment Required"
+          }
+        }
+      },
+      post: {
+        operationId: "bazaarVerifiedFetchPost",
+        summary: "Verified Fetch (POST) - Schema-verified HTTP fetch & anti-hallucination proxy with custom invariants",
+        tags: ["Bazaar Oracles"],
+        "x-payment-info": FIXED_PAYMENT_INFO,
+        requestBody: {
+          required: false,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                properties: {
+                  url: {
+                    type: "string",
+                    default: "https://api.coinbase.com/v2/prices/BTC-USD/spot",
+                    example: "https://api.coinbase.com/v2/prices/BTC-USD/spot",
+                    description: "Target public HTTPS URL"
+                  },
+                  jsonSchema: { type: "object", description: "Optional Draft-07 JSON Schema" },
+                  invariants: { type: "array", items: { type: "object" } },
+                  rejectRefusals: { type: "boolean", default: true }
+                }
+              }
+            }
+          }
+        },
+        responses: {
+          "200": {
+            description: "Verified and attested fetch payload",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  required: [
+                    "targetUrl",
+                    "upstreamStatus",
+                    "verified",
+                    "refusalDetected",
+                    "invariantsPassed",
+                    "attestation"
+                  ],
+                  properties: {
+                    targetUrl: { type: "string" },
+                    upstreamStatus: { type: "integer" },
+                    verified: { type: "boolean" },
+                    data: {},
+                    refusalDetected: { type: "boolean" },
+                    invariantsPassed: { type: "boolean" },
+                    attestation: { type: "string" },
+                    timestamp: { type: "integer" },
+                    _agentDirective: { type: "object" }
+                  }
+                }
+              }
+            }
+          },
+          "402": {
+            description: "Payment Required"
+          }
+        }
+      }
+    },
+    "/v1/bazaar/audit": {
+      get: {
+        operationId: "bazaarAuditGet",
+        summary:
+          "Agent Reputation Audit - Verify ERC-8004 agent Sybil reputation score, wash-trading risk, and x402 escrow readiness",
+        tags: ["Bazaar Oracles"],
+        "x-payment-info": FIXED_PAYMENT_INFO,
+        parameters: [
+          {
+            name: "agentId",
+            in: "query",
+            required: false,
+            description: "ERC-8004 Agent Token ID on Base Mainnet",
+            schema: { type: "string", default: "124595", example: "124595" }
+          }
+        ],
+        responses: {
+          "200": {
+            description: "Agent reputation audit response",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  required: ["agentId", "trustScore", "grade", "escrowReady"],
+                  properties: {
+                    agentId: { type: "string", example: "124595" },
+                    trustScore: { type: "integer", example: 98 },
+                    grade: { type: "string", example: "A" },
+                    sybilRisk: { type: "string", example: "low" },
+                    escrowReady: { type: "boolean", example: true },
+                    attestation: { type: "string" },
+                    settlementTransaction: { type: "string" },
+                    timestamp: { type: "integer" },
+                    _agentDirective: { type: "object" }
+                  }
+                }
+              }
+            }
+          },
+          "402": {
+            description: "Payment Required"
+          }
+        }
+      },
+      post: {
+        operationId: "bazaarAuditPost",
+        summary: "Agent Reputation Audit (POST) - Verify ERC-8004 agent Sybil reputation score",
+        tags: ["Bazaar Oracles"],
+        "x-payment-info": FIXED_PAYMENT_INFO,
+        requestBody: {
+          required: false,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                properties: {
+                  agentId: {
+                    type: "string",
+                    default: "124595",
+                    example: "124595",
+                    description: "ERC-8004 Agent Token ID on Base Mainnet"
+                  }
+                }
+              }
+            }
+          }
+        },
+        responses: {
+          "200": {
+            description: "Agent reputation audit response",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  required: ["agentId", "trustScore", "grade", "escrowReady"],
+                  properties: {
+                    agentId: { type: "string" },
+                    trustScore: { type: "integer" },
+                    grade: { type: "string" },
+                    sybilRisk: { type: "string" },
+                    escrowReady: { type: "boolean" },
+                    timestamp: { type: "integer" }
+                  }
+                }
+              }
+            }
+          },
+          "402": { description: "Payment Required" }
+        }
+      }
+    },
+    "/v1/bazaar/verify": {
+      get: {
+        operationId: "bazaarVerifyGet",
+        summary: "Schema Verify (GET) - Verify agent x402 schema contract compatibility on Base Mainnet",
+        tags: ["Bazaar Oracles"],
+        "x-payment-info": FIXED_PAYMENT_INFO,
+        parameters: [
+          {
+            name: "agentId",
+            in: "query",
+            required: false,
+            description: "ERC-8004 agent token ID",
+            schema: { type: "string", default: "124595", example: "124595" }
+          }
+        ],
+        responses: {
+          "200": {
+            description: "Verification response",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  required: ["verified", "agentId", "escrowSupported"],
+                  properties: {
+                    verified: { type: "boolean", example: true },
+                    agentId: { type: "string", example: "124595" },
+                    escrowSupported: { type: "boolean", example: true },
+                    timestamp: { type: "integer" }
+                  }
+                }
+              }
+            }
+          },
+          "402": { description: "Payment Required" }
+        }
+      },
+      post: {
+        operationId: "bazaarVerify",
+        summary: "Schema Verify (POST) - Cryptographically verify agent x402 schema compatibility",
+        tags: ["Bazaar Oracles"],
+        "x-payment-info": FIXED_PAYMENT_INFO,
+        requestBody: {
+          required: false,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                properties: {
+                  agentId: {
+                    type: "string",
+                    default: "124595",
+                    example: "124595",
+                    description: "ERC-8004 agent token ID"
+                  },
+                  schema: {
+                    type: "object",
+                    default: { type: "object", required: ["price"] },
+                    description: "JSON schema to verify against seller output"
+                  }
+                }
+              }
+            }
+          }
+        },
+        responses: {
+          "200": {
+            description: "Verification response",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  required: ["verified", "agentId", "escrowSupported"],
+                  properties: {
+                    verified: { type: "boolean", example: true },
+                    agentId: { type: "string", example: "124595" },
+                    escrowSupported: { type: "boolean", example: true },
+                    timestamp: { type: "integer" }
+                  }
+                }
+              }
+            }
+          },
+          "402": { description: "Payment Required" }
+        }
+      }
+    },
+    "/v1/sandbox/market-feed": {
+      get: {
+        operationId: "sandboxMarketFeedGet",
+        summary: "Sandbox Market Feed - Verified ETH/USDC spot feed & schema canary",
+        tags: ["Sandbox"],
+        "x-payment-info": FIXED_PAYMENT_INFO,
+        parameters: [
+          {
+            name: "asset",
+            in: "query",
+            required: false,
+            description: "Asset symbol (default ETH)",
+            schema: { type: "string", default: "ETH", example: "ETH" }
+          }
+        ],
+        responses: {
+          "200": {
+            description: "Verified market feed response",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  required: ["asset", "price", "source", "timestamp"],
+                  properties: {
+                    asset: { type: "string", example: "ETH/USDC" },
+                    price: { type: "number", example: 2645.5 },
+                    source: { type: "string", example: "NullClear Verified Feed" },
+                    timestamp: { type: "integer" }
+                  }
+                }
+              }
+            }
+          },
+          "402": { description: "Payment Required" }
+        }
+      }
+    },
+    "/v1/clear": {
+      get: {
+        summary: "Get clearing proxy protocol status and usage instructions",
+        operationId: "getClearStatus",
+        tags: ["Escrow Clearinghouse"],
+        security: [],
+        responses: {
+          "200": {
+            description: "Protocol clearinghouse proxy information",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    service: { type: "string" },
+                    method: { type: "string" },
+                    usage: { type: "string" },
+                    documentation: { type: "string" },
+                    _agentDirective: { type: "object" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      post: {
+        summary: "Execute deferred escrow clearing with deep invariants, failover routing, and spend firewall",
+        operationId: "clearPayment",
+        tags: ["Escrow Clearinghouse"],
+        security: [],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                required: ["targetUrl", "paymentSignatureHeader"],
+                properties: {
+                  targetUrl: {
+                    type: "string",
+                    example: "https://api.nullclear.dev/v1/sandbox/market-feed",
+                    description: "Upstream API endpoint demanding x402 payment"
+                  },
+                  method: { type: "string", enum: ["GET", "POST", "PUT", "DELETE"], default: "GET" },
+                  headers: { type: "object", additionalProperties: { type: "string" } },
+                  body: { description: "Optional request body forwarded upstream" },
+                  paymentSignatureHeader: {
+                    type: "string",
+                    description: "Base64 encoded X402PaymentSignaturePayload"
+                  },
+                  sellerAgentId: {
+                    type: "string",
+                    default: "124595",
+                    description: "Seller's ERC-8004 agent token ID"
+                  },
+                  minTrustScore: {
+                    type: "number",
+                    default: 50,
+                    description: "Minimum acceptable seller trust score (0-100)"
+                  },
+                  validation: {
+                    type: "object",
+                    properties: {
+                      expectedStatus: { type: "array", items: { type: "integer" }, default: [200] },
+                      jsonSchema: { type: "object", description: "Draft-07 JSON Schema response must satisfy" },
+                      requiredFields: { type: "array", items: { type: "string" } },
+                      invariants: {
+                        type: "array",
+                        description: "Deep semantic and numeric bounds invariants",
+                        items: {
+                          type: "object",
+                          required: ["path"],
+                          properties: {
+                            path: { type: "string", description: "Dot-notation property path (e.g. 'price')" },
+                            gt: { type: "number" },
+                            gte: { type: "number" },
+                            lt: { type: "number" },
+                            lte: { type: "number" },
+                            eq: {},
+                            neq: {},
+                            minLength: { type: "number" },
+                            maxLength: { type: "number" },
+                            pattern: { type: "string", description: "Regex pattern string" },
+                            notContains: { type: "array", items: { type: "string" } },
+                            maxStalenessSeconds: {
+                              type: "number",
+                              description: "Max age in seconds vs current time"
                             }
                           }
-                        },
-                        rejectRefusals: { type: "boolean", default: true, description: "Reject canonical LLM refusal boilerplate" },
-                        sha256Match: { type: "string" }
-                      }
-                    },
-                    fallbacks: {
-                      type: "array",
-                      description: "Ordered backup candidates for autonomous multi-seller failover routing",
-                      items: {
-                        type: "object",
-                        required: ["targetUrl", "paymentSignatureHeader"],
-                        properties: {
-                          targetUrl: { type: "string" },
-                          sellerAgentId: { type: "string" },
-                          paymentSignatureHeader: { type: "string" },
-                          headers: { type: "object" }
-                        }
-                      }
-                    },
-                    spendPolicy: {
-                      type: "object",
-                      description: "Outbound spend firewall policy",
-                      properties: {
-                        maxPerCallAtomic: { type: "string", description: "Max atomic USDC spend allowed per call" },
-                        maxDailyWalletAtomic: { type: "string", description: "Max rolling daily atomic USDC spend allowed" }
-                      }
-                    }
-                  }
-                }
-              }
-            }
-          },
-          responses: {
-            "200": {
-              description: "Cleared and settled response",
-              content: {
-                "application/json": {
-                  schema: {
-                    type: "object",
-                    properties: {
-                      cleared: { type: "boolean", example: true },
-                      settled: { type: "boolean", example: true },
-                      clearingId: { type: "string" },
-                      buyerCharged: { type: "string" },
-                      failoverAttempts: { type: "integer", example: 0 },
-                      winningSellerAgentId: { type: "string" },
-                      data: {},
-                      attestation: { type: "object" }
-                    }
-                  }
-                }
-              }
-            },
-            "400": { description: "Invalid request, bad signature, or self-clearing wash-loop prohibited" },
-            "403": { description: "Reputation gate blocked or outbound spend policy limit exceeded" },
-            "422": { description: "Validation/Invariant failed: payment VOIDED, $0 charged" },
-            "502": { description: "Upstream network failure: all candidates exhausted" }
-          }
-        }
-      },
-      "/v1/score/{chainId}/{agentId}": {
-        get: {
-          summary: "Retrieve composite trust score and Sybil wash-trade analysis for an agent",
-          operationId: "getTrustScore",
-          security: [],
-          parameters: [
-            {
-              name: "chainId",
-              in: "path",
-              required: true,
-              description: "EVM chain ID (e.g. 8453 for Base Mainnet)",
-              schema: { type: "string", default: "8453", example: "8453" }
-            },
-            {
-              name: "agentId",
-              in: "path",
-              required: true,
-              description: "ERC-8004 Agent token ID on specified chain",
-              schema: { type: "string", default: "124595", example: "124595" }
-            }
-          ],
-          responses: {
-            "200": {
-              description: "Trust score and metrics result",
-              content: {
-                "application/json": {
-                  schema: {
-                    type: "object",
-                    properties: {
-                      success: { type: "boolean" },
-                      data: {
-                        type: "object",
-                        properties: {
-                          agentId: { type: "string" },
-                          chainId: { type: "integer" },
-                          score: { type: "integer" },
-                          grade: { type: "string" },
-                          sybilFlags: { type: "array", items: { type: "string" } },
-                          metrics: { type: "object" }
                         }
                       },
-                      _agentDirective: { type: "object" }
+                      rejectRefusals: {
+                        type: "boolean",
+                        default: true,
+                        description: "Reject canonical LLM refusal boilerplate"
+                      },
+                      sha256Match: { type: "string" }
                     }
-                  }
-                }
-              }
-            },
-            "400": { description: "Invalid chain ID" }
-          }
-        }
-      },
-      "/v1/stats": {
-        get: {
-          summary: "Public protocol telemetry and verified clearing history",
-          operationId: "getProtocolStats",
-          security: [],
-          responses: {
-            "200": {
-              description: "Live protocol metrics",
-              content: {
-                "application/json": {
-                  schema: {
-                    type: "object",
-                    properties: {
-                      totalClearings: { type: "integer" },
-                      validSettlements: { type: "integer" },
-                      voidedHallucinations: { type: "integer" },
-                      totalAgentsIndexed: { type: "integer" },
-                      recentClearings: { type: "array" },
-                      _agentDirective: { type: "object" }
-                    }
-                  }
-                }
-              }
-            }
-          }
-        }
-      },
-      "/v1/bazaar/audit": {
-        get: {
-          summary: "x402 Bazaar payable oracle for agent reputation audits",
-          operationId: "bazaarAuditGet",
-          security: [{ x402: [] }],
-          parameters: [
-            {
-              name: "agentId",
-              in: "query",
-              required: false,
-              description: "ERC-8004 Agent Token ID on Base Mainnet",
-              schema: { type: "string", default: "124595" }
-            }
-          ],
-          responses: {
-            "200": {
-              description: "Agent reputation audit response",
-              content: {
-                "application/json": {
-                  schema: {
-                    type: "object",
-                    properties: {
-                      agentId: { type: "string" },
-                      trustScore: { type: "integer" },
-                      grade: { type: "string" },
-                      sybilRisk: { type: "string" },
-                      escrowReady: { type: "boolean" },
-                      timestamp: { type: "integer" },
-                      _agentDirective: { type: "object" }
-                    }
-                  }
-                }
-              }
-            },
-            "402": {
-              description: "Payment Required: $0.01 USDC (10000 atomic units) on Base Mainnet with x402 v2 payment headers"
-            }
-          }
-        },
-        post: {
-          summary: "x402 Bazaar payable oracle for agent reputation audits (POST)",
-          operationId: "bazaarAuditPost",
-          security: [{ x402: [] }],
-          requestBody: {
-            required: false,
-            content: {
-              "application/json": {
-                schema: {
-                  type: "object",
-                  properties: {
-                    agentId: { type: "string", default: "124595" }
-                  }
-                }
-              }
-            }
-          },
-          responses: {
-            "200": { description: "Agent reputation audit response" },
-            "402": { description: "Payment Required" }
-          }
-        }
-      },
-      "/v1/bazaar/verify": {
-        get: {
-          summary: "x402 Bazaar payable oracle verification status (probe)",
-          operationId: "bazaarVerifyGet",
-          security: [{ x402: [] }],
-          responses: {
-            "200": { description: "Verification response" },
-            "402": { description: "Payment Required" }
-          }
-        },
-        post: {
-          summary: "x402 Bazaar payable oracle for agent schema compatibility verification",
-          operationId: "bazaarVerify",
-          security: [{ x402: [] }],
-          requestBody: {
-            required: true,
-            content: {
-              "application/json": {
-                schema: {
-                  type: "object",
-                  required: ["agentId", "schema"],
-                  properties: {
-                    agentId: { type: "string", description: "ERC-8004 agent token ID" },
-                    schema: { type: "object", description: "JSON schema to verify against seller output" }
-                  }
-                }
-              }
-            }
-          },
-          responses: {
-            "200": {
-              description: "Verification response",
-              content: {
-                "application/json": {
-                  schema: {
-                    type: "object",
-                    properties: {
-                      verified: { type: "boolean" },
-                      agentId: { type: "string" },
-                      escrowSupported: { type: "boolean" },
-                      timestamp: { type: "integer" }
-                    }
-                  }
-                }
-              }
-            },
-            "402": { description: "Payment Required (includes extensions.bazaar discovery)" }
-          }
-        }
-      },
-      "/v1/bazaar/token-security": {
-        get: {
-          summary: "x402 Bazaar payable oracle for Base token security and x402 clearing compatibility",
-          operationId: "bazaarTokenSecurityGet",
-          security: [{ x402: [] }],
-          parameters: [
-            {
-              name: "tokenAddress",
-              in: "query",
-              required: false,
-              description: "Base ERC-20 token contract address (default: native USDC)",
-              schema: { type: "string", default: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913" }
-            }
-          ],
-          responses: {
-            "200": {
-              description: "Token security audit response",
-              content: {
-                "application/json": {
-                  schema: {
-                    type: "object",
-                    properties: {
-                      tokenAddress: { type: "string" },
-                      symbol: { type: "string" },
-                      name: { type: "string" },
-                      decimals: { type: "integer" },
-                      verified: { type: "boolean" },
-                      isHoneypot: { type: "boolean" },
-                      buyTaxBps: { type: "integer" },
-                      sellTaxBps: { type: "integer" },
-                      x402Compatible: { type: "boolean" },
-                      securityScore: { type: "integer" },
-                      riskLevel: { type: "string" },
-                      timestamp: { type: "integer" }
-                    }
-                  }
-                }
-              }
-            },
-            "402": { description: "Payment Required: $0.01 USDC (10000 atomic units) on Base Mainnet" }
-          }
-        },
-        post: {
-          summary: "x402 Bazaar payable oracle for Base token security (POST)",
-          operationId: "bazaarTokenSecurityPost",
-          security: [{ x402: [] }],
-          responses: {
-            "200": { description: "Token security audit response" },
-            "402": { description: "Payment Required" }
-          }
-        }
-      },
-      "/v1/bazaar/market-oracle": {
-        get: {
-          summary: "Live cross-verified crypto price oracle (BTC, ETH, SOL, BASE tokens) with deterministic spread invariant check and cryptographic attestation",
-          operationId: "bazaarMarketOracleGet",
-          security: [{ x402: [] }],
-          parameters: [
-            {
-              name: "symbol",
-              in: "query",
-              required: false,
-              description: "Crypto asset ticker symbol (e.g. ETH, BTC, SOL)",
-              schema: { type: "string", default: "ETH" }
-            },
-            {
-              name: "pair",
-              in: "query",
-              required: false,
-              description: "Trading pair (e.g. ETH-USD)",
-              schema: { type: "string" }
-            }
-          ],
-          responses: {
-            "200": {
-              description: "Real-time verified market oracle price with cryptographic attestation",
-              content: {
-                "application/json": {
-                  schema: {
-                    type: "object",
-                    required: ["symbol", "priceUsd", "verified", "invariantCheck", "timestamp"],
-                    properties: {
-                      symbol: { type: "string" },
-                      pair: { type: "string" },
-                      priceUsd: { type: "number" },
-                      source: { type: "string" },
-                      sourcesChecked: { type: "array", items: { type: "string" } },
-                      verified: { type: "boolean" },
-                      invariantCheck: { type: "string" },
-                      timestamp: { type: "integer" },
-                      arbiterSignature: { type: "string" },
-                      _agentDirective: { type: "object" }
-                    }
-                  }
-                }
-              }
-            },
-            "402": {
-              description: "Payment Required: $0.01 USDC (10000 atomic units) on Base Mainnet"
-            }
-          }
-        }
-      },
-      "/v1/bazaar/wallet-risk": {
-        get: {
-          summary: "Live Base Mainnet wallet counterparty risk profiler: checks EOA vs smart contract status, nonce history, ETH/USDC balances, and ERC-8004 Sybil risk",
-          operationId: "bazaarWalletRiskGet",
-          security: [{ x402: [] }],
-          parameters: [
-            {
-              name: "address",
-              in: "query",
-              required: false,
-              description: "Base Mainnet wallet address to profile",
-              schema: { type: "string", default: "0xfd74fF802EA0E735514C070AF04E0D6528deD145" }
-            }
-          ],
-          responses: {
-            "200": {
-              description: "Real-time counterparty wallet risk profile",
-              content: {
-                "application/json": {
-                  schema: {
-                    type: "object",
-                    required: ["address", "isContract", "transactionCount", "riskScore", "riskLevel", "timestamp"],
-                    properties: {
-                      address: { type: "string" },
-                      isContract: { type: "boolean" },
-                      ethBalance: { type: "string" },
-                      usdcBalance: { type: "string" },
-                      transactionCount: { type: "integer" },
-                      erc8004Registered: { type: "boolean" },
-                      riskScore: { type: "integer", minimum: 0, maximum: 100 },
-                      riskLevel: { type: "string", enum: ["low", "medium", "high"] },
-                      timestamp: { type: "integer" },
-                      arbiterSignature: { type: "string" },
-                      _agentDirective: { type: "object" }
-                    }
-                  }
-                }
-              }
-            },
-            "402": {
-              description: "Payment Required: $0.01 USDC (10000 atomic units) on Base Mainnet"
-            }
-          }
-        }
-      },
-      "/v1/bazaar/verified-fetch": {
-        get: {
-          summary: "Schema-verified HTTP fetch & anti-hallucination proxy (GET)",
-          operationId: "bazaarVerifiedFetchGet",
-          security: [{ x402: [] }],
-          parameters: [
-            {
-              name: "url",
-              in: "query",
-              required: true,
-              description: "Target public HTTPS URL to fetch with schema & refusal validation",
-              schema: { type: "string", example: "https://api.coinbase.com/v2/prices/BTC-USD/spot" }
-            }
-          ],
-          responses: {
-            "200": {
-              description: "Verified and attested fetch payload",
-              content: {
-                "application/json": {
-                  schema: {
-                    type: "object",
-                    required: ["targetUrl", "upstreamStatus", "verified", "refusalDetected", "invariantsPassed", "attestation"],
-                    properties: {
-                      targetUrl: { type: "string" },
-                      upstreamStatus: { type: "integer" },
-                      verified: { type: "boolean" },
-                      data: {},
-                      refusalDetected: { type: "boolean" },
-                      invariantsPassed: { type: "boolean" },
-                      attestation: { type: "string" },
-                      timestamp: { type: "integer" },
-                      _agentDirective: { type: "object" }
-                    }
-                  }
-                }
-              }
-            },
-            "402": {
-              description: "Payment Required: $0.01 USDC (10000 atomic units) on Base Mainnet"
-            }
-          }
-        },
-        post: {
-          summary: "Schema-verified HTTP fetch & anti-hallucination proxy with invariants (POST)",
-          operationId: "bazaarVerifiedFetchPost",
-          security: [{ x402: [] }],
-          requestBody: {
-            required: true,
-            content: {
-              "application/json": {
-                schema: {
-                  type: "object",
-                  required: ["url"],
-                  properties: {
-                    url: { type: "string", description: "Target public HTTPS URL" },
-                    method: { type: "string", enum: ["GET", "POST"], default: "GET" },
-                    headers: { type: "object" },
-                    body: {},
-                    jsonSchema: { type: "object", description: "Optional Draft-07 JSON Schema" },
-                    invariants: { type: "array", items: { type: "object" } },
-                    rejectRefusals: { type: "boolean", default: true }
-                  }
-                }
-              }
-            }
-          },
-          responses: {
-            "200": {
-              description: "Verified and attested fetch payload",
-              content: {
-                "application/json": {
-                  schema: {
-                    type: "object",
-                    required: ["targetUrl", "upstreamStatus", "verified", "refusalDetected", "invariantsPassed", "attestation"],
-                    properties: {
-                      targetUrl: { type: "string" },
-                      upstreamStatus: { type: "integer" },
-                      verified: { type: "boolean" },
-                      data: {},
-                      refusalDetected: { type: "boolean" },
-                      invariantsPassed: { type: "boolean" },
-                      attestation: { type: "string" },
-                      timestamp: { type: "integer" },
-                      _agentDirective: { type: "object" }
-                    }
-                  }
-                }
-              }
-            },
-            "402": {
-              description: "Payment Required: $0.01 USDC (10000 atomic units) on Base Mainnet"
-            }
-          }
-        }
-      },
-      "/v1/kya/attest": {
-        get: {
-          summary: "KYA attestation service status and format guide",
-          operationId: "getKyaAttestInfo",
-          security: [],
-          responses: {
-            "200": {
-              description: "Attestation guide",
-              content: {
-                "application/json": {
-                  schema: {
-                    type: "object",
-                    properties: {
-                      service: { type: "string" },
-                      method: { type: "string" },
-                      usage: { type: "string" },
-                      documentation: { type: "string" }
-                    }
-                  }
-                }
-              }
-            }
-          }
-        },
-        post: {
-          summary: "Register and attest a corporate liability KYA mandate",
-          operationId: "attestKyaMandate",
-          security: [],
-          requestBody: {
-            required: true,
-            content: {
-              "application/json": {
-                schema: {
-                  type: "object",
-                  required: ["mandate", "chainId"],
-                  properties: {
-                    chainId: { type: "integer", default: 8453, description: "EVM chain ID" },
-                    signature: { type: "string" },
-                    signerAddress: { type: "string" },
-                    mandate: {
+                  },
+                  fallbacks: {
+                    type: "array",
+                    description: "Ordered backup candidates for autonomous multi-seller failover routing",
+                    items: {
                       type: "object",
-                      required: ["agentId", "corporateEntity", "agentWallet"],
+                      required: ["targetUrl", "paymentSignatureHeader"],
                       properties: {
-                        agentId: { type: "string" },
-                        corporateEntity: { type: "string" },
-                        agentWallet: { type: "string" },
-                        entityRegistrationNumber: { type: "string" },
-                        jurisdiction: { type: "string" },
-                        maxTxLimitUsd: { type: "number" },
-                        liabilityCoverageUsd: { type: "number" },
-                        validUntil: { type: "integer" }
+                        targetUrl: { type: "string" },
+                        sellerAgentId: { type: "string" },
+                        paymentSignatureHeader: { type: "string" },
+                        headers: { type: "object" }
+                      }
+                    }
+                  },
+                  spendPolicy: {
+                    type: "object",
+                    description: "Outbound spend firewall policy",
+                    properties: {
+                      maxPerCallAtomic: {
+                        type: "string",
+                        description: "Max atomic USDC spend allowed per call"
+                      },
+                      maxDailyWalletAtomic: {
+                        type: "string",
+                        description: "Max rolling daily atomic USDC spend allowed"
                       }
                     }
                   }
                 }
               }
             }
-          },
-          responses: {
-            "200": {
-              description: "Mandate recorded",
-              content: {
-                "application/json": {
-                  schema: {
-                    type: "object",
-                    properties: {
-                      success: { type: "boolean" },
-                      message: { type: "string" },
-                      data: { type: "object" }
-                    }
+          }
+        },
+        responses: {
+          "200": {
+            description: "Cleared and settled response",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    cleared: { type: "boolean", example: true },
+                    settled: { type: "boolean", example: true },
+                    clearingId: { type: "string" },
+                    buyerCharged: { type: "string" },
+                    failoverAttempts: { type: "integer", example: 0 },
+                    winningSellerAgentId: { type: "string" },
+                    data: {},
+                    attestation: { type: "object" }
                   }
                 }
               }
-            },
-            "400": { description: "Invalid mandate parameters" }
-          }
-        }
-      },
-      "/v1/kya/{chainId}/{agentId}": {
-        get: {
-          summary: "Retrieve active KYA corporate mandate for an agent",
-          operationId: "getKyaMandate",
-          security: [],
-          parameters: [
-            {
-              name: "chainId",
-              in: "path",
-              required: true,
-              description: "EVM chain ID (e.g. 8453 for Base Mainnet)",
-              schema: { type: "string", default: "8453", example: "8453" }
-            },
-            {
-              name: "agentId",
-              in: "path",
-              required: true,
-              description: "ERC-8004 agent token ID",
-              schema: { type: "string", default: "124595", example: "124595" }
             }
-          ],
-          responses: {
-            "200": {
-              description: "KYA corporate mandate record or status",
-              content: {
-                "application/json": {
-                  schema: {
-                    type: "object",
-                    properties: {
-                      success: { type: "boolean" },
-                      registered: { type: "boolean" },
-                      active: { type: "boolean" },
-                      data: { type: "object" }
-                    }
+          },
+          "400": { description: "Invalid request, bad signature, or self-clearing wash-loop prohibited" },
+          "403": { description: "Reputation gate blocked or outbound spend policy limit exceeded" },
+          "422": { description: "Validation/Invariant failed: payment VOIDED, $0 charged" },
+          "502": { description: "Upstream network failure: all candidates exhausted" }
+        }
+      }
+    },
+    "/v1/score/{chainId}/{agentId}": {
+      get: {
+        summary: "Retrieve composite trust score and Sybil wash-trade analysis for an agent",
+        operationId: "getTrustScore",
+        tags: ["Reputation & KYA"],
+        security: [],
+        parameters: [
+          {
+            name: "chainId",
+            in: "path",
+            required: true,
+            description: "EVM chain ID (e.g. 8453 for Base Mainnet)",
+            schema: { type: "string", default: "8453", example: "8453" }
+          },
+          {
+            name: "agentId",
+            in: "path",
+            required: true,
+            description: "ERC-8004 Agent token ID on specified chain",
+            schema: { type: "string", default: "124595", example: "124595" }
+          }
+        ],
+        responses: {
+          "200": {
+            description: "Trust score and metrics result",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    success: { type: "boolean" },
+                    data: {
+                      type: "object",
+                      properties: {
+                        agentId: { type: "string" },
+                        chainId: { type: "integer" },
+                        score: { type: "integer" },
+                        grade: { type: "string" },
+                        sybilFlags: { type: "array", items: { type: "string" } },
+                        metrics: { type: "object" }
+                      }
+                    },
+                    _agentDirective: { type: "object" }
                   }
                 }
               }
-            },
-            "404": { description: "No mandate found" }
+            }
+          },
+          "400": { description: "Invalid chain ID" }
+        }
+      }
+    },
+    "/v1/stats": {
+      get: {
+        summary: "Public protocol telemetry and verified clearing history",
+        operationId: "getProtocolStats",
+        tags: ["Telemetry"],
+        security: [],
+        responses: {
+          "200": {
+            description: "Live protocol metrics",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    totalClearings: { type: "integer" },
+                    validSettlements: { type: "integer" },
+                    voidedHallucinations: { type: "integer" },
+                    totalAgentsIndexed: { type: "integer" },
+                    recentClearings: { type: "array" },
+                    _agentDirective: { type: "object" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/a2a": {
+      get: {
+        summary: "Google A2A protocol status and supported JSON-RPC 2.0 methods for Agent #124595",
+        operationId: "getA2aStatus",
+        tags: ["A2A"],
+        security: [],
+        responses: {
+          "200": {
+            description: "A2A metadata and skill registry",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    status: { type: "string" },
+                    protocol: { type: "string" },
+                    agent: { type: "object" },
+                    supportedMethods: { type: "array", items: { type: "string" } }
+                  }
+                }
+              }
+            }
           }
         }
       },
-      "/v1/kya/verify": {
-        get: {
-          summary: "KYA verification service status and usage guide",
-          operationId: "getKyaVerifyInfo",
-          security: [],
-          responses: {
-            "200": {
-              description: "Verification guide",
-              content: {
-                "application/json": {
-                  schema: {
-                    type: "object",
-                    properties: {
-                      service: { type: "string" },
-                      method: { type: "string" },
-                      usage: { type: "string" },
-                      documentation: { type: "string" }
-                    }
-                  }
+      post: {
+        summary: "Execute A2A JSON-RPC 2.0 methods (tasks/send, message/send, reputation/check, kya/verify)",
+        operationId: "postA2aRpc",
+        tags: ["A2A"],
+        security: [],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                properties: {
+                  jsonrpc: { type: "string", default: "2.0", example: "2.0" },
+                  id: { type: "integer", default: 1, example: 1 },
+                  method: {
+                    type: "string",
+                    default: "message/send",
+                    example: "message/send",
+                    description: "A2A JSON-RPC method"
+                  },
+                  params: { type: "object" }
                 }
               }
             }
           }
         },
-        post: {
-          summary: "Verify an agent's corporate liability mandate and transaction spending limits",
-          operationId: "verifyKyaMandate",
-          security: [],
-          requestBody: {
-            required: true,
+        responses: {
+          "200": {
+            description: "JSON-RPC 2.0 response",
             content: {
               "application/json": {
                 schema: {
                   type: "object",
-                  required: ["agentId", "transactionAmountUsd"],
                   properties: {
-                    agentId: { type: "string", description: "ERC-8004 agent token ID" },
-                    chainId: { type: "integer", default: 8453, description: "EVM chain ID (default 8453)" },
-                    transactionAmountUsd: { type: "number", description: "Proposed transaction amount in USD" }
+                    jsonrpc: { type: "string" },
+                    id: {},
+                    result: { type: "object" }
                   }
                 }
               }
             }
-          },
-          responses: {
-            "200": {
-              description: "Verification decision with corporate coverage details",
-              content: {
-                "application/json": {
-                  schema: {
+          }
+        }
+      }
+    },
+    "/v1/kya/attest": {
+      get: {
+        summary: "KYA attestation service status and format guide",
+        operationId: "getKyaAttestInfo",
+        tags: ["Reputation & KYA"],
+        security: [],
+        responses: {
+          "200": {
+            description: "Attestation guide",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    service: { type: "string" },
+                    method: { type: "string" },
+                    usage: { type: "string" },
+                    documentation: { type: "string" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      post: {
+        summary: "Register and attest a corporate liability KYA mandate",
+        operationId: "attestKyaMandate",
+        tags: ["Reputation & KYA"],
+        security: [],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                required: ["mandate", "chainId"],
+                properties: {
+                  chainId: { type: "integer", default: 8453, description: "EVM chain ID" },
+                  signature: { type: "string" },
+                  signerAddress: { type: "string" },
+                  mandate: {
                     type: "object",
+                    required: ["agentId", "corporateEntity", "agentWallet"],
                     properties: {
-                      verified: { type: "boolean" },
-                      approvedForAmount: { type: "boolean" },
                       agentId: { type: "string" },
-                      chainId: { type: "integer" },
                       corporateEntity: { type: "string" },
+                      agentWallet: { type: "string" },
                       entityRegistrationNumber: { type: "string" },
                       jurisdiction: { type: "string" },
                       maxTxLimitUsd: { type: "number" },
                       liabilityCoverageUsd: { type: "number" },
-                      isExpired: { type: "boolean" },
-                      exceedsLimit: { type: "boolean" }
+                      validUntil: { type: "integer" }
                     }
                   }
                 }
               }
-            },
-            "400": { description: "Missing required parameters or unsupported chain ID" }
+            }
           }
+        },
+        responses: {
+          "200": {
+            description: "Mandate recorded",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    success: { type: "boolean" },
+                    message: { type: "string" },
+                    data: { type: "object" }
+                  }
+                }
+              }
+            }
+          },
+          "400": { description: "Invalid mandate parameters" }
+        }
+      }
+    },
+    "/v1/kya/{chainId}/{agentId}": {
+      get: {
+        summary: "Retrieve active KYA corporate mandate for an agent",
+        operationId: "getKyaMandate",
+        tags: ["Reputation & KYA"],
+        security: [],
+        parameters: [
+          {
+            name: "chainId",
+            in: "path",
+            required: true,
+            description: "EVM chain ID (e.g. 8453 for Base Mainnet)",
+            schema: { type: "string", default: "8453", example: "8453" }
+          },
+          {
+            name: "agentId",
+            in: "path",
+            required: true,
+            description: "ERC-8004 agent token ID",
+            schema: { type: "string", default: "124595", example: "124595" }
+          }
+        ],
+        responses: {
+          "200": {
+            description: "KYA corporate mandate record or status",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    success: { type: "boolean" },
+                    registered: { type: "boolean" },
+                    active: { type: "boolean" },
+                    data: { type: "object" }
+                  }
+                }
+              }
+            }
+          },
+          "404": { description: "No mandate found" }
+        }
+      }
+    },
+    "/v1/kya/verify": {
+      get: {
+        summary: "KYA verification service status and usage guide",
+        operationId: "getKyaVerifyInfo",
+        tags: ["Reputation & KYA"],
+        security: [],
+        responses: {
+          "200": {
+            description: "Verification guide",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    service: { type: "string" },
+                    method: { type: "string" },
+                    usage: { type: "string" },
+                    documentation: { type: "string" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      post: {
+        summary: "Verify an agent's corporate liability mandate and transaction spending limits",
+        operationId: "verifyKyaMandate",
+        tags: ["Reputation & KYA"],
+        security: [],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                required: ["agentId", "transactionAmountUsd"],
+                properties: {
+                  agentId: { type: "string", default: "124595", description: "ERC-8004 agent token ID" },
+                  chainId: { type: "integer", default: 8453, description: "EVM chain ID (default 8453)" },
+                  transactionAmountUsd: {
+                    type: "number",
+                    default: 1.0,
+                    description: "Proposed transaction amount in USD"
+                  }
+                }
+              }
+            }
+          }
+        },
+        responses: {
+          "200": {
+            description: "Verification decision with corporate coverage details",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    verified: { type: "boolean" },
+                    approvedForAmount: { type: "boolean" },
+                    agentId: { type: "string" },
+                    chainId: { type: "integer" },
+                    corporateEntity: { type: "string" },
+                    entityRegistrationNumber: { type: "string" },
+                    jurisdiction: { type: "string" },
+                    maxTxLimitUsd: { type: "number" },
+                    liabilityCoverageUsd: { type: "number" },
+                    isExpired: { type: "boolean" },
+                    exceedsLimit: { type: "boolean" }
+                  }
+                }
+              }
+            }
+          },
+          "400": { description: "Missing required parameters or unsupported chain ID" }
         }
       }
     }
-  });
+  }
 });
+
+// GET /openapi.json, /api/v1/openapi.json, and /.well-known/openapi.json
+discoveryRouter.get("/openapi.json", (c) => c.json(getOpenApiSpec()));
+discoveryRouter.get("/api/v1/openapi.json", (c) => c.json(getOpenApiSpec()));
+discoveryRouter.get("/.well-known/openapi.json", (c) => c.json(getOpenApiSpec()));
+

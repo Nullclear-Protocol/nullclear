@@ -6,13 +6,11 @@ preview_urls = false
 compatibility_flags = ["nodejs_compat"]
 
 # Production Domain Routes Configuration
-# To deploy to Cloudflare custom domains, enable these routes:
-# routes = [
-#   { pattern = "nullclear.dev/*", zone_name = "nullclear.dev" },
-#   { pattern = "api.nullclear.dev/*", zone_name = "nullclear.dev" },
-#   { pattern = "nullclear.com/*", zone_name = "nullclear.com" },
-#   { pattern = "www.nullclear.com/*", zone_name = "nullclear.com" }
-# ]
+routes = [
+  { pattern = "nullclear.dev", custom_domain = true },
+  { pattern = "api.nullclear.dev", custom_domain = true },
+  { pattern = "nullclear.com", custom_domain = true }
+]
 
 [[d1_databases]]
 binding = "DB"
@@ -40,9 +38,3 @@ BASE_SEPOLIA_RPC_URL = "https://sepolia.base.org"
 MIN_ONCHAIN_ATOMIC = "5000"
 MAX_DAILY_ONCHAIN_PER_WALLET = "50"
 
-
-routes = [
-  { pattern = "nullclear.dev", custom_domain = true },
-  { pattern = "api.nullclear.dev", custom_domain = true },
-  { pattern = "nullclear.com", custom_domain = true }
-]

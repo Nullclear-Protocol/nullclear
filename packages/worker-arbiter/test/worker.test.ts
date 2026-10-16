@@ -974,4 +974,143 @@ describe("NullClear Worker Arbiter Test Suite", () => {
     expect(json200.symbol).toBe("USDC");
     expect(json200.x402Compatible).toBe(true);
   });
+
+  it("GET /v1/bazaar/market-oracle, /wallet-risk, /verified-fetch, and POST /verify enforce 402 Before 400 and settle with test payment", async () => {
+    // 1. Unauthenticated probes (empty query/body) MUST return 402 Before 400 with full bazaar schema
+    for (const [method, path] of [
+      ["GET", "/v1/bazaar/market-oracle"],
+      ["GET", "/v1/bazaar/wallet-risk"],
+      ["GET", "/v1/bazaar/verified-fetch"],
+      ["POST", "/v1/bazaar/verified-fetch"],
+      ["POST", "/v1/bazaar/audit"],
+      ["POST", "/v1/bazaar/verify"]
+    ] as const) {
+      const probeRes = await app.fetch(new Request(`http://localhost${path}`, { method }), testEnv);
+      expect(probeRes.status).toBe(402);
+      expect(probeRes.headers.get("PAYMENT-REQUIRED")).toBeTruthy();
+      const probeJson = (await probeRes.json()) as any;
+      expect(probeJson.x402Version).toBe(2);
+      expect(probeJson.extensions?.bazaar?.schema?.properties?.input).toBeDefined();
+      expect(probeJson.extensions?.bazaar?.schema?.properties?.output?.properties?.example).toBeDefined();
+    }
+
+    // 2. Paid GET /v1/bazaar/market-oracle
+    const sigOracle = await createValidPaymentSignature(sellerAccount.address, "10000");
+    const resOracle = await app.fetch(
+      new Request("http://localhost/v1/bazaar/market-oracle?symbol=ETH", {
+        headers: { "PAYMENT-SIGNATURE": sigOracle }
+      }),
+      testEnv
+    );
+    expect(resOracle.status).toBe(200);
+    const jsonOracle = (await resOracle.json()) as any;
+    expect(jsonOracle.symbol).toBe("ETH");
+    expect(jsonOracle.priceUsd).toBeGreaterThan(0);
+    expect(jsonOracle.verified).toBe(true);
+
+    // 3. Paid GET /v1/bazaar/wallet-risk
+    const sigWallet = await createValidPaymentSignature(sellerAccount.address, "10000");
+    const resWallet = await app.fetch(
+      new Request("http://localhost/v1/bazaar/wallet-risk?address=0xfd74fF802EA0E735514C070AF04E0D6528deD145", {
+        headers: { "PAYMENT-SIGNATURE": sigWallet }
+      }),
+      testEnv
+    );
+    expect(resWallet.status).toBe(200);
+    const jsonWallet = (await resWallet.json()) as any;
+    expect(jsonWallet.address.toLowerCase()).toBe("0xfd74ff802ea0e735514c070af04e0d6528ded145");
+    expect(jsonWallet.erc8004Registered).toBe(true);
+    expect(jsonWallet.riskScore).toBeGreaterThanOrEqual(80);
+
+    // 4. Paid GET /v1/bazaar/verified-fetch against local mock server
+    const sigFetch = await createValidPaymentSignature(sellerAccount.address, "10000");
+    const resFetch = await app.fetch(
+      new Request(`http://localhost/v1/bazaar/verified-fetch?url=${encodeURIComponent(`http://127.0.0.1:${mockServerPort}/honest`)}`, {
+        headers: { "PAYMENT-SIGNATURE": sigFetch }
+      }),
+      testEnv
+    );
+    expect(resFetch.status).toBe(200);
+    const jsonFetch = (await resFetch.json()) as any;
+    expect(jsonFetch.verified).toBe(true);
+    expect(jsonFetch.refusalDetected).toBe(false);
+    expect(jsonFetch.invariantsPassed).toBe(true);
+
+    // 5. Paid POST /v1/bazaar/verify
+    const sigVerify = await createValidPaymentSignature(sellerAccount.address, "10000");
+    const resVerify = await app.fetch(
+      new Request("http://localhost/v1/bazaar/verify", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "PAYMENT-SIGNATURE": sigVerify
+        },
+        body: JSON.stringify({
+          payload: { asset: "ETH", price: 2645.5 },
+          invariants: [{ path: "price", gt: 0 }]
+        })
+      }),
+      testEnv
+    );
+    expect(resVerify.status).toBe(200);
+    const jsonVerify = (await resVerify.json()) as any;
+    expect(jsonVerify.verified).toBe(true);
+    expect(jsonVerify.escrowSupported).toBe(true);
+  });
+
+  // 23. AgentCash OpenAPI 3.1.0, /.well-known/x402, /agents.md, and POST /a2a
+  it("serves AgentCash-compliant /openapi.json, /agents.md, /.well-known/x402, and JSON-RPC 2.0 /a2a", async () => {
+    for (const openApiPath of ["/openapi.json", "/api/v1/openapi.json", "/.well-known/openapi.json"]) {
+      const resOpenApi = await app.fetch(new Request(`http://localhost${openApiPath}`), testEnv);
+      expect(resOpenApi.status).toBe(200);
+      const spec = (await resOpenApi.json()) as any;
+      expect(spec.openapi).toBe("3.1.0");
+      expect(typeof spec.info["x-guidance"]).toBe("string");
+      expect(spec["x-discovery"]?.ownershipProofs).toEqual([]);
+      expect(spec.components?.securitySchemes?.x402).toBeDefined();
+
+      const oracleGet = spec.paths["/v1/bazaar/market-oracle"]?.get;
+      expect(oracleGet?.["x-payment-info"]).toEqual({
+        price: { mode: "fixed", currency: "USD", amount: "0.01" },
+        protocols: [{ x402: {} }]
+      });
+    }
+
+    const resAgentsMd = await app.fetch(new Request("http://localhost/agents.md"), testEnv);
+    expect(resAgentsMd.status).toBe(200);
+    const mdText = await resAgentsMd.text();
+    expect(mdText).toContain("NullClear Protocol");
+    expect(mdText).toContain("124595");
+
+    const resX402 = await app.fetch(new Request("http://localhost/.well-known/x402"), testEnv);
+    expect(resX402.status).toBe(200);
+    const x402Json = (await resX402.json()) as any;
+    expect(x402Json.x402Version).toBe(2);
+
+    // Test POST /a2a JSON-RPC 2.0
+    const resA2aMsg = await app.fetch(
+      new Request("http://localhost/a2a", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          jsonrpc: "2.0",
+          id: "req-1",
+          method: "message/send",
+          params: {
+            message: {
+              parts: [{ type: "text", text: "audit agent 124595" }]
+            }
+          }
+        })
+      }),
+      testEnv
+    );
+    expect(resA2aMsg.status).toBe(200);
+    const a2aJson = (await resA2aMsg.json()) as any;
+    expect(a2aJson.jsonrpc).toBe("2.0");
+    expect(a2aJson.id).toBe("req-1");
+    expect(a2aJson.result?.status?.state).toBe("completed");
+    expect(a2aJson.result?.data?.agentId).toBe("124595");
+  });
 });
+
