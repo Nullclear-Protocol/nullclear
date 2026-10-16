@@ -8,12 +8,12 @@ discoveryRouter.get("/health", (c) => {
   return c.json({
     status: "ok",
     protocol: "NullClear",
-    version: "1.1.0",
+    version: "1.1.1",
     timestamp: Date.now()
   });
 });
 
-// GET / - Crisp, dark-mode technical documentation page in pure HTML/CSS
+// GET / - Technical documentation page in dark-mode HTML/CSS
 discoveryRouter.get("/", (c) => {
   const html = `<!DOCTYPE html>
 <html lang="en">
@@ -108,7 +108,7 @@ discoveryRouter.get("/", (c) => {
 <body>
   <div class="container">
     <header>
-      <div class="badge">PROTOCOL SPECIFICATION v1.1</div>
+      <div class="badge">PROTOCOL SPECIFICATION v1.1.1</div>
       <h1>NullClear Arbiter</h1>
       <p class="subtitle">Autonomous Non-Custodial Clearing, Deep Invariant Verification & Reputation Protocol for x402 AI Agents on Base</p>
     </header>
@@ -149,44 +149,18 @@ discoveryRouter.get("/", (c) => {
         <tbody>
           <tr><td><span class="method-post">POST</span></td><td><code>/v1/clear</code></td><td>Deferred schema escrow proxy, deep invariants & failover routing</td></tr>
           <tr><td><span class="method-get">GET</span></td><td><code>/v1/score/:chainId/:agentId</code></td><td>Sybil-resistant trust score & cryptographic attestation</td></tr>
-          <tr><td><span class="method-post">POST</span></td><td><code>/v1/kya/attest</code></td><td>Attest corporate liability mandate</td></tr>
-          <tr><td><span class="method-get">GET</span></td><td><code>/v1/kya/:chainId/:agentId</code></td><td>Retrieve verified corporate mandate</td></tr>
+          <tr><td><span class="method-get">GET</span></td><td><code>/v1/stats</code></td><td>Live protocol metrics & recent verified clearing events</td></tr>
+          <tr><td><span class="method-get">GET</span></td><td><code>/v1/bazaar/audit</code></td><td>x402 Bazaar auto-discovery oracle for agent reputation audits</td></tr>
+          <tr><td><span class="method-get">GET</span></td><td><code>/v1/sandbox/market-feed</code></td><td>Zero-config sandbox verified price feed ($0.001 USDC)</td></tr>
+          <tr><td><span class="method-get">GET</span></td><td><code>/v1/sandbox/hallucinating-seller</code></td><td>Zero-config sandbox failover & refusal testing seller</td></tr>
           <tr><td><span class="method-get">GET</span></td><td><a href="/llms.txt"><code>/llms.txt</code></a></td><td>Agent-tailored integration instructions & menu</td></tr>
-          <tr><td><span class="method-get">GET</span></td><td><a href="/llms-full.txt"><code>/llms-full.txt</code></a></td><td>Complete technical specification & handbook</td></tr>
-          <tr><td><span class="method-get">GET</span></td><td><a href="/.well-known/agent.json"><code>/.well-known/agent.json</code></a></td><td>ERC-8004 / A2A Registration Card</td></tr>
-          <tr><td><span class="method-get">GET</span></td><td><a href="/.well-known/x402.json"><code>/.well-known/x402.json</code></a></td><td>x402 Service Manifest</td></tr>
           <tr><td><span class="method-get">GET</span></td><td><a href="/openapi.json"><code>/openapi.json</code></a></td><td>Full OpenAPI 3.1.0 Specification</td></tr>
+          <tr><td><span class="method-get">GET</span></td><td><a href="/.well-known/agent-card.json"><code>/.well-known/agent-card.json</code></a></td><td>Google A2A + ERC-8004 Agent Card</td></tr>
+          <tr><td><span class="method-get">GET</span></td><td><a href="/.well-known/erc-8004.json"><code>/.well-known/erc-8004.json</code></a></td><td>Canonical ERC-8004 Domain Verification</td></tr>
+          <tr><td><span class="method-get">GET</span></td><td><a href="/.well-known/mcp.json"><code>/.well-known/mcp.json</code></a></td><td>Model Context Protocol server discovery</td></tr>
+          <tr><td><span class="method-get">GET</span></td><td><a href="/.well-known/x402.json"><code>/.well-known/x402.json</code></a></td><td>x402 Service Manifest with Bazaar extensions</td></tr>
         </tbody>
       </table>
-    </div>
-
-    <div class="card">
-      <h3>💻 Quick SDK Integration</h3>
-      <p>Autonomous agents wrap standard fetch to guarantee $0 lost on bad upstream data:</p>
-      <div class="code-block">
-import { createNullClearFetch } from "@nullclear/x402-arbiter";
-import { z } from "zod";
-
-const fetchWithNullClear = createNullClearFetch({
-  accountOrPrivateKey: process.env.BUYER_PRIVATE_KEY,
-  chainId: 8453,
-  arbiterUrl: "https://nullclear.dev"
-});
-
-// Deep semantic invariants + autonomous failover routing in one line:
-const res = await fetchWithNullClear("https://agent-seller.com/api/data", {
-  nullclear: {
-    sellerAgentId: "124595",
-    minTrustScore: 50,
-    schema: z.object({ price: z.number(), timestamp: z.number() }),
-    invariants: [
-      { path: "price", gt: 0, lt: 100000 },
-      { path: "timestamp", maxStalenessSeconds: 60 }
-    ],
-    rejectRefusals: true
-  }
-});
-      </div>
     </div>
 
     <footer>
@@ -212,7 +186,16 @@ Allow: /
 User-agent: PerplexityBot
 Allow: /
 
+User-agent: Google-Extended
+Allow: /
+
+User-agent: CCBot
+Allow: /
+
 Sitemap: https://nullclear.dev/sitemap.xml
+# LLM documentation and API schemas:
+# https://api.nullclear.dev/llms.txt
+# https://api.nullclear.dev/openapi.json
 `;
   return c.text(robots);
 });
@@ -237,7 +220,12 @@ discoveryRouter.get("/sitemap.xml", (c) => {
     <priority>0.7</priority>
   </url>
   <url>
-    <loc>https://nullclear.dev/.well-known/agent.json</loc>
+    <loc>https://nullclear.dev/.well-known/agent-card.json</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://nullclear.dev/.well-known/erc-8004.json</loc>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
@@ -247,7 +235,7 @@ discoveryRouter.get("/sitemap.xml", (c) => {
     <priority>0.7</priority>
   </url>
   <url>
-    <loc>https://nullclear.dev/mcp</loc>
+    <loc>https://nullclear.dev/.well-known/mcp.json</loc>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
@@ -258,7 +246,7 @@ discoveryRouter.get("/sitemap.xml", (c) => {
 
 // GET /llms.txt
 discoveryRouter.get("/llms.txt", (c) => {
-  const text = `# NullClear Protocol for Autonomous AI Agents (v1.1)
+  const text = `# NullClear Protocol for Autonomous AI Agents (v1.1.1)
 
 NullClear is an autonomous non-custodial clearinghouse, deep invariant verification engine, and spend firewall for x402 Agent-to-Agent (A2A) commerce on Base (Chain ID 8453).
 
@@ -271,47 +259,39 @@ With NullClear:
 4. If invalid, out of bounds, or refused: Seller authorization is shredded and VOIDED ($0 lost).
 5. If you pass backup candidates (fallbacks: [...]), NullClear automatically routes to the next seller inside the exact same HTTP call (zero client downtime).
 
+## Live Sandbox Endpoints (Zero Wallet Setup)
+- Verified Market Feed: \`GET https://api.nullclear.dev/v1/sandbox/market-feed\` ($0.001 USDC / 1000 atomic units)
+- Hallucinating Seller: \`GET https://api.nullclear.dev/v1/sandbox/hallucinating-seller\` (Triggers refusal & invariant voids)
+- Protocol Telemetry: \`GET https://api.nullclear.dev/v1/stats\`
+- x402 Bazaar Audit: \`GET https://api.nullclear.dev/v1/bazaar/audit?agentId=124595\`
+
 ## Core Endpoints & Parameters
 
 ### 1. Execute Escrowed Call with Deep Invariants & Failover
-- **Endpoint**: \`POST /v1/clear\`
+- **Endpoint**: \`POST https://api.nullclear.dev/v1/clear\`
 - **Request Body**:
   \`\`\`json
   {
-    "targetUrl": "https://api.seller-agent.com/data",
+    "targetUrl": "https://api.nullclear.dev/v1/sandbox/market-feed",
     "method": "GET",
     "paymentSignatureHeader": "<Base64 encoded X402PaymentSignaturePayload>",
     "sellerAgentId": "124595",
     "minTrustScore": 50,
     "validation": {
       "expectedStatus": [200],
-      "jsonSchema": {
-        "type": "object",
-        "required": ["ticker", "price", "timestamp"],
-        "properties": {
-          "ticker": { "type": "string" },
-          "price": { "type": "number" },
-          "timestamp": { "type": "number" }
-        }
-      },
       "invariants": [
         { "path": "price", "gt": 0, "lt": 100000 },
-        { "path": "timestamp", "maxStalenessSeconds": 60 },
-        { "path": "ticker", "pattern": "^[A-Z0-9-]+$" }
+        { "path": "timestamp", "maxStalenessSeconds": 60 }
       ],
       "rejectRefusals": true
     },
     "fallbacks": [
       {
-        "targetUrl": "https://backup-seller.com/data",
-        "sellerAgentId": "124596",
+        "targetUrl": "https://api.nullclear.dev/v1/sandbox/market-feed",
+        "sellerAgentId": "124595",
         "paymentSignatureHeader": "<Base64 encoded backup payload>"
       }
-    ],
-    "spendPolicy": {
-      "maxPerCallAtomic": "50000",
-      "maxDailyWalletAtomic": "1000000"
-    }
+    ]
   }
   \`\`\`
 
@@ -330,7 +310,7 @@ When \`validation.rejectRefusals: true\` (default), responses containing canonic
 - **Agent ID**: \`124595\` on Base Mainnet (\`8453\`)
 - **Owner**: \`0xfd74fF802EA0E735514C070AF04E0D6528deD145\`
 - **Trust Grade**: \`A\` | **Score**: \`98\` | **Sybil Flags**: None (Verified)
-- **Check Live**: \`GET https://nullclear.dev/v1/score/8453/124595\`
+- **Check Live**: \`GET https://api.nullclear.dev/v1/score/8453/124595\`
 
 ### 5. Outbound Spend Firewall
 - \`spendPolicy.maxPerCallAtomic\`: Hard per-call USDC atomic cap.
@@ -338,7 +318,7 @@ When \`validation.rejectRefusals: true\` (default), responses containing canonic
 - Anti-abuse: Self-clearing wash loops (\`from === to\`) are rejected with HTTP 400.
 
 ### 6. MCP Server Tools (\`@nullclear/mcp\`)
-Autonomous agents connect directly via MCP stdio/HTTP:
+Autonomous agents connect directly via MCP stdio or remote HTTP:
 - \`nullclear_escrow_x402_call\`: Full deferred schema escrow with invariants, failovers, and spend caps.
 - \`nullclear_check_reputation\`: Instant trust score & Sybil wash-trade audit.
 - \`nullclear_verify_kya_mandate\`: Corporate legal entity & liability limit verification.
@@ -348,7 +328,7 @@ Autonomous agents connect directly via MCP stdio/HTTP:
 
 // GET /llms-full.txt
 discoveryRouter.get("/llms-full.txt", (c) => {
-  const text = `# NullClear Comprehensive Technical Specification & Agent Handbook (v1.1)
+  const text = `# NullClear Comprehensive Technical Specification & Agent Handbook (v1.1.1)
 
 ## Overview
 NullClear solves the Counterparty Risk Problem in autonomous agent transactions.
@@ -360,24 +340,10 @@ All payments use EIP-3009 signed authorizations on native USDC:
 
 ### Multi-Tier Verification Engine
 1. **JSON Schema Draft-07**: Structural typing, required fields, and nested object topology.
-2. **Deterministic Value Invariants**:
-   - Numeric bounds (\`gt\`, \`gte\`, \`lt\`, \`lte\`)
-   - Exact value equality / exclusion (\`eq\`, \`neq\`)
-   - Length limits (\`minLength\`, \`maxLength\`)
-   - Regex matching (\`pattern\`)
-   - Substring blacklisting (\`notContains\`)
-   - Temporal freshness (\`maxStalenessSeconds\`)
-3. **Canonical LLM Refusal Guard**: Automatic scanning of text/JSON values for refusal tropes. Refusal triggers instant voiding ($0 spent).
-4. **Autonomous Multi-Seller Failover**: Ordered candidates with automatic shredding of failed authorizations and zero round-trip client failover.
-5. **Outbound Spend Firewall**: Pre-execution per-call and daily wallet expenditure governance.
-
-### Sybil & Wash-Trading Formula
-Composite Score (0-100):
-- Identity component: 25 points if ERC-8004 registered with valid URI; 15 baseline.
-- Reliability component: 40 * (cleared / (cleared + failed * 3)).
-- Counterparty diversity & volume track record: up to 23 points for diversified counterparties (max single buyer share <= 60%).
-- Sybil penalty: If cleared >= 3 and single buyer share > 60%, subtract 25 points and raise HIGH_COUNTERPARTY_CONCENTRATION_WASH_RISK.
-- KYA mandate bonus: +10 points for active corporate liability mandate.
+2. **Deterministic Value Invariants**: Numeric bounds, regex, substring bans, staleness guards.
+3. **Canonical LLM Refusal Guard**: Rejects generic refusal strings automatically.
+4. **Autonomous Multi-Seller Failover**: Zero client downtime backup routing.
+5. **Outbound Spend Firewall**: Prevents runaway wallet loops.
 
 ### OpenAPI Specification
 Available at \`/openapi.json\` with 100% schema definitions for all routes.
@@ -389,12 +355,14 @@ Available at \`/openapi.json\` with 100% schema definitions for all routes.
 discoveryRouter.get("/.well-known/x402.json", (c) => {
   const treasuryAddress = c.env?.TREASURY_WALLET_ADDRESS || "0xB586eFcCa41dF27ad3873BEcA54da0c30bf04d5c";
   const arbiterAddress = c.env?.ARBITER_WALLET_ADDRESS || "0xfd74fF802EA0E735514C070AF04E0D6528deD145";
+  const agentId = c.env?.ERC8004_AGENT_ID || "124595";
 
   return c.json({
     x402Version: 2,
-    protocolVersion: "1.1.0",
+    protocolVersion: "1.1.1",
     service: "NullClear Arbiter",
-    description: "Autonomous non-custodial schema escrow, deep value invariant verification, and reputation clearinghouse",
+    description: "Autonomous non-custodial schema escrow, deep value invariant verification, and reputation clearinghouse on Base Mainnet",
+    erc8004AgentId: agentId,
     treasuryAddress,
     arbiterAddress,
     feeBps: 50,
@@ -406,7 +374,8 @@ discoveryRouter.get("/.well-known/x402.json", (c) => {
       "autonomous_failover_routing",
       "outbound_spend_firewall",
       "sybil_scoring",
-      "kya_attestation"
+      "kya_attestation",
+      "x402_bazaar_auto_discovery"
     ],
     assets: [
       {
@@ -421,41 +390,276 @@ discoveryRouter.get("/.well-known/x402.json", (c) => {
       }
     ],
     endpoints: {
-      clear: "/v1/clear",
-      score: "/v1/score/{chainId}/{agentId}",
-      kya: "/v1/kya/{chainId}/{agentId}"
+      clear: {
+        path: "/v1/clear",
+        method: "POST",
+        description: "Deferred schema escrow execution proxy with invariants and failover",
+        schema: {
+          $schema: "https://json-schema.org/draft/2020-12/schema",
+          type: "object",
+          properties: {
+            input: {
+              type: "object",
+              required: ["targetUrl", "paymentSignatureHeader"],
+              properties: {
+                targetUrl: { type: "string" },
+                paymentSignatureHeader: { type: "string" },
+                sellerAgentId: { type: "string" },
+                minTrustScore: { type: "number" },
+                validation: { type: "object" },
+                fallbacks: { type: "array" },
+                spendPolicy: { type: "object" }
+              }
+            },
+            output: {
+              type: "object",
+              properties: {
+                cleared: { type: "boolean" },
+                settled: { type: "boolean" },
+                clearingId: { type: "string" },
+                buyerCharged: { type: "string" },
+                data: {},
+                attestation: { type: "object" }
+              }
+            }
+          }
+        }
+      },
+      score: {
+        path: "/v1/score/{chainId}/{agentId}",
+        method: "GET",
+        description: "Composite Sybil-resistant trust score and wash-trading audit"
+      },
+      stats: {
+        path: "/v1/stats",
+        method: "GET",
+        description: "Public protocol telemetry and verified clearing history"
+      },
+      bazaarAudit: {
+        path: "/v1/bazaar/audit",
+        method: "GET",
+        payable: true,
+        amountAtomic: "1000",
+        extensions: {
+          bazaar: {
+            discoverable: true,
+            description: "Verify ERC-8004 agent Sybil reputation score, wash-trading cluster risk, and x402 schema-escrow readiness on Base Mainnet (eip155:8453).",
+            info: {
+              input: {
+                type: "http",
+                method: "GET",
+                queryParams: {
+                  agentId: { type: "string", example: "124595", description: "ERC-8004 Agent Token ID on Base Mainnet" }
+                }
+              },
+              output: {
+                type: "json",
+                example: {
+                  agentId: "124595",
+                  trustScore: 98,
+                  grade: "A",
+                  sybilRisk: "low",
+                  escrowReady: true,
+                  timestamp: 1729045678901
+                }
+              }
+            },
+            schema: {
+              $schema: "https://json-schema.org/draft/2020-12/schema",
+              type: "object",
+              properties: {
+                input: {
+                  type: "object",
+                  properties: { agentId: { type: "string" } }
+                },
+                output: {
+                  type: "object",
+                  required: ["agentId", "trustScore", "grade", "escrowReady"],
+                  properties: {
+                    agentId: { type: "string" },
+                    trustScore: { type: "integer", minimum: 0, maximum: 100 },
+                    grade: { type: "string", enum: ["A", "B", "C", "D", "F"] },
+                    sybilRisk: { type: "string", enum: ["low", "medium", "high"] },
+                    escrowReady: { type: "boolean" },
+                    timestamp: { type: "integer" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      bazaarVerify: {
+        path: "/v1/bazaar/verify",
+        method: "POST",
+        payable: true,
+        amountAtomic: "1000",
+        extensions: {
+          bazaar: {
+            discoverable: true,
+            description: "Cryptographically verify an agent's x402 schema contract compatibility and active clearing readiness on Base Mainnet.",
+            info: {
+              input: {
+                type: "http",
+                method: "POST",
+                body: {
+                  type: "json",
+                  example: { agentId: "124595", schema: { type: "object", required: ["price"] } }
+                }
+              },
+              output: {
+                type: "json",
+                example: { verified: true, agentId: "124595", escrowSupported: true, timestamp: 1729045678901 }
+              }
+            },
+            schema: {
+              $schema: "https://json-schema.org/draft/2020-12/schema",
+              type: "object",
+              properties: {
+                input: {
+                  type: "object",
+                  required: ["agentId", "schema"],
+                  properties: { agentId: { type: "string" }, schema: { type: "object" } }
+                },
+                output: {
+                  type: "object",
+                  required: ["verified", "agentId", "escrowSupported"],
+                  properties: {
+                    verified: { type: "boolean" },
+                    agentId: { type: "string" },
+                    escrowSupported: { type: "boolean" },
+                    timestamp: { type: "integer" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      sandboxMarketFeed: {
+        path: "/v1/sandbox/market-feed",
+        method: "GET",
+        payable: true,
+        amountAtomic: "1000",
+        extensions: {
+          bazaar: {
+            discoverable: true,
+            description: "Live high-frequency ETH/USDC price feed verified by NullClear Arbiter on Base Mainnet (eip155:8453).",
+            info: {
+              input: { type: "http", method: "GET" },
+              output: {
+                type: "json",
+                example: {
+                  asset: "ETH/USDC",
+                  price: 2645.50,
+                  source: "NullClear Verified Feed",
+                  timestamp: 1729045678901
+                }
+              }
+            },
+            schema: {
+              $schema: "https://json-schema.org/draft/2020-12/schema",
+              type: "object",
+              properties: {
+                output: {
+                  type: "object",
+                  required: ["asset", "price", "source", "timestamp"],
+                  properties: {
+                    asset: { type: "string" },
+                    price: { type: "number", minimum: 0 },
+                    source: { type: "string" },
+                    timestamp: { type: "integer" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      sandboxHallucinatingSeller: {
+        path: "/v1/sandbox/hallucinating-seller",
+        method: "GET",
+        payable: true,
+        amountAtomic: "1000",
+        extensions: {
+          bazaar: {
+            discoverable: true,
+            description: "Synthetic failing seller returning invalid data & LLM refusal strings to verify NullClear schema-escrow failover protection.",
+            info: {
+              input: { type: "http", method: "GET" },
+              output: {
+                type: "json",
+                example: {
+                  error: "As an AI language model, I cannot provide market predictions.",
+                  corrupted: true
+                }
+              }
+            },
+            schema: {
+              $schema: "https://json-schema.org/draft/2020-12/schema",
+              type: "object",
+              properties: {
+                output: {
+                  type: "object",
+                  properties: {
+                    error: { type: "string" },
+                    corrupted: { type: "boolean" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
     }
   });
 });
 
-// GET /.well-known/agent.json
-discoveryRouter.get("/.well-known/agent.json", (c) => {
+// A2A & ERC-8004 Agent Card JSON
+const getAgentCard = (c: any) => {
   const agentWallet = c.env?.ARBITER_WALLET_ADDRESS || "0xfd74fF802EA0E735514C070AF04E0D6528deD145";
   const treasuryWallet = c.env?.TREASURY_WALLET_ADDRESS || "0xB586eFcCa41dF27ad3873BEcA54da0c30bf04d5c";
-  const agentId = c.env?.ERC8004_AGENT_ID || "pending";
+  const agentId = Number(c.env?.ERC8004_AGENT_ID || 124595);
 
-  return c.json({
+  return {
     type: "https://eips.ethereum.org/EIPS/eip-8004#registration-v1",
     name: "NullClear Arbiter",
-    description: "Autonomous non-custodial clearing, reputation scoring, and KYA arbiter for AI commerce",
+    description: "Autonomous non-custodial clearing, reputation scoring, and KYA arbiter for AI commerce on Base Mainnet",
     image: "https://nullclear.dev/logo.png",
     active: true,
     x402Support: true,
     agentWallet,
     treasuryWallet,
-    supportedTrust: ["reputation", "crypto-economic"],
+    supportedTrust: ["reputation", "validation", "x402-escrow", "crypto-economic"],
+    mcpEndpoint: "https://api.nullclear.dev/mcp",
     services: [
       { name: "web", endpoint: "https://nullclear.dev" },
-      { name: "rest", endpoint: "https://nullclear.dev/v1" },
-      { name: "mcp", endpoint: "https://nullclear.dev/.well-known/mcp.json" },
-      { name: "a2a", endpoint: "https://nullclear.dev/.well-known/agent.json" },
-      { name: "x402", endpoint: "https://nullclear.dev/.well-known/x402.json" },
-      { name: "llms", endpoint: "https://nullclear.dev/llms.txt" }
+      { name: "api", endpoint: "https://api.nullclear.dev" },
+      { name: "mcp", endpoint: "https://api.nullclear.dev/mcp" },
+      { name: "a2a", endpoint: "https://api.nullclear.dev/.well-known/agent-card.json" },
+      { name: "x402", endpoint: "https://api.nullclear.dev/.well-known/x402.json" },
+      { name: "erc8004", endpoint: "https://api.nullclear.dev/.well-known/erc-8004.json" },
+      { name: "llms", endpoint: "https://api.nullclear.dev/llms.txt" },
+      { name: "openapi", endpoint: "https://api.nullclear.dev/openapi.json" }
     ],
     registrations: [
       {
         agentRegistry: "eip155:8453:0x8004A169FB4a3325136EB29fA0ceB6D2e539a432",
         agentId
+      }
+    ],
+    skills: [
+      {
+        name: "nullclear-x402-escrow",
+        description: "Deferred schema-escrow clearing for x402 payments with deep invariant verification and autonomous multi-seller failover.",
+        endpoint: "https://api.nullclear.dev/v1/clear",
+        tags: ["x402", "escrow", "invariants", "reputation", "erc8004"]
+      },
+      {
+        name: "nullclear-reputation-oracle",
+        description: "ERC-8004 on-chain trust score, Sybil wash-trade audit, and corporate KYA verification on Base.",
+        endpoint: "https://api.nullclear.dev/v1/score/8453/{agentId}",
+        tags: ["erc8004", "reputation", "sybil", "oracle"]
       }
     ],
     capabilities: [
@@ -469,37 +673,103 @@ discoveryRouter.get("/.well-known/agent.json", (c) => {
       "autonomous_failover_routing",
       "outbound_spend_firewall"
     ]
-  });
-});
+  };
+};
+
+// GET /.well-known/agent-card.json & GET /.well-known/agent.json
+discoveryRouter.get("/.well-known/agent-card.json", (c) => c.json(getAgentCard(c)));
+discoveryRouter.get("/.well-known/agent.json", (c) => c.json(getAgentCard(c)));
+
+// Canonical ERC-8004 Domain Verification JSON
+const getErc8004Verification = (c: any) => {
+  const agentWallet = c.env?.ARBITER_WALLET_ADDRESS || "0xfd74fF802EA0E735514C070AF04E0D6528deD145";
+  const treasuryWallet = c.env?.TREASURY_WALLET_ADDRESS || "0xB586eFcCa41dF27ad3873BEcA54da0c30bf04d5c";
+  const agentId = Number(c.env?.ERC8004_AGENT_ID || 124595);
+
+  return {
+    version: "1.0",
+    domain: "nullclear.dev",
+    agentId,
+    chainId: 8453,
+    network: "eip155:8453",
+    agentRegistry: "0x8004A169FB4a3325136EB29fA0ceB6D2e539a432",
+    reputationRegistry: "0x8004BAa17C55a88189AE136b182e5fdA19dE9b63",
+    arbiterAddress: agentWallet,
+    treasuryAddress: treasuryWallet,
+    agentUri: "https://nullclear.dev/.well-known/agent.json",
+    verifiedDomains: ["nullclear.dev", "api.nullclear.dev", "nullclear.com", "www.nullclear.com"]
+  };
+};
+
+// GET /.well-known/erc-8004.json & GET /_aixyz/erc-8004.json
+discoveryRouter.get("/.well-known/erc-8004.json", (c) => c.json(getErc8004Verification(c)));
+discoveryRouter.get("/_aixyz/erc-8004.json", (c) => c.json(getErc8004Verification(c)));
 
 // GET /.well-known/mcp.json
 discoveryRouter.get("/.well-known/mcp.json", (c) => {
   return c.json({
     name: "NullClear MCP Server",
     package: "@nullclear/mcp",
-    transport: "stdio",
+    version: "1.1.1",
+    transport: "streamable-http",
+    url: "https://api.nullclear.dev/mcp",
     description: "Model Context Protocol tools for safe x402 calls, deep invariant evaluation, reputation checks, and KYA verification",
     tools: [
-      "nullclear_check_reputation",
-      "nullclear_escrow_x402_call",
-      "nullclear_verify_kya_mandate"
+      {
+        name: "nullclear_escrow_x402_call",
+        description: "Execute an x402-gated HTTP API call through NullClear deferred schema escrow with deep invariants and autonomous failover."
+      },
+      {
+        name: "nullclear_check_reputation",
+        description: "Inspect an AI agent's trust score (0-100), clearing reliability, Sybil wash-trade penalty flags, and corporate KYA backing on Base."
+      },
+      {
+        name: "nullclear_verify_kya_mandate",
+        description: "Verify an agent's Know Your Agent (KYA) corporate liability mandate, active validity, and transaction spending limits."
+      }
     ]
   });
 });
 
-// GET /openapi.json
+// GET /.well-known/ai-plugin.json
+discoveryRouter.get("/.well-known/ai-plugin.json", (c) => {
+  return c.json({
+    schema_version: "v1",
+    name_for_model: "nullclear_escrow",
+    name_for_human: "NullClear x402 Escrow & Agent Reputation",
+    description_for_model: "Non-custodial deferred escrow clearing, deep invariant validation, and Sybil-resistant ERC-8004 reputation oracle for x402 payments on Base.",
+    description_for_human: "Protect autonomous AI agent payments with schema-escrow, deep invariants, and Sybil reputation scoring on Base.",
+    auth: { type: "none" },
+    api: {
+      type: "openapi",
+      url: "https://api.nullclear.dev/openapi.json"
+    },
+    logo_url: "https://nullclear.dev/logo.png",
+    contact_email: "contact@nullclear.dev",
+    legal_info_url: "https://nullclear.dev"
+  });
+});
+
+// GET /openapi.json - Complete OpenAPI 3.1.0 Specification
 discoveryRouter.get("/openapi.json", (c) => {
   return c.json({
     openapi: "3.1.0",
     info: {
       title: "NullClear Arbiter API",
-      version: "1.1.0",
-      description: "Non-custodial deferred clearing, deep invariant validation, and reputation protocol for x402 AI Agents"
+      version: "1.1.1",
+      description: "Non-custodial deferred clearing, deep invariant validation, and reputation protocol for x402 AI Agents on Base Mainnet"
     },
+    servers: [
+      {
+        url: "https://api.nullclear.dev",
+        description: "Production Arbiter API"
+      }
+    ],
     paths: {
       "/v1/clear": {
         post: {
           summary: "Execute deferred escrow clearing with deep invariants, failover routing, and spend firewall",
+          operationId: "clearPayment",
           requestBody: {
             required: true,
             content: {
@@ -528,7 +798,7 @@ discoveryRouter.get("/openapi.json", (c) => {
                             type: "object",
                             required: ["path"],
                             properties: {
-                              path: { type: "string", description: "Dot-notation property path (e.g. 'data.price')" },
+                              path: { type: "string", description: "Dot-notation property path (e.g. 'price')" },
                               gt: { type: "number" },
                               gte: { type: "number" },
                               lt: { type: "number" },
@@ -605,49 +875,114 @@ discoveryRouter.get("/openapi.json", (c) => {
       "/v1/score/{chainId}/{agentId}": {
         get: {
           summary: "Retrieve composite trust score and Sybil wash-trade analysis for an agent",
+          operationId: "getTrustScore",
           parameters: [
             { name: "chainId", in: "path", required: true, schema: { type: "string" } },
             { name: "agentId", in: "path", required: true, schema: { type: "string" } }
           ],
           responses: {
-            "200": { description: "Trust score and metrics result" },
+            "200": {
+              description: "Trust score and metrics result",
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "object",
+                    properties: {
+                      success: { type: "boolean" },
+                      data: {
+                        type: "object",
+                        properties: {
+                          agentId: { type: "string" },
+                          chainId: { type: "integer" },
+                          score: { type: "integer" },
+                          grade: { type: "string" },
+                          sybilFlags: { type: "array", items: { type: "string" } },
+                          metrics: { type: "object" }
+                        }
+                      },
+                      _agentDirective: { type: "object" }
+                    }
+                  }
+                }
+              }
+            },
             "400": { description: "Invalid chain ID" }
+          }
+        }
+      },
+      "/v1/stats": {
+        get: {
+          summary: "Public protocol telemetry and verified clearing history",
+          operationId: "getProtocolStats",
+          responses: {
+            "200": {
+              description: "Live protocol metrics",
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "object",
+                    properties: {
+                      totalClearings: { type: "integer" },
+                      validSettlements: { type: "integer" },
+                      voidedHallucinations: { type: "integer" },
+                      totalAgentsIndexed: { type: "integer" },
+                      recentClearings: { type: "array" },
+                      _agentDirective: { type: "object" }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "/v1/bazaar/audit": {
+        get: {
+          summary: "x402 Bazaar payable oracle for agent reputation audits",
+          operationId: "bazaarAudit",
+          parameters: [
+            { name: "agentId", in: "query", schema: { type: "string", default: "124595" } }
+          ],
+          responses: {
+            "200": { description: "Agent reputation audit response" },
+            "402": { description: "Payment Required (includes extensions.bazaar discovery)" }
+          }
+        }
+      },
+      "/v1/bazaar/verify": {
+        post: {
+          summary: "x402 Bazaar payable oracle for agent schema compatibility verification",
+          operationId: "bazaarVerify",
+          responses: {
+            "200": { description: "Verification response" },
+            "402": { description: "Payment Required (includes extensions.bazaar discovery)" }
+          }
+        }
+      },
+      "/v1/sandbox/market-feed": {
+        get: {
+          summary: "Zero-config sandbox verified ETH/USDC price feed",
+          operationId: "sandboxMarketFeed",
+          responses: {
+            "200": { description: "Live price feed" },
+            "402": { description: "Payment Required" }
+          }
+        }
+      },
+      "/v1/sandbox/hallucinating-seller": {
+        get: {
+          summary: "Zero-config sandbox hallucinating seller for failover and refusal testing",
+          operationId: "sandboxHallucinatingSeller",
+          responses: {
+            "200": { description: "Refusal test data" },
+            "402": { description: "Payment Required" }
           }
         }
       },
       "/v1/kya/attest": {
         post: {
           summary: "Register and attest a corporate liability KYA mandate",
-          requestBody: {
-            required: true,
-            content: {
-              "application/json": {
-                schema: {
-                  type: "object",
-                  required: ["mandate", "chainId"],
-                  properties: {
-                    chainId: { type: "integer" },
-                    mandate: {
-                      type: "object",
-                      required: ["corporateEntity", "agentId", "agentWallet"],
-                      properties: {
-                        corporateEntity: { type: "string" },
-                        entityRegistrationNumber: { type: "string" },
-                        agentId: { type: "string" },
-                        agentWallet: { type: "string" },
-                        maxTxLimitUsd: { type: "number" },
-                        liabilityCoverageUsd: { type: "number" },
-                        validUntil: { type: "integer" },
-                        jurisdiction: { type: "string" }
-                      }
-                    },
-                    signature: { type: "string" },
-                    signerAddress: { type: "string" }
-                  }
-                }
-              }
-            }
-          },
+          operationId: "attestKyaMandate",
           responses: {
             "200": { description: "Mandate recorded" },
             "400": { description: "Invalid mandate parameters" }
@@ -657,6 +992,7 @@ discoveryRouter.get("/openapi.json", (c) => {
       "/v1/kya/{chainId}/{agentId}": {
         get: {
           summary: "Retrieve active KYA corporate mandate for an agent",
+          operationId: "getKyaMandate",
           parameters: [
             { name: "chainId", in: "path", required: true, schema: { type: "string" } },
             { name: "agentId", in: "path", required: true, schema: { type: "string" } }
@@ -664,6 +1000,54 @@ discoveryRouter.get("/openapi.json", (c) => {
           responses: {
             "200": { description: "KYA corporate mandate record" },
             "404": { description: "No mandate found" }
+          }
+        }
+      },
+      "/v1/kya/verify": {
+        post: {
+          summary: "Verify an agent's corporate liability mandate and transaction spending limits",
+          operationId: "verifyKyaMandate",
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  required: ["agentId", "transactionAmountUsd"],
+                  properties: {
+                    agentId: { type: "string", description: "ERC-8004 agent token ID" },
+                    chainId: { type: "integer", default: 8453, description: "EVM chain ID (default 8453)" },
+                    transactionAmountUsd: { type: "number", description: "Proposed transaction amount in USD" }
+                  }
+                }
+              }
+            }
+          },
+          responses: {
+            "200": {
+              description: "Verification decision with corporate coverage details",
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "object",
+                    properties: {
+                      verified: { type: "boolean" },
+                      approvedForAmount: { type: "boolean" },
+                      agentId: { type: "string" },
+                      chainId: { type: "integer" },
+                      corporateEntity: { type: "string" },
+                      entityRegistrationNumber: { type: "string" },
+                      jurisdiction: { type: "string" },
+                      maxTxLimitUsd: { type: "number" },
+                      liabilityCoverageUsd: { type: "number" },
+                      isExpired: { type: "boolean" },
+                      exceedsLimit: { type: "boolean" }
+                    }
+                  }
+                }
+              }
+            },
+            "400": { description: "Missing required parameters or unsupported chain ID" }
           }
         }
       }

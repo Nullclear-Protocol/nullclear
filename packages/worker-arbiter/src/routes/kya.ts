@@ -91,3 +91,58 @@ kyaRouter.get("/:chainId/:agentId", async (c) => {
     data: record
   });
 });
+
+kyaRouter.post("/verify", async (c) => {
+  let body: { agentId?: string; chainId?: number | string; transactionAmountUsd?: number };
+  try {
+    body = await c.req.json();
+  } catch {
+    return c.json({ error: "Invalid JSON request body" }, 400);
+  }
+
+  const agentId = String(body.agentId || "");
+  if (!agentId) {
+    return c.json({ error: "Missing required agentId parameter" }, 400);
+  }
+
+  let chainId = 8453;
+  if (body.chainId !== undefined) {
+    try {
+      chainId = getChainConfig(body.chainId).chainId;
+    } catch (err: any) {
+      return c.json({ error: `Unsupported chainId: ${body.chainId}` }, 400);
+    }
+  }
+
+  const transactionAmountUsd = Number(body.transactionAmountUsd || 0);
+  const store = getArbiterStore(c.env);
+  const record = await store.getKyaMandate(agentId, chainId);
+
+  if (!record) {
+    return c.json({
+      verified: false,
+      agentId,
+      chainId,
+      reason: `No corporate liability KYA mandate found for agent ${agentId} on chain ${chainId}`
+    });
+  }
+
+  const now = Math.floor(Date.now() / 1000);
+  const isExpired = record.validUntil <= now;
+  const exceedsLimit = transactionAmountUsd > record.maxTxLimitUsd;
+
+  return c.json({
+    verified: !isExpired && !exceedsLimit,
+    agentId,
+    chainId,
+    corporateEntity: record.corporateEntity,
+    entityRegistrationNumber: record.entityRegistrationNumber,
+    jurisdiction: record.jurisdiction,
+    maxTxLimitUsd: record.maxTxLimitUsd,
+    liabilityCoverageUsd: record.liabilityCoverageUsd,
+    isExpired,
+    exceedsLimit,
+    approvedForAmount: !isExpired && !exceedsLimit
+  });
+});
+

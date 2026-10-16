@@ -161,7 +161,7 @@ describe("NullClear Worker Arbiter Test Suite", () => {
     expect(res1.status).toBe(200);
     const data1 = (await res1.json()) as any;
     expect(data1.x402Version).toBe(2);
-    expect(data1.endpoints.clear).toBe("/v1/clear");
+    expect(typeof data1.endpoints.clear === "object" ? data1.endpoints.clear.path : data1.endpoints.clear).toBe("/v1/clear");
     expect(data1.treasuryAddress).toBe("0xB586eFcCa41dF27ad3873BEcA54da0c30bf04d5c");
     expect(data1.arbiterAddress).toBe("0xfd74fF802EA0E735514C070AF04E0D6528deD145");
     expect(data1.feeBps).toBe(50);
@@ -811,7 +811,7 @@ describe("NullClear Worker Arbiter Test Suite", () => {
     const json = (await res.json()) as any;
     expect(json.status).toBe("ok");
     expect(json.protocol).toBe("NullClear");
-    expect(json.version).toBe("1.1.0");
+    expect(json.version).toBe("1.1.1");
   });
 
   // 22. Live Sandbox 402 Seller Endpoints & Public Stats

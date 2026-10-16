@@ -1,47 +1,27 @@
 {
-  "$schema": "https://raw.githubusercontent.com/modelcontextprotocol/registry/main/schema.json",
-  "name": "dev.nullclear/mcp",
-  "title": "NullClear MCP Server",
-  "description": "Autonomous non-custodial clearing, reputation scoring, and KYA corporate liability verification for AI agent commerce",
-  "version": "1.0.0",
-  "homepage": "https://nullclear.dev",
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-07-09/server.schema.json",
+  "name": "io.github.mithgalalfayez/nullclear",
+  "description": "Autonomous x402 payment schema-escrow arbiter, spend firewall, failover router & ERC-8004 Sybil oracle on Base.",
+  "version": "1.1.1",
+  "website_url": "https://nullclear.dev",
   "repository": {
-    "type": "git",
-    "url": "https://github.com/Nullclear-Protocol/nullclear"
+    "url": "https://github.com/Nullclear-Protocol/nullclear",
+    "source": "github"
   },
-  "license": "MIT",
   "packages": [
     {
-      "registry": "npm",
-      "package": "@nullclear/mcp",
-      "version": "1.0.0",
+      "registry_type": "npm",
+      "identifier": "@nullclear/mcp",
+      "version": "1.1.1",
       "transport": {
         "type": "stdio"
-      },
-      "executable": "nullclear-mcp",
-      "command": "npx",
-      "args": ["-y", "@nullclear/mcp"]
+      }
     }
   ],
-  "tools": [
+  "remotes": [
     {
-      "name": "nullclear_check_reputation",
-      "description": "Inspect an agent's on-chain ERC-8004 identity, composite trust score (0-100), letter grade (A-F), and Sybil wash-trading risk flags before interacting."
-    },
-    {
-      "name": "nullclear_escrow_x402_call",
-      "description": "Execute a deferred-escrow x402 upstream call. The buyer signs an EIP-3009 payment authorization held in escrow by NullClear. If the seller agent returns an invalid response or crashes, settlement is VOIDED with $0 lost."
-    },
-    {
-      "name": "nullclear_verify_kya_mandate",
-      "description": "Verify an autonomous agent's corporate liability mandate (KYA) signed via EIP-712, checking legal entity backing, max transaction limit, and liability coverage."
+      "type": "streamable-http",
+      "url": "https://api.nullclear.dev/mcp"
     }
-  ],
-  "categories": [
-    "finance",
-    "payments",
-    "security",
-    "reputation",
-    "web3"
   ]
 }

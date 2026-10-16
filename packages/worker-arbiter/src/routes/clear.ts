@@ -49,9 +49,9 @@ interface CandidateTarget {
 function isSandboxUrl(urlStr: string): boolean {
   try {
     const u = new URL(urlStr);
-    return u.pathname.startsWith("/v1/sandbox");
+    return u.pathname.startsWith("/v1/sandbox") || u.pathname.startsWith("/v1/bazaar");
   } catch {
-    return urlStr.includes("/v1/sandbox");
+    return urlStr.includes("/v1/sandbox") || urlStr.includes("/v1/bazaar");
   }
 }
 
@@ -91,6 +91,38 @@ function handleLocalSandbox(targetUrl: string, reqHeaders: Record<string, string
       text: JSON.stringify({
         error: "Internal Server Error",
         message: "Simulated upstream 500 server crash for NullClear canary test"
+      })
+    };
+  }
+
+  if (targetUrl.includes("/v1/bazaar/audit")) {
+    if (!hasPayment) {
+      return { status: 402, text: JSON.stringify({ error: "Payment Required" }) };
+    }
+    return {
+      status: 200,
+      text: JSON.stringify({
+        agentId: "124595",
+        trustScore: 98,
+        grade: "A",
+        sybilRisk: "low",
+        escrowReady: true,
+        timestamp: Date.now()
+      })
+    };
+  }
+
+  if (targetUrl.includes("/v1/bazaar/verify")) {
+    if (!hasPayment) {
+      return { status: 402, text: JSON.stringify({ error: "Payment Required" }) };
+    }
+    return {
+      status: 200,
+      text: JSON.stringify({
+        verified: true,
+        agentId: "124595",
+        escrowSupported: true,
+        timestamp: Date.now()
       })
     };
   }

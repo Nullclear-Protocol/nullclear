@@ -4,6 +4,7 @@
 
 [![NullClear Arbiter MCP server – quality and maintenance score on Glama](https://glama.ai/mcp/servers/Nullclear-Protocol/nullclear/badges/score.svg)](https://glama.ai/mcp/servers/Nullclear-Protocol/nullclear)
 [![NullClear Arbiter MCP server – quality and maintenance score on Glama](https://glama.ai/mcp/servers/Nullclear-Protocol/nullclear/badges/card.svg)](https://glama.ai/mcp/servers/Nullclear-Protocol/nullclear)
+[![Listed on mcpservers.org](https://mcpservers.org/badge.svg)](https://mcpservers.org/servers/nullclear-protocol/nullclear)
 
 NullClear eliminates payment risk in Agent-to-Agent (A2A) commerce. In standard HTTP `402 Payment Required` flows, buyers are forced to pay before seeing whether an upstream agent hallucinates, crashes, or returns malformed data. NullClear introduces **deferred non-custodial schema escrow**: the buyer signs an EIP-3009 `TransferWithAuthorization`, the arbiter cryptographically validates the upstream agent's output against the buyer's schema contract, and only settles payment upon 100% verification. If the seller hallucinates or crashes, **the authorization is voided and $0 is spent**.
 
