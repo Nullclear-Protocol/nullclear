@@ -106,7 +106,7 @@ export interface NullClearOptions {
 }
 
 export interface NullClearFetchConfig {
-  accountOrPrivateKey: SignerInput;
+  accountOrPrivateKey?: SignerInput;
   chainId?: number;
   arbiterUrl?: string;
   defaultMinTrustScore?: number;
@@ -121,9 +121,9 @@ export type NullClearRequestInit = RequestInit & {
  * Creates an enhanced fetch client that autonomously intercepts HTTP 402 Payment Required
  * and safely wraps the call in NullClear Deferred Non-Custodial Schema Escrow
  */
-export function createNullClearFetch(config: NullClearFetchConfig) {
+export function createNullClearFetch(config: NullClearFetchConfig = {}) {
   const chainId = config.chainId || 8453;
-  const arbiterUrl = (config.arbiterUrl || "https://arbiter.nullclear.dev").replace(/\/$/, "");
+  const arbiterUrl = (config.arbiterUrl || "https://api.nullclear.dev").replace(/\/$/, "");
   const defaultMinTrustScore = config.defaultMinTrustScore || 50;
   const customFetch = config.customFetch || fetch;
 
@@ -147,38 +147,42 @@ export function createNullClearFetch(config: NullClearFetchConfig) {
     const paymentRequiredHeader =
       initialRes.headers.get("PAYMENT-REQUIRED") || initialRes.headers.get("payment-required");
 
-    if (!paymentRequiredHeader) {
-      // 402 without x402 header - return as is
-      return initialRes;
-    }
+    let paymentSignatureHeader: string | undefined;
 
-    let paymentRequired: X402PaymentRequired;
-    try {
-      paymentRequired = decodeBase64Json<X402PaymentRequired>(paymentRequiredHeader);
-    } catch {
-      return initialRes;
-    }
+    if (config.accountOrPrivateKey && paymentRequiredHeader) {
+      let paymentRequired: X402PaymentRequired;
+      try {
+        paymentRequired = decodeBase64Json<X402PaymentRequired>(paymentRequiredHeader);
+      } catch {
+        return initialRes;
+      }
 
-    // 3. Find matching payment option for target network
-    const targetNetwork = `eip155:${chainId}`;
-    const selectedOption: X402PaymentOption | undefined = paymentRequired.accepts.find(
-      (opt) => opt.network === targetNetwork && opt.scheme === "exact"
-    );
-
-    if (!selectedOption) {
-      throw new Error(
-        `Seller does not accept payments on network ${targetNetwork}. Accepted: ${paymentRequired.accepts
-          .map((a) => a.network)
-          .join(", ")}`
+      // 3. Find matching payment option for target network
+      const targetNetwork = `eip155:${chainId}`;
+      const selectedOption: X402PaymentOption | undefined = paymentRequired.accepts.find(
+        (opt) => opt.network === targetNetwork && opt.scheme === "exact"
       );
-    }
 
-    // 4. Sign EIP-3009 TransferWithAuthorization
-    const paymentSignatureHeader = await signX402Payment(
-      config.accountOrPrivateKey,
-      selectedOption,
-      targetUrl
-    );
+      if (!selectedOption) {
+        throw new Error(
+          `Seller does not accept payments on network ${targetNetwork}. Accepted: ${paymentRequired.accepts
+            .map((a) => a.network)
+            .join(", ")}`
+        );
+      }
+
+      // 4. Sign EIP-3009 TransferWithAuthorization
+      paymentSignatureHeader = await signX402Payment(
+        config.accountOrPrivateKey,
+        selectedOption,
+        targetUrl
+      );
+    } else if (!config.accountOrPrivateKey) {
+      // Zero-Config Sponsored Free Trial Mode (10 calls/day)
+      paymentSignatureHeader = "free-trial";
+    } else {
+      return initialRes;
+    }
 
     // 5. Convert schema if provided
     let jsonSchema: Record<string, unknown> | undefined;
@@ -211,9 +215,14 @@ export function createNullClearFetch(config: NullClearFetchConfig) {
       spendPolicy: init?.nullclear?.spendPolicy
     };
 
+    const clearHeaders: Record<string, string> = { "Content-Type": "application/json" };
+    if (paymentSignatureHeader === "free-trial") {
+      clearHeaders["x-nullclear-free-trial"] = "true";
+    }
+
     const arbiterRes = await customFetch(`${arbiterUrl}/v1/clear`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: clearHeaders,
       body: JSON.stringify(clearPayload)
     });
 

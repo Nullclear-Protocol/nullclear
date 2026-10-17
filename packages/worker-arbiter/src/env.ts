@@ -108,6 +108,78 @@ export interface ClearingRecord {
   createdAt: number;
 }
 
+export type TrafficActorType =
+  | "MCP_CLIENT"
+  | "AI_CRAWLER"
+  | "HUMAN_BROWSER"
+  | "SDK_AGENT"
+  | "BOT_SCANNER";
+
+export interface TrafficEventRecord {
+  id: string;
+  timestamp: number;
+  host: string;
+  path: string;
+  method: string;
+  status: number;
+  actorType: TrafficActorType;
+  mcpMethod?: string | null;
+  toolName?: string | null;
+  country?: string | null;
+  asn?: string | null;
+  referer?: string | null;
+}
+
+export interface TelemetryFunnelWindow {
+  windowLabel: string;
+  totalInvocations: number;
+  byActorType: Record<TrafficActorType, number>;
+  byHost: Record<string, number>;
+  topPaths: Array<{ path: string; count: number }>;
+  mcp: {
+    toolsListed: number;
+    toolsCalled: number;
+    conversionRatePct: number;
+    topTools: Array<{ toolName: string; count: number }>;
+    methodsBreakdown: Record<string, number>;
+  };
+  funnel: {
+    discovery: number;
+    mcpHandshake: number;
+    freeOrSandboxCall: number;
+    realX402Settlement: number;
+  };
+}
+
+export interface TelemetryFunnelReport {
+  generatedAt: number;
+  last24h: TelemetryFunnelWindow;
+  last7d: TelemetryFunnelWindow;
+}
+
+export interface FreeTierUsageResult {
+  allowed: boolean;
+  used: number;
+  remaining: number;
+  limit: number;
+}
+
+export type ValidationPreset = "DEFAULT_JSON" | "STRICT_NO_REFUSAL" | "CUSTOM";
+
+export interface SellerGatewayRecord {
+  id: string;
+  slug: string;
+  sellerAddress: `0x${string}`;
+  upstreamUrl: string;
+  priceAtomic: string;
+  description: string;
+  category: string;
+  validationPreset: ValidationPreset;
+  customSchema?: Record<string, unknown> | null;
+  totalCalls: number;
+  createdAt: number;
+}
+
 export interface ProtocolStats {
   totalClearings: number;
   validSettlements: number;
@@ -136,6 +208,14 @@ export interface IArbiterStore {
   getProtocolStats(): Promise<ProtocolStats>;
   saveSafePayDeal(deal: SafePayDealRecord): Promise<void>;
   getSafePayDeal(dealId: string): Promise<SafePayDealRecord | null>;
+  recordTrafficEvent(event: TrafficEventRecord): Promise<void>;
+  getTelemetryFunnel(): Promise<TelemetryFunnelReport>;
+  consumeFreeTierCall(clientKey: string, dailyLimit?: number): Promise<FreeTierUsageResult>;
+  getFreeTierRemaining(clientKey: string, dailyLimit?: number): Promise<number>;
+  saveSellerGateway(gateway: SellerGatewayRecord): Promise<void>;
+  getSellerGatewayBySlug(slug: string): Promise<SellerGatewayRecord | null>;
+  listSellerGateways(category?: string): Promise<SellerGatewayRecord[]>;
+  incrementSellerGatewayCalls(slug: string): Promise<void>;
   reset(): void;
 }
 
@@ -151,6 +231,9 @@ export class MemoryArbiterStore implements IArbiterStore {
   private kyaMandates = new Map<string, StoredKyaRecord>();
   private agents = new Map<string, StoredAgentRecord>();
   private safepayDeals = new Map<string, SafePayDealRecord>();
+  private trafficEvents: TrafficEventRecord[] = [];
+  private freeTierUsage = new Map<string, number>();
+  private sellerGateways = new Map<string, SellerGatewayRecord>();
 
   reset(): void {
     this.stats.clear();
@@ -160,6 +243,9 @@ export class MemoryArbiterStore implements IArbiterStore {
     this.kyaMandates.clear();
     this.agents.clear();
     this.safepayDeals.clear();
+    this.trafficEvents = [];
+    this.freeTierUsage.clear();
+    this.sellerGateways.clear();
   }
 
   async hasUsedNonce(network: string, buyerAddress: string, nonce: string): Promise<boolean> {
@@ -295,6 +381,188 @@ export class MemoryArbiterStore implements IArbiterStore {
     const found = this.safepayDeals.get(dealId);
     return found ? { ...found } : null;
   }
+
+  async recordTrafficEvent(event: TrafficEventRecord): Promise<void> {
+    this.trafficEvents.push(event);
+    if (this.trafficEvents.length > 5000) {
+      this.trafficEvents.shift();
+    }
+  }
+
+  async getTelemetryFunnel(): Promise<TelemetryFunnelReport> {
+    const now = Date.now();
+    const cutoff24h = now - 24 * 3600 * 1000;
+    const cutoff7d = now - 7 * 24 * 3600 * 1000;
+    const events24h = this.trafficEvents.filter((e) => e.timestamp >= cutoff24h);
+    const events7d = this.trafficEvents.filter((e) => e.timestamp >= cutoff7d);
+    const clearings24h = this.clearings.filter((c) => c.createdAt >= cutoff24h && c.status === "PASSED").length;
+    const clearings7d = this.clearings.filter((c) => c.createdAt >= cutoff7d && c.status === "PASSED").length;
+
+    return {
+      generatedAt: now,
+      last24h: buildTelemetryWindow("Last 24 Hours", events24h, clearings24h),
+      last7d: buildTelemetryWindow("Last 7 Days", events7d, clearings7d)
+    };
+  }
+
+  async consumeFreeTierCall(clientKey: string, dailyLimit = 10): Promise<FreeTierUsageResult> {
+    const utcDate = new Date().toISOString().slice(0, 10);
+    const key = `${utcDate}:${clientKey.toLowerCase()}`;
+    const current = this.freeTierUsage.get(key) || 0;
+    if (current >= dailyLimit) {
+      return { allowed: false, used: current, remaining: 0, limit: dailyLimit };
+    }
+    const nextUsed = current + 1;
+    this.freeTierUsage.set(key, nextUsed);
+    return {
+      allowed: true,
+      used: nextUsed,
+      remaining: Math.max(0, dailyLimit - nextUsed),
+      limit: dailyLimit
+    };
+  }
+
+  async getFreeTierRemaining(clientKey: string, dailyLimit = 10): Promise<number> {
+    const utcDate = new Date().toISOString().slice(0, 10);
+    const key = `${utcDate}:${clientKey.toLowerCase()}`;
+    const current = this.freeTierUsage.get(key) || 0;
+    return Math.max(0, dailyLimit - current);
+  }
+
+  async saveSellerGateway(gateway: SellerGatewayRecord): Promise<void> {
+    this.sellerGateways.set(gateway.slug.toLowerCase(), { ...gateway, slug: gateway.slug.toLowerCase() });
+  }
+
+  async getSellerGatewayBySlug(slug: string): Promise<SellerGatewayRecord | null> {
+    const found = this.sellerGateways.get(slug.toLowerCase());
+    return found ? { ...found } : null;
+  }
+
+  async listSellerGateways(category?: string): Promise<SellerGatewayRecord[]> {
+    const all = Array.from(this.sellerGateways.values());
+    if (!category) return all.sort((a, b) => b.createdAt - a.createdAt);
+    return all
+      .filter((g) => g.category.toLowerCase() === category.toLowerCase())
+      .sort((a, b) => b.createdAt - a.createdAt);
+  }
+
+  async incrementSellerGatewayCalls(slug: string): Promise<void> {
+    const found = this.sellerGateways.get(slug.toLowerCase());
+    if (found) {
+      found.totalCalls = (found.totalCalls || 0) + 1;
+    }
+  }
+}
+
+function buildTelemetryWindow(
+  windowLabel: string,
+  events: TrafficEventRecord[],
+  passedClearingsCount: number
+): TelemetryFunnelWindow {
+  const byActorType: Record<TrafficActorType, number> = {
+    MCP_CLIENT: 0,
+    AI_CRAWLER: 0,
+    HUMAN_BROWSER: 0,
+    SDK_AGENT: 0,
+    BOT_SCANNER: 0
+  };
+  const byHost: Record<string, number> = {};
+  const pathCounts = new Map<string, number>();
+  const toolCounts = new Map<string, number>();
+  const methodsBreakdown: Record<string, number> = {};
+
+  let toolsListed = 0;
+  let toolsCalled = 0;
+  let discovery = 0;
+  let mcpHandshake = 0;
+  let freeOrSandboxCall = 0;
+  let realX402Settlement = passedClearingsCount;
+
+  for (const ev of events) {
+    if (ev.actorType in byActorType) {
+      byActorType[ev.actorType] += 1;
+    } else {
+      byActorType.BOT_SCANNER += 1;
+    }
+
+    const hostKey = ev.host || "unknown";
+    byHost[hostKey] = (byHost[hostKey] || 0) + 1;
+
+    const p = ev.path || "/";
+    pathCounts.set(p, (pathCounts.get(p) || 0) + 1);
+
+    if (ev.mcpMethod) {
+      methodsBreakdown[ev.mcpMethod] = (methodsBreakdown[ev.mcpMethod] || 0) + 1;
+      if (ev.mcpMethod === "tools/list") toolsListed += 1;
+      if (ev.mcpMethod === "tools/call") toolsCalled += 1;
+    }
+
+    if (ev.toolName) {
+      toolCounts.set(ev.toolName, (toolCounts.get(ev.toolName) || 0) + 1);
+    }
+
+    // Funnel classification
+    if (
+      p.startsWith("/.well-known/") ||
+      p === "/llms.txt" ||
+      p === "/llms-full.txt" ||
+      p === "/openapi.json" ||
+      p === "/api/v1/openapi.json" ||
+      p === "/agents.md"
+    ) {
+      discovery += 1;
+    } else if (
+      ev.mcpMethod === "initialize" ||
+      ev.mcpMethod === "tools/list" ||
+      (p === "/mcp" && ev.method === "GET")
+    ) {
+      mcpHandshake += 1;
+    } else if (
+      ev.mcpMethod === "tools/call" ||
+      p.startsWith("/v1/sandbox") ||
+      p.startsWith("/v1/bazaar") ||
+      p.startsWith("/https://") ||
+      p.startsWith("/http://") ||
+      p.startsWith("/v1/proxy") ||
+      p.startsWith("/g/")
+    ) {
+      freeOrSandboxCall += 1;
+    }
+  }
+
+  const topPaths = Array.from(pathCounts.entries())
+    .map(([path, count]) => ({ path, count }))
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 15);
+
+  const topTools = Array.from(toolCounts.entries())
+    .map(([toolName, count]) => ({ toolName, count }))
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 15);
+
+  const conversionRatePct =
+    toolsListed > 0 ? Math.round((toolsCalled / toolsListed) * 10000) / 100 : 0;
+
+  return {
+    windowLabel,
+    totalInvocations: events.length,
+    byActorType,
+    byHost,
+    topPaths,
+    mcp: {
+      toolsListed,
+      toolsCalled,
+      conversionRatePct,
+      topTools,
+      methodsBreakdown
+    },
+    funnel: {
+      discovery,
+      mcpHandshake,
+      freeOrSandboxCall,
+      realX402Settlement
+    }
+  };
 }
 
 /**
@@ -724,6 +992,257 @@ export class D1ArbiterStore implements IArbiterStore {
       updatedAt: Number(row.updated_at),
       settledAt: row.settled_at ? Number(row.settled_at) : null
     };
+  }
+
+  private async ensureTelemetryAndFreeTierTables(): Promise<void> {
+    await this.db.batch([
+      this.db.prepare(
+        `CREATE TABLE IF NOT EXISTS traffic_events (
+          id TEXT PRIMARY KEY,
+          timestamp INTEGER NOT NULL,
+          host TEXT NOT NULL,
+          path TEXT NOT NULL,
+          method TEXT NOT NULL,
+          status INTEGER NOT NULL,
+          actor_type TEXT NOT NULL,
+          mcp_method TEXT,
+          tool_name TEXT,
+          country TEXT,
+          asn TEXT,
+          referer TEXT
+        )`
+      ),
+      this.db.prepare(
+        `CREATE TABLE IF NOT EXISTS free_tier_usage (
+          client_key TEXT NOT NULL,
+          usage_date TEXT NOT NULL,
+          call_count INTEGER NOT NULL DEFAULT 0,
+          updated_at INTEGER NOT NULL,
+          PRIMARY KEY (client_key, usage_date)
+        )`
+      )
+    ]);
+  }
+
+  private async ensureGatewayTable(): Promise<void> {
+    await this.db
+      .prepare(
+        `CREATE TABLE IF NOT EXISTS seller_gateways (
+          id TEXT PRIMARY KEY,
+          slug TEXT UNIQUE NOT NULL,
+          seller_address TEXT NOT NULL,
+          upstream_url TEXT NOT NULL,
+          price_atomic TEXT NOT NULL,
+          description TEXT,
+          category TEXT,
+          validation_preset TEXT,
+          custom_schema TEXT,
+          total_calls INTEGER DEFAULT 0,
+          created_at INTEGER NOT NULL
+        )`
+      )
+      .run();
+  }
+
+  async recordTrafficEvent(event: TrafficEventRecord): Promise<void> {
+    await this.ensureTelemetryAndFreeTierTables();
+    await this.db
+      .prepare(
+        `INSERT INTO traffic_events (
+          id, timestamp, host, path, method, status, actor_type, mcp_method, tool_name, country, asn, referer
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      )
+      .bind(
+        event.id,
+        event.timestamp,
+        event.host,
+        event.path,
+        event.method,
+        event.status,
+        event.actorType,
+        event.mcpMethod || null,
+        event.toolName || null,
+        event.country || null,
+        event.asn || null,
+        event.referer || null
+      )
+      .run();
+  }
+
+  async getTelemetryFunnel(): Promise<TelemetryFunnelReport> {
+    await this.ensureTelemetryAndFreeTierTables();
+    const now = Date.now();
+    const cutoff24h = now - 24 * 3600 * 1000;
+    const cutoff7d = now - 7 * 24 * 3600 * 1000;
+
+    const [rows7dRes, clearings24hRes, clearings7dRes] = await Promise.all([
+      this.db
+        .prepare("SELECT * FROM traffic_events WHERE timestamp >= ? ORDER BY timestamp DESC LIMIT 10000")
+        .bind(cutoff7d)
+        .all<any>(),
+      this.db
+        .prepare("SELECT COUNT(*) as count FROM clearings WHERE status = 'PASSED' AND created_at >= ?")
+        .bind(cutoff24h)
+        .first<{ count: number }>(),
+      this.db
+        .prepare("SELECT COUNT(*) as count FROM clearings WHERE status = 'PASSED' AND created_at >= ?")
+        .bind(cutoff7d)
+        .first<{ count: number }>()
+    ]);
+
+    const events7d: TrafficEventRecord[] = (rows7dRes.results || []).map((r: any) => ({
+      id: r.id,
+      timestamp: Number(r.timestamp),
+      host: r.host,
+      path: r.path,
+      method: r.method,
+      status: Number(r.status),
+      actorType: r.actor_type as TrafficActorType,
+      mcpMethod: r.mcp_method,
+      toolName: r.tool_name,
+      country: r.country,
+      asn: r.asn,
+      referer: r.referer
+    }));
+
+    const events24h = events7d.filter((e) => e.timestamp >= cutoff24h);
+
+    return {
+      generatedAt: now,
+      last24h: buildTelemetryWindow("Last 24 Hours", events24h, Number(clearings24hRes?.count || 0)),
+      last7d: buildTelemetryWindow("Last 7 Days", events7d, Number(clearings7dRes?.count || 0))
+    };
+  }
+
+  async consumeFreeTierCall(clientKey: string, dailyLimit = 10): Promise<FreeTierUsageResult> {
+    await this.ensureTelemetryAndFreeTierTables();
+    const utcDate = new Date().toISOString().slice(0, 10);
+    const normalizedKey = clientKey.toLowerCase();
+    const existing = await this.db
+      .prepare("SELECT call_count FROM free_tier_usage WHERE client_key = ? AND usage_date = ? LIMIT 1")
+      .bind(normalizedKey, utcDate)
+      .first<{ call_count: number }>();
+
+    const current = Number(existing?.call_count || 0);
+    if (current >= dailyLimit) {
+      return { allowed: false, used: current, remaining: 0, limit: dailyLimit };
+    }
+
+    const nextUsed = current + 1;
+    await this.db
+      .prepare(
+        `INSERT INTO free_tier_usage (client_key, usage_date, call_count, updated_at)
+         VALUES (?, ?, 1, ?)
+         ON CONFLICT(client_key, usage_date) DO UPDATE SET
+           call_count = call_count + 1,
+           updated_at = excluded.updated_at`
+      )
+      .bind(normalizedKey, utcDate, Date.now())
+      .run();
+
+    return {
+      allowed: true,
+      used: nextUsed,
+      remaining: Math.max(0, dailyLimit - nextUsed),
+      limit: dailyLimit
+    };
+  }
+
+  async getFreeTierRemaining(clientKey: string, dailyLimit = 10): Promise<number> {
+    await this.ensureTelemetryAndFreeTierTables();
+    const utcDate = new Date().toISOString().slice(0, 10);
+    const normalizedKey = clientKey.toLowerCase();
+    const existing = await this.db
+      .prepare("SELECT call_count FROM free_tier_usage WHERE client_key = ? AND usage_date = ? LIMIT 1")
+      .bind(normalizedKey, utcDate)
+      .first<{ call_count: number }>();
+    const current = Number(existing?.call_count || 0);
+    return Math.max(0, dailyLimit - current);
+  }
+
+  async saveSellerGateway(gateway: SellerGatewayRecord): Promise<void> {
+    await this.ensureGatewayTable();
+    await this.db
+      .prepare(
+        `INSERT INTO seller_gateways (
+          id, slug, seller_address, upstream_url, price_atomic, description, category, validation_preset, custom_schema, total_calls, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(slug) DO UPDATE SET
+          seller_address = excluded.seller_address,
+          upstream_url = excluded.upstream_url,
+          price_atomic = excluded.price_atomic,
+          description = excluded.description,
+          category = excluded.category,
+          validation_preset = excluded.validation_preset,
+          custom_schema = excluded.custom_schema`
+      )
+      .bind(
+        gateway.id,
+        gateway.slug.toLowerCase(),
+        gateway.sellerAddress,
+        gateway.upstreamUrl,
+        gateway.priceAtomic,
+        gateway.description || "",
+        gateway.category || "data",
+        gateway.validationPreset || "STRICT_NO_REFUSAL",
+        gateway.customSchema ? JSON.stringify(gateway.customSchema) : null,
+        gateway.totalCalls || 0,
+        gateway.createdAt
+      )
+      .run();
+  }
+
+  async getSellerGatewayBySlug(slug: string): Promise<SellerGatewayRecord | null> {
+    await this.ensureGatewayTable();
+    const row = await this.db
+      .prepare("SELECT * FROM seller_gateways WHERE slug = ? LIMIT 1")
+      .bind(slug.toLowerCase())
+      .first<any>();
+    if (!row) return null;
+    return {
+      id: row.id,
+      slug: row.slug,
+      sellerAddress: row.seller_address,
+      upstreamUrl: row.upstream_url,
+      priceAtomic: row.price_atomic,
+      description: row.description || "",
+      category: row.category || "data",
+      validationPreset: (row.validation_preset || "STRICT_NO_REFUSAL") as ValidationPreset,
+      customSchema: row.custom_schema ? JSON.parse(row.custom_schema) : null,
+      totalCalls: Number(row.total_calls || 0),
+      createdAt: Number(row.created_at)
+    };
+  }
+
+  async listSellerGateways(category?: string): Promise<SellerGatewayRecord[]> {
+    await this.ensureGatewayTable();
+    const stmt = category
+      ? this.db
+          .prepare("SELECT * FROM seller_gateways WHERE lower(category) = ? ORDER BY created_at DESC LIMIT 100")
+          .bind(category.toLowerCase())
+      : this.db.prepare("SELECT * FROM seller_gateways ORDER BY created_at DESC LIMIT 100");
+    const res = await stmt.all<any>();
+    return (res.results || []).map((row: any) => ({
+      id: row.id,
+      slug: row.slug,
+      sellerAddress: row.seller_address,
+      upstreamUrl: row.upstream_url,
+      priceAtomic: row.price_atomic,
+      description: row.description || "",
+      category: row.category || "data",
+      validationPreset: (row.validation_preset || "STRICT_NO_REFUSAL") as ValidationPreset,
+      customSchema: row.custom_schema ? JSON.parse(row.custom_schema) : null,
+      totalCalls: Number(row.total_calls || 0),
+      createdAt: Number(row.created_at)
+    }));
+  }
+
+  async incrementSellerGatewayCalls(slug: string): Promise<void> {
+    await this.ensureGatewayTable();
+    await this.db
+      .prepare("UPDATE seller_gateways SET total_calls = total_calls + 1 WHERE slug = ?")
+      .bind(slug.toLowerCase())
+      .run();
   }
 }
 

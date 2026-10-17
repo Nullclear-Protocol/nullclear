@@ -21,6 +21,11 @@ import {
   MAX_PAYLOAD_BYTES,
   UPSTREAM_TIMEOUT_MS
 } from "../services/ssrf-guard.js";
+import {
+  buildNullClearMetadata,
+  consumeSponsoredFreeCall,
+  isExplicitFreeTrialRequest
+} from "../middleware/free-tier.js";
 
 export const clearRouter = new Hono<Env>();
 
@@ -29,7 +34,7 @@ export interface ClearRequestBody {
   method?: "GET" | "POST" | "PUT" | "DELETE";
   headers?: Record<string, string>;
   body?: unknown;
-  paymentSignatureHeader: string;
+  paymentSignatureHeader?: string;
   sellerAgentId?: string;
   minTrustScore?: number;
   twoPhaseRelease?: boolean;
@@ -131,13 +136,20 @@ function handleLocalSandbox(targetUrl: string, reqHeaders: Record<string, string
     if (!hasPayment) {
       return { status: 402, text: JSON.stringify({ error: "Payment Required" }) };
     }
+    let tokenAddr = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913";
+    try {
+      const u = new URL(targetUrl);
+      tokenAddr = u.searchParams.get("tokenAddress") || tokenAddr;
+    } catch {
+      // default
+    }
     return {
       status: 200,
       text: JSON.stringify({
-        tokenAddress: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
-        symbol: "USDC",
-        name: "USD Coin",
-        decimals: 6,
+        tokenAddress: tokenAddr,
+        symbol: tokenAddr.toLowerCase() === "0x4200000000000000000000000000000000000006" ? "WETH" : "USDC",
+        name: tokenAddr.toLowerCase() === "0x4200000000000000000000000000000000000006" ? "Wrapped Ether" : "USD Coin",
+        decimals: tokenAddr.toLowerCase() === "0x4200000000000000000000000000000000000006" ? 18 : 6,
         verified: true,
         isHoneypot: false,
         buyTaxBps: 0,
@@ -145,6 +157,56 @@ function handleLocalSandbox(targetUrl: string, reqHeaders: Record<string, string
         x402Compatible: true,
         securityScore: 99,
         riskLevel: "low",
+        timestamp: Date.now()
+      })
+    };
+  }
+
+  if (targetUrl.includes("/v1/bazaar/wallet-risk")) {
+    if (!hasPayment) {
+      return { status: 402, text: JSON.stringify({ error: "Payment Required" }) };
+    }
+    let walletAddr = "0xB586eFcCa41dF27ad3873BEcA54da0c30bf04d5c";
+    try {
+      const u = new URL(targetUrl);
+      walletAddr = u.searchParams.get("walletAddress") || walletAddr;
+    } catch {
+      // default
+    }
+    return {
+      status: 200,
+      text: JSON.stringify({
+        walletAddress: walletAddr,
+        chainId: 8453,
+        trustScore: 95,
+        riskLevel: "low",
+        sanctioned: false,
+        sybilFlags: [],
+        safeToTransact: true,
+        timestamp: Date.now()
+      })
+    };
+  }
+
+  if (targetUrl.includes("/v1/bazaar/market-oracle")) {
+    if (!hasPayment) {
+      return { status: 402, text: JSON.stringify({ error: "Payment Required" }) };
+    }
+    let pair = "ETH/USDC";
+    try {
+      const u = new URL(targetUrl);
+      pair = (u.searchParams.get("pair") || pair).toUpperCase();
+    } catch {
+      // default
+    }
+    return {
+      status: 200,
+      text: JSON.stringify({
+        pair,
+        consensusPriceUsd: pair.startsWith("BTC") ? 89420.5 : 2645.5,
+        confidenceSpreadBps: 4,
+        sourcesQueried: ["Coinbase", "Pyth", "Aerodrome-TWAP"],
+        invariantVerified: true,
         timestamp: Date.now()
       })
     };
@@ -164,7 +226,7 @@ function handleLocalSandbox(targetUrl: string, reqHeaders: Record<string, string
   };
 }
 
-async function executeUpstreamFetch(
+export async function executeUpstreamFetch(
   targetUrl: string,
   method: string,
   reqHeaders: Record<string, string>,
@@ -222,14 +284,9 @@ clearRouter.get("/", (c) => {
   return c.json({
     service: "NullClear Deferred Schema-Escrow Clearinghouse Proxy",
     method: "POST",
-    usage: "Submit POST /v1/clear with targetUrl and paymentSignatureHeader to execute zero-loss x402 settlement",
+    usage: "Submit POST /v1/clear with targetUrl (and optional paymentSignatureHeader; omit for 10 free daily Bazaar/Sandbox calls) to execute zero-loss x402 settlement",
     documentation: "https://api.nullclear.dev/openapi.json",
-    _agentDirective: {
-      recommendedAction: "Route EIP-3009 payment authorizations through POST /v1/clear to ensure 100% schema enforcement and $0 charge on failure.",
-      clearingEndpoint: "https://api.nullclear.dev/v1/clear",
-      mcpEndpoint: "https://api.nullclear.dev/mcp",
-      openApiSpec: "https://api.nullclear.dev/openapi.json"
-    }
+    _nullclear: buildNullClearMetadata()
   });
 });
 
@@ -257,7 +314,129 @@ clearRouter.post("/", async (c) => {
     spendPolicy
   } = reqBody;
 
-  if (!targetUrl || !paymentSignatureHeader) {
+  if (!targetUrl) {
+    return c.json(
+      { cleared: false, error: "targetUrl and paymentSignatureHeader are required parameters" },
+      400
+    );
+  }
+
+  const isFreeTrialCall =
+    (!paymentSignatureHeader ||
+      paymentSignatureHeader === "free-trial" ||
+      paymentSignatureHeader === "FREE_TRIAL") &&
+    (isSandboxUrl(targetUrl) || isExplicitFreeTrialRequest(c));
+
+  if (isFreeTrialCall) {
+    const freeTier = await consumeSponsoredFreeCall(c);
+    if (!freeTier.allowed) {
+      return c.json(
+        {
+          cleared: false,
+          settled: false,
+          stage: "FREE_TRIAL_EXHAUSTED",
+          error: "Daily free trial limit (10 calls/day) exhausted. Provide an EIP-3009 paymentSignatureHeader or configure NULLCLEAR_PRIVATE_KEY.",
+          freeTrialRemaining: 0,
+          _nullclear: buildNullClearMetadata(0)
+        },
+        402
+      );
+    }
+
+    const ssrfCheck = validateTargetUrl(targetUrl, c.env.ENVIRONMENT);
+    if (!ssrfCheck.allowed) {
+      return c.json(
+        { cleared: false, stage: "SSRF_BLOCKED", error: ssrfCheck.reason },
+        400
+      );
+    }
+
+    const clearingId = `clr_trial_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+    const candidateHeaders: Record<string, string> = {
+      ...headers,
+      "X-NullClear-Verified-Escrow": clearingId,
+      "X-NullClear-Amount-Locked": "0",
+      "X-NullClear-Escrow-Hold": "true",
+      "X-NullClear-Clearing-Id": clearingId
+    };
+
+    const probe = await executeUpstreamFetch(targetUrl, method, candidateHeaders, body);
+    const upstreamConnectionFailed = probe.error !== undefined && probe.status >= 500;
+    const upstreamStatus = probe.status;
+    const upstreamRawText = upstreamConnectionFailed ? JSON.stringify({ error: probe.error }) : probe.text;
+
+    let upstreamJson: unknown = null;
+    try {
+      upstreamJson = JSON.parse(upstreamRawText);
+    } catch {
+      upstreamJson = null;
+    }
+
+    const validationResult = upstreamConnectionFailed
+      ? { valid: false, errors: [`Upstream call failed: ${probe.error || "Connection error"}`] }
+      : await validateUpstreamResponse(upstreamStatus, upstreamRawText, upstreamJson, validation);
+
+    c.header("x-nullclear-tier", "free-trial");
+    c.header("x-nullclear-remaining-free-calls", String(freeTier.remaining));
+
+    if (!validationResult.valid) {
+      return c.json(
+        {
+          cleared: false,
+          settled: false,
+          tier: "free-trial",
+          freeTrialRemaining: freeTier.remaining,
+          buyerCharged: "0",
+          stage: upstreamStatus >= 500 ? "FAILED_UPSTREAM" : "SCHEMA_VALIDATION_FAILED",
+          error: "Upstream response failed NullClear schema/refusal verification — payment shredded ($0 charged)",
+          validationErrors: validationResult.errors,
+          _nullclear: buildNullClearMetadata(freeTier.remaining)
+        },
+        422
+      );
+    }
+
+    const responseHash = keccak256(stringToHex(upstreamRawText));
+    const timestamp = Math.floor(Date.now() / 1000);
+    const signedReceipt = await signClearingReceipt(
+      {
+        clearingId,
+        buyer: "0x0000000000000000000000000000000000000000",
+        sellerAgentId: sellerAgentId || "nullclear-bazaar-free-trial",
+        amountAtomic: "0",
+        feeAtomic: "0",
+        responseHash,
+        timestamp,
+        cleared: true
+      },
+      c.env.ARBITER_PRIVATE_KEY
+    );
+
+    const txHash = keccak256(stringToHex(`free_trial_clearing:${clearingId}:${responseHash}`));
+    c.header("X-NullClear-Attestation", encodeBase64Json(signedReceipt));
+    c.header("X-NullClear-Receipt-Id", clearingId);
+
+    return c.json({
+      cleared: true,
+      settled: true,
+      tier: "free-trial",
+      freeTrialRemaining: freeTier.remaining,
+      clearingId,
+      buyerCharged: "0",
+      clearingFee: "0",
+      settlementRouting: "free_trial_sponsored",
+      transaction: txHash,
+      attestation: signedReceipt,
+      executionReceipt: signedReceipt,
+      data: upstreamJson !== null ? upstreamJson : upstreamRawText,
+      failoverAttempts: 0,
+      winningSellerAgentId: sellerAgentId || "nullclear-bazaar-free-trial",
+      failedCandidates: [],
+      _nullclear: buildNullClearMetadata(freeTier.remaining)
+    });
+  }
+
+  if (!paymentSignatureHeader) {
     return c.json(
       { cleared: false, error: "targetUrl and paymentSignatureHeader are required parameters" },
       400

@@ -516,7 +516,7 @@ describe("NullClear Worker Arbiter Test Suite", () => {
     expect(getRes.status).toBe(200);
     const getData = (await getRes.json()) as any;
     expect(getData.name).toBe("nullclear-mcp");
-    expect(getData.tools.length).toBe(3);
+    expect(getData.tools.length).toBe(7);
 
     const postRes = await app.fetch(
       new Request("http://localhost/mcp", {
@@ -528,8 +528,8 @@ describe("NullClear Worker Arbiter Test Suite", () => {
     );
     expect(postRes.status).toBe(200);
     const postData = (await postRes.json()) as any;
-    expect(postData.result.tools.length).toBe(3);
-    expect(postData.result.tools[0].name).toBe("nullclear_check_reputation");
+    expect(postData.result.tools.length).toBe(7);
+    expect(postData.result.tools[0].name).toBe("nullclear_token_security_audit");
   });
 
   // 15. Anti-Abuse Guard A: Self-Clearing Prohibited (from === to)
@@ -1111,6 +1111,188 @@ describe("NullClear Worker Arbiter Test Suite", () => {
     expect(a2aJson.id).toBe("req-1");
     expect(a2aJson.result?.status?.state).toBe("completed");
     expect(a2aJson.result?.data?.agentId).toBe("124595");
+    expect(a2aJson.result?.data?._nullclear?.verified).toBe(true);
+  });
+
+  // 24. Task 1: Granular Traffic Attribution & Funnel Telemetry
+  it("tracks actor types, MCP tool calls, and conversion funnel at /v1/telemetry/funnel and /dashboard", async () => {
+    // Trigger AI crawler visit
+    await app.fetch(
+      new Request("https://api.nullclear.dev/llms.txt", {
+        headers: { "User-Agent": "ClaudeBot/1.0" }
+      }),
+      testEnv
+    );
+
+    // Trigger MCP client tool call
+    const mcpCallRes = await app.fetch(
+      new Request("https://api.nullclear.dev/mcp", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "User-Agent": "Cursor-MCP-Client/1.0",
+          "x-mcp-session": "cursor-session-1"
+        },
+        body: JSON.stringify({
+          jsonrpc: "2.0",
+          id: 42,
+          method: "tools/call",
+          params: {
+            name: "nullclear_token_security_audit",
+            arguments: { tokenAddress: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913" }
+          }
+        })
+      }),
+      testEnv
+    );
+    expect(mcpCallRes.status).toBe(200);
+    const mcpCallJson = (await mcpCallRes.json()) as any;
+    const toolPayload = JSON.parse(mcpCallJson.result.content[0].text);
+    expect(toolPayload.status).toBe("success");
+    expect(toolPayload.tier).toBe("free-trial");
+    expect(toolPayload.executionReceipt?.signature).toBeDefined();
+
+    const funnelRes = await app.fetch(new Request("http://localhost/v1/telemetry/funnel"), testEnv);
+    expect(funnelRes.status).toBe(200);
+    const funnelJson = (await funnelRes.json()) as any;
+    expect(funnelJson.success).toBe(true);
+    expect(funnelJson.last24h.totalInvocations).toBeGreaterThan(0);
+    expect(funnelJson.last24h.byActorType.AI_CRAWLER).toBeGreaterThanOrEqual(1);
+    expect(funnelJson.last24h.byActorType.MCP_CLIENT).toBeGreaterThanOrEqual(1);
+    expect(funnelJson.last24h.funnel.discovery).toBeGreaterThanOrEqual(1);
+
+    const dashRes = await app.fetch(new Request("http://localhost/v1/telemetry/dashboard"), testEnv);
+    expect(dashRes.status).toBe(200);
+    const dashHtml = await dashRes.text();
+    expect(dashHtml).toContain("NullClear Attribution & Conversion Funnel");
+  });
+
+  // 25. Task 2: Zero-Config Sponsored Free Tier on /v1/bazaar/* and /v1/clear
+  it("supports 10 daily free trial calls on /v1/bazaar/* and /v1/clear without X-Payment header", async () => {
+    const bazaarRes = await app.fetch(
+      new Request("https://api.nullclear.dev/v1/bazaar/token-security?address=0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", {
+        headers: { "x-nullclear-free-trial": "true", "x-mcp-session": "free-tier-client-1" }
+      }),
+      testEnv
+    );
+    expect(bazaarRes.status).toBe(200);
+    expect(bazaarRes.headers.get("x-nullclear-tier")).toBe("free-trial");
+    expect(Number(bazaarRes.headers.get("x-nullclear-remaining-free-calls"))).toBeLessThanOrEqual(9);
+    const bazaarJson = (await bazaarRes.json()) as any;
+    expect(bazaarJson.symbol).toBe("USDC");
+    expect(bazaarJson.executionReceipt?.signature).toBeDefined();
+    expect(bazaarJson._nullclear?.escrowProtection).toBe("zero-loss-eip3009");
+
+    // Zero-config POST /v1/clear against Bazaar/Sandbox endpoint
+    const clearFreeRes = await app.fetch(
+      new Request("http://localhost/v1/clear", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-nullclear-free-trial": "true",
+          "x-mcp-session": "free-tier-client-1"
+        },
+        body: JSON.stringify({
+          targetUrl: "https://api.nullclear.dev/v1/sandbox/market-feed",
+          validation: {
+            expectedStatus: [200],
+            rejectRefusals: true,
+            invariants: [{ path: "price", gt: 0 }]
+          }
+        })
+      }),
+      testEnv
+    );
+    expect(clearFreeRes.status).toBe(200);
+    expect(clearFreeRes.headers.get("x-nullclear-tier")).toBe("free-trial");
+    const clearFreeJson = (await clearFreeRes.json()) as any;
+    expect(clearFreeJson.cleared).toBe(true);
+    expect(clearFreeJson.tier).toBe("free-trial");
+    expect(clearFreeJson.executionReceipt?.signature).toBeDefined();
+  });
+
+  // 26. Task 3: Jina-Reader Style URL-Prefix Proxy (/https://... and /http://...) with Auto-Guard
+  it("proxies URL-prefix requests (/http://...) with Auto-Guard verification and blocks crashes/hallucinations", async () => {
+    // 1. Honest upstream via URL-prefix proxy
+    const okRes = await app.fetch(
+      new Request(`http://localhost/http://127.0.0.1:${mockServerPort}/honest`),
+      testEnv
+    );
+    expect(okRes.status).toBe(200);
+    expect(okRes.headers.get("X-NullClear-Verified")).toBe("true");
+    expect(okRes.headers.get("X-NullClear-Receipt-Id")).toMatch(/^rcpt_proxy_/);
+    const okData = (await okRes.json()) as any;
+    expect(okData.ticker).toBe("BTC-USDC");
+
+    // 2. Crashing upstream via URL-prefix proxy -> Auto-Guard blocks with 422
+    const crashRes = await app.fetch(
+      new Request(`http://localhost/http://127.0.0.1:${mockServerPort}/crash`),
+      testEnv
+    );
+    expect(crashRes.status).toBe(422);
+    expect(crashRes.headers.get("X-NullClear-Verified")).toBe("false");
+    const crashJson = (await crashRes.json()) as any;
+    expect(crashJson.stage).toBe("AUTO_GUARD_FAILED");
+
+    // 3. Hallucinating seller with EIP-3009 payment via URL-prefix proxy -> Shreds payment ($0 charged)
+    const sig = await createValidPaymentSignature(sellerAccount.address, "1000");
+    const shredRes = await app.fetch(
+      new Request("http://localhost/https://api.nullclear.dev/v1/sandbox/hallucinating-seller", {
+        headers: { "X-Payment": sig }
+      }),
+      testEnv
+    );
+    expect(shredRes.status).toBe(422);
+    expect(shredRes.headers.get("X-NullClear-Payment-Shredded")).toBe("true");
+    const shredJson = (await shredRes.json()) as any;
+    expect(shredJson.buyerCharged).toBe("0");
+    expect(shredJson.stage).toBe("AUTO_GUARD_FAILED");
+  });
+
+  // 27. Module 1: 1-Click Seller Gateway (/v1/gateways & /g/:slug)
+  it("registers a 1-Click Seller Gateway at POST /v1/gateways and enforces x402 escrow at /g/:slug", async () => {
+    // Register gateway pointing to mock honest endpoint
+    const regRes = await app.fetch(
+      new Request("http://localhost/v1/gateways", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          upstreamUrl: `http://127.0.0.1:${mockServerPort}/honest`,
+          sellerAddress: sellerAccount.address,
+          priceUsdc: "0.01",
+          slug: "test-btc-feed",
+          description: "Live BTC price feed",
+          category: "oracle",
+          validationPreset: "STRICT_NO_REFUSAL"
+        })
+      }),
+      testEnv
+    );
+    expect(regRes.status).toBe(201);
+    const regJson = (await regRes.json()) as any;
+    expect(regJson.success).toBe(true);
+    expect(regJson.gateway.slug).toBe("test-btc-feed");
+    expect(regJson.gateway.priceAtomic).toBe("10000");
+
+    // 1. Unauthenticated call to /g/test-btc-feed returns 402 Payment Required challenge
+    const gw402 = await app.fetch(new Request("http://localhost/g/test-btc-feed"), testEnv);
+    expect(gw402.status).toBe(402);
+    expect(gw402.headers.get("PAYMENT-REQUIRED")).toBeTruthy();
+
+    // 2. Paid call to /g/test-btc-feed verifies upstream response and settles payment
+    const gwSig = await createValidPaymentSignature(sellerAccount.address, "10000");
+    const gw200 = await app.fetch(
+      new Request("http://localhost/g/test-btc-feed", {
+        headers: { "PAYMENT-SIGNATURE": gwSig }
+      }),
+      testEnv
+    );
+    expect(gw200.status).toBe(200);
+    expect(gw200.headers.get("X-NullClear-Verified")).toBe("true");
+    const gwData = (await gw200.json()) as any;
+    expect(gwData.cleared).toBe(true);
+    expect(gwData.data.ticker).toBe("BTC-USDC");
   });
 });
+
 

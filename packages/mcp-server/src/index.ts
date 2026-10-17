@@ -10,18 +10,16 @@ import {
 } from "@modelcontextprotocol/sdk/types.js";
 import { NullClearClient, createNullClearFetch, NullClearEscrowAbortedError } from "@nullclear/x402-arbiter";
 
-const ARBITER_URL = process.env.ARBITER_URL || "https://api.nullclear.dev";
-const SANDBOX_TEST_KEY = "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80" as const;
-const DEFAULT_BUYER_KEY =
-  (process.env.BUYER_PRIVATE_KEY as `0x${string}`) ||
-  SANDBOX_TEST_KEY; // Zero-config deterministic sandbox test key
+const ARBITER_URL = (process.env.ARBITER_URL || "https://api.nullclear.dev").replace(/\/$/, "");
+const CONFIGURED_PRIVATE_KEY = (process.env.NULLCLEAR_PRIVATE_KEY || process.env.BUYER_PRIVATE_KEY) as `0x${string}` | undefined;
+const MCP_SESSION_ID = `mcp_stdio_${process.pid}_${Math.random().toString(36).slice(2, 8)}`;
 
 const client = new NullClearClient({ arbiterUrl: ARBITER_URL });
 
 const server = new Server(
   {
     name: "nullclear-mcp-server",
-    version: "1.1.2"
+    version: "1.2.0"
   },
   {
     capabilities: {
@@ -32,16 +30,92 @@ const server = new Server(
   }
 );
 
-// 1. Tool Definitions with Smithery/Glama annotations
+async function callBazaarOrProxyWithFreeTrialFirst(
+  endpointUrl: string,
+  method: "GET" | "POST" = "GET",
+  body?: unknown
+): Promise<{ status: number; data: any; tier: string; remainingFreeCalls: string | null; receipt: string | null }> {
+  const headers: Record<string, string> = {
+    Accept: "application/json",
+    "x-nullclear-free-trial": "true",
+    "x-mcp-session": MCP_SESSION_ID
+  };
+  if (body !== undefined && method !== "GET") {
+    headers["Content-Type"] = "application/json";
+  }
+
+  // 1. Try Sponsored Free Tier first (zero-config, 0 wallet keys required)
+  const trialRes = await fetch(endpointUrl, {
+    method,
+    headers,
+    body: body !== undefined && method !== "GET" ? (typeof body === "string" ? body : JSON.stringify(body)) : undefined
+  });
+
+  if (trialRes.status === 200) {
+    const text = await trialRes.text();
+    let parsed: any = text;
+    try {
+      parsed = JSON.parse(text);
+    } catch {}
+    return {
+      status: 200,
+      data: parsed,
+      tier: trialRes.headers.get("x-nullclear-tier") || "free-trial",
+      remainingFreeCalls: trialRes.headers.get("x-nullclear-remaining-free-calls"),
+      receipt: trialRes.headers.get("X-NullClear-Attestation") || trialRes.headers.get("X-NullClear-Receipt-Id")
+    };
+  }
+
+  // 2. If Free Trial exhausted (402) and user configured NULLCLEAR_PRIVATE_KEY / BUYER_PRIVATE_KEY, settle via x402
+  if (trialRes.status === 402 && CONFIGURED_PRIVATE_KEY) {
+    const nullclearFetch = createNullClearFetch({
+      accountOrPrivateKey: CONFIGURED_PRIVATE_KEY,
+      chainId: 8453,
+      arbiterUrl: ARBITER_URL
+    });
+    const paidRes = await nullclearFetch(endpointUrl, {
+      method,
+      headers: body !== undefined && method !== "GET" ? { "Content-Type": "application/json" } : undefined,
+      body: body !== undefined && method !== "GET" ? (typeof body === "string" ? body : JSON.stringify(body)) : undefined
+    });
+    const text = await paidRes.text();
+    let parsed: any = text;
+    try {
+      parsed = JSON.parse(text);
+    } catch {}
+    return {
+      status: paidRes.status,
+      data: parsed,
+      tier: "x402-paid",
+      remainingFreeCalls: "0",
+      receipt: paidRes.headers.get("X-NullClear-Attestation")
+    };
+  }
+
+  const errText = await trialRes.text();
+  let errParsed: any = errText;
+  try {
+    errParsed = JSON.parse(errText);
+  } catch {}
+  return {
+    status: trialRes.status,
+    data: errParsed,
+    tier: "exhausted",
+    remainingFreeCalls: "0",
+    receipt: null
+  };
+}
+
+// 1. Tool Definitions with First-Class Capability Tools at the Top
 server.setRequestHandler(ListToolsRequestSchema, async () => {
   return {
     tools: [
       {
-        name: "nullclear_check_reputation",
+        name: "nullclear_token_security_audit",
         description:
-          "Inspect an AI agent's trust score (0-100), clearing reliability, Sybil wash-trade penalty flags, and corporate KYA backing on Base",
+          "Audit any Base ERC-20 token address for honeypots, buy/sell taxes, verified bytecode, and x402 compatibility via NullClear Bazaar. Works out-of-the-box with zero configuration (10 free daily calls included).",
         annotations: {
-          title: "Inspect AI Agent Trust & Sybil Score",
+          title: "Base Token Honeypot & Security Audit",
           readOnlyHint: true,
           destructiveHint: false,
           idempotentHint: true,
@@ -49,16 +123,93 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
         },
         inputSchema: {
           type: "object",
-          required: ["agentId"],
+          required: ["tokenAddress"],
           properties: {
-            agentId: {
+            tokenAddress: {
               type: "string",
-              description: "The ERC-8004 agent token ID or registered identifier (e.g. '124595')"
+              description: "Base ERC-20 token contract address (e.g. '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913' for USDC)",
+              default: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
+            }
+          }
+        }
+      },
+      {
+        name: "nullclear_wallet_risk_score",
+        description:
+          "Check any wallet or agent address on Base for OFAC sanctions, Sybil wash-trading concentration flags, and ERC-8004 counterparty reputation. Works out-of-the-box with zero configuration (10 free daily calls included).",
+        annotations: {
+          title: "Wallet & Agent Sanctions / Sybil Risk Score",
+          readOnlyHint: true,
+          destructiveHint: false,
+          idempotentHint: true,
+          openWorldHint: true
+        },
+        inputSchema: {
+          type: "object",
+          required: ["walletAddress"],
+          properties: {
+            walletAddress: {
+              type: "string",
+              description: "0x wallet address or ERC-8004 agent ID to inspect"
             },
             chainId: {
               type: "number",
-              description: "Base chain ID (8453 for Mainnet, 84532 for Sepolia)",
+              description: "Base chain ID (default 8453)",
               default: 8453
+            }
+          }
+        }
+      },
+      {
+        name: "nullclear_crypto_market_oracle",
+        description:
+          "Fetch multi-exchange spread-verified crypto spot prices (ETH/USDC, BTC/USDC, SOL/USDC, BASE/USDC) with cryptographic NullClear invariant receipts. Works out-of-the-box with zero configuration (10 free daily calls included).",
+        annotations: {
+          title: "Spread-Verified Crypto Market Price Oracle",
+          readOnlyHint: true,
+          destructiveHint: false,
+          idempotentHint: true,
+          openWorldHint: true
+        },
+        inputSchema: {
+          type: "object",
+          required: ["pair"],
+          properties: {
+            pair: {
+              type: "string",
+              description: "Trading pair symbol (e.g. 'ETH/USDC', 'BTC/USDC', 'SOL/USDC')",
+              default: "ETH/USDC"
+            }
+          }
+        }
+      },
+      {
+        name: "nullclear_safe_fetch",
+        description:
+          "Zero-config drop-in URL fetcher with automatic Canonical LLM Refusal Guard, HTTP 5xx crash guard, empty-JSON guard, and cryptographic execution receipt. Protects agents from hallucinated or broken API responses.",
+        annotations: {
+          title: "Auto-Guarded URL Fetcher (Zero Schema Required)",
+          readOnlyHint: true,
+          destructiveHint: false,
+          idempotentHint: true,
+          openWorldHint: true
+        },
+        inputSchema: {
+          type: "object",
+          required: ["url"],
+          properties: {
+            url: {
+              type: "string",
+              description: "Target HTTPS URL to fetch and verify through NullClear Auto-Guard"
+            },
+            method: {
+              type: "string",
+              enum: ["GET", "POST"],
+              default: "GET"
+            },
+            body: {
+              type: "string",
+              description: "Optional JSON string body for POST requests"
             }
           }
         }
@@ -66,7 +217,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       {
         name: "nullclear_escrow_x402_call",
         description:
-          "Execute an x402-gated HTTP API call through NullClear deferred schema escrow. The arbiter guarantees payment is only settled if upstream returns valid data matching your schema contract. If the seller hallucinates or crashes, $0 is spent. Users can test immediately against https://api.nullclear.dev/v1/sandbox/market-feed (or fail over from https://api.nullclear.dev/v1/sandbox/hallucinating-seller to https://api.nullclear.dev/v1/sandbox/market-feed) with zero wallet setup.",
+          "Execute an x402-gated HTTP API call through NullClear deferred schema escrow. The arbiter guarantees payment is only settled if upstream returns valid data matching your schema contract. Works out-of-the-box with 10 free daily trial calls before requiring NULLCLEAR_PRIVATE_KEY.",
         annotations: {
           title: "Execute Escrowed x402 Call with Invariants",
           readOnlyHint: false,
@@ -156,7 +307,34 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
             },
             buyerPrivateKey: {
               type: "string",
-              description: "Optional buyer private key (defaults to BUYER_PRIVATE_KEY environment variable)"
+              description: "Optional buyer private key (defaults to Sponsored Free Tier, then NULLCLEAR_PRIVATE_KEY)"
+            }
+          }
+        }
+      },
+      {
+        name: "nullclear_check_reputation",
+        description:
+          "Inspect an AI agent's trust score (0-100), clearing reliability, Sybil wash-trade penalty flags, and corporate KYA backing on Base",
+        annotations: {
+          title: "Inspect AI Agent Trust & Sybil Score",
+          readOnlyHint: true,
+          destructiveHint: false,
+          idempotentHint: true,
+          openWorldHint: true
+        },
+        inputSchema: {
+          type: "object",
+          required: ["agentId"],
+          properties: {
+            agentId: {
+              type: "string",
+              description: "The ERC-8004 agent token ID or registered identifier (e.g. '124595')"
+            },
+            chainId: {
+              type: "number",
+              description: "Base chain ID (8453 for Mainnet, 84532 for Sepolia)",
+              default: 8453
             }
           }
         }
@@ -345,7 +523,7 @@ server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
         {
           uri,
           mimeType: "text/markdown",
-          text: `# NullClear Arbiter Quickstart\n\nNullClear is the autonomous deferred clearing and reputation protocol for AI agent commerce on Base Mainnet.\n\n### Core Philosophy\nNever sign away funds unconditionally. Using EIP-3009 signed authorizations and deterministic JSON schema validation, NullClear holds seller payments in deferred escrow and only settles if output adheres 100% to your contract.\n\n### Primary MCP Tools\n- \`nullclear_escrow_x402_call\`: Execute deferred schema escrow with numeric bounds and LLM refusal guards.\n- \`nullclear_check_reputation\`: Check an ERC-8004 agent's Sybil trust score (0-100) and wash-trading flags.\n- \`nullclear_verify_kya_mandate\`: Verify an agent's corporate entity backing and spending limits.\n\n### Test Sandbox\n- Market Feed (Success): \`https://api.nullclear.dev/v1/sandbox/market-feed\` ($0.01 USDC)\n- Hallucinating Seller (Fails & Voids): \`https://api.nullclear.dev/v1/sandbox/hallucinating-seller\`\n`
+          text: `# NullClear Arbiter Quickstart\n\nNullClear is the autonomous deferred clearing and reputation protocol for AI agent commerce on Base Mainnet.\n\n### Zero-Config Free Trial\nAll MCP tools work out-of-the-box with **10 free daily calls**—no wallet or private key needed to get started.\n\n### First-Class Capability Tools\n- \`nullclear_token_security_audit\`: Audit any Base token for honeypots, taxes, and bytecode verification.\n- \`nullclear_wallet_risk_score\`: Check any wallet or agent for sanctions, Sybil wash-trading, and ERC-8004 reputation.\n- \`nullclear_crypto_market_oracle\`: Multi-exchange spread-verified price feed (ETH, BTC, SOL).\n- \`nullclear_safe_fetch\`: Drop-in URL fetcher with Canonical LLM Refusal Guard & crash protection.\n- \`nullclear_escrow_x402_call\`: Execute deferred schema escrow with numeric bounds and LLM refusal guards.\n`
         }
       ]
     };
@@ -354,11 +532,176 @@ server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
   throw new Error(`Resource not found: ${uri}`);
 });
 
-// 2. Tool Execution
+// 4. Tool Execution
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
   const { name, arguments: args } = request.params;
 
   try {
+    if (name === "nullclear_token_security_audit") {
+      const tokenAddress = String(args?.tokenAddress || "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913");
+      const url = `${ARBITER_URL}/v1/bazaar/token-security?tokenAddress=${encodeURIComponent(tokenAddress)}`;
+      const res = await callBazaarOrProxyWithFreeTrialFirst(url, "GET");
+
+      if (res.status === 402) {
+        return {
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify(
+                {
+                  status: "free_trial_exhausted",
+                  message:
+                    "You have used all 10 daily free trial calls. Set NULLCLEAR_PRIVATE_KEY in your MCP environment variables to continue with automatic $0.005 USDC x402 settlement.",
+                  tokenAddress,
+                  details: res.data
+                },
+                null,
+                2
+              )
+            }
+          ]
+        };
+      }
+
+      return {
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify(
+              {
+                status: "success",
+                tier: res.tier,
+                remainingFreeCalls: res.remainingFreeCalls,
+                receipt: res.receipt,
+                result: res.data
+              },
+              null,
+              2
+            )
+          }
+        ]
+      };
+    }
+
+    if (name === "nullclear_wallet_risk_score") {
+      const walletAddress = String(args?.walletAddress || "0xB586eFcCa41dF27ad3873BEcA54da0c30bf04d5c");
+      const chainId = Number(args?.chainId || 8453);
+      const url = `${ARBITER_URL}/v1/bazaar/wallet-risk?walletAddress=${encodeURIComponent(walletAddress)}&chainId=${chainId}`;
+      const res = await callBazaarOrProxyWithFreeTrialFirst(url, "GET");
+
+      if (res.status === 402) {
+        return {
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify(
+                {
+                  status: "free_trial_exhausted",
+                  message:
+                    "You have used all 10 daily free trial calls. Set NULLCLEAR_PRIVATE_KEY in your MCP environment variables to continue with automatic $0.005 USDC x402 settlement.",
+                  walletAddress,
+                  details: res.data
+                },
+                null,
+                2
+              )
+            }
+          ]
+        };
+      }
+
+      return {
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify(
+              {
+                status: "success",
+                tier: res.tier,
+                remainingFreeCalls: res.remainingFreeCalls,
+                receipt: res.receipt,
+                result: res.data
+              },
+              null,
+              2
+            )
+          }
+        ]
+      };
+    }
+
+    if (name === "nullclear_crypto_market_oracle") {
+      const pair = String(args?.pair || "ETH/USDC");
+      const url = `${ARBITER_URL}/v1/bazaar/market-oracle?pair=${encodeURIComponent(pair)}`;
+      const res = await callBazaarOrProxyWithFreeTrialFirst(url, "GET");
+
+      if (res.status === 402) {
+        return {
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify(
+                {
+                  status: "free_trial_exhausted",
+                  message:
+                    "You have used all 10 daily free trial calls. Set NULLCLEAR_PRIVATE_KEY in your MCP environment variables to continue with automatic $0.01 USDC x402 settlement.",
+                  pair,
+                  details: res.data
+                },
+                null,
+                2
+              )
+            }
+          ]
+        };
+      }
+
+      return {
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify(
+              {
+                status: "success",
+                tier: res.tier,
+                remainingFreeCalls: res.remainingFreeCalls,
+                receipt: res.receipt,
+                result: res.data
+              },
+              null,
+              2
+            )
+          }
+        ]
+      };
+    }
+
+    if (name === "nullclear_safe_fetch") {
+      const targetUrl = String(args?.url || "");
+      const method = (args?.method as "GET" | "POST") || "GET";
+      const proxyUrl = `${ARBITER_URL}/${targetUrl}`;
+      const res = await callBazaarOrProxyWithFreeTrialFirst(proxyUrl, method, args?.body);
+
+      return {
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify(
+              {
+                status: res.status === 200 ? "verified_success" : "auto_guard_blocked",
+                httpStatus: res.status,
+                verified: res.status === 200,
+                receipt: res.receipt,
+                data: res.data
+              },
+              null,
+              2
+            )
+          }
+        ]
+      };
+    }
+
     if (name === "nullclear_check_reputation") {
       const agentId = String(args?.agentId);
       const chainId = Number(args?.chainId || 8453);
@@ -399,8 +742,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       const rejectRefusals = args?.rejectRefusals !== undefined ? Boolean(args.rejectRefusals) : true;
       const fallbacks = (args?.fallbacks as any[]) || undefined;
       const spendPolicy = (args?.spendPolicy as any) || undefined;
-      const buyerPrivateKey = (args?.buyerPrivateKey as `0x${string}`) || DEFAULT_BUYER_KEY;
+      const buyerPrivateKey = (args?.buyerPrivateKey as `0x${string}`) || CONFIGURED_PRIVATE_KEY;
 
+      // Use zero-config Free Trial first if no private key was explicitly provided
       const nullclearFetch = createNullClearFetch({
         accountOrPrivateKey: buyerPrivateKey,
         chainId: 8453,
@@ -438,7 +782,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
               text: JSON.stringify(
                 {
                   status: "cleared_and_settled",
-                  message: "Response successfully validated against schema. Payment settled.",
+                  tier: buyerPrivateKey ? "x402-paid" : "free-trial",
+                  message: "Response successfully validated against schema. Payment cleared.",
                   attestation: response.headers.get("X-NullClear-Attestation") || "verified",
                   data: parsedData
                 },
@@ -450,6 +795,25 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         };
       } catch (err: any) {
         if (err instanceof NullClearEscrowAbortedError) {
+          if (err.stage === "FREE_TRIAL_EXHAUSTED") {
+            return {
+              content: [
+                {
+                  type: "text",
+                  text: JSON.stringify(
+                    {
+                      status: "free_trial_exhausted",
+                      message:
+                        "Daily 10 free trial calls exhausted. Set NULLCLEAR_PRIVATE_KEY in your MCP configuration to continue with automatic zero-loss x402 settlement.",
+                      stage: err.stage
+                    },
+                    null,
+                    2
+                  )
+                }
+              ]
+            };
+          }
           return {
             content: [
               {

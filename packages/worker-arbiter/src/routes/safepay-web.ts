@@ -667,6 +667,40 @@ export function renderSafePayLandingHtml(options: {
       </div>
     </section>
 
+    <!-- Instant Client-Side Data Redaction & SHA-256 Proof Commitment Tool -->
+    <section id="redaction-studio" style="padding:18px 0 24px;">
+      <div class="card" style="border-color:var(--border-bright);">
+        <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:14px;">
+          <div>
+            <div class="pill-badge mono" style="margin-bottom:6px;">100% CLIENT-SIDE ZERO-KNOWLEDGE PREVIEW STUDIO</div>
+            <h2 style="font-size:22px;font-weight:800;">Instant Dataset Redaction &amp; SHA-256 Proof Seal Generator</h2>
+            <p style="font-size:13px;color:var(--muted);">Prove dataset structure, row count, and SHA-256 integrity to your buyer without exposing raw emails, keys, or PII. Runs 100% in your browser via WebCrypto.</p>
+          </div>
+          <div style="display:flex;gap:10px;flex-wrap:wrap;">
+            <button type="button" id="redactRunBtn" class="btn-secondary" style="border-color:var(--emerald);color:var(--emerald);">
+              🛡️ Redact &amp; Compute SHA-256 Proof
+            </button>
+            <button type="button" id="useProofInDealBtn" class="btn-secondary">
+              ↗ Bind SHA-256 Seal to Deal Form
+            </button>
+          </div>
+        </div>
+        <div class="row-2">
+          <div>
+            <label class="field-label">Raw Dataset / JSON / CSV Input (Never leaves your browser)</label>
+            <textarea id="rawRedactInput" class="mono" rows="5">email,company,apiKey,revenueUsd
+alice.founder@stripe.com,Stripe Inc,sk_live_987654321abcdef,1450000
+bob.vp@coinbase.com,Coinbase Global,sk_live_123456789fedcba,3200000
+carol.cto@base.org,Base Ecosystem,sk_live_555666777aaaa,890000</textarea>
+          </div>
+          <div>
+            <label class="field-label">Buyer-Safe Redacted Preview + SHA-256 Commitment Seal</label>
+            <pre id="redactedOutputBox" class="terminal mono" style="margin-top:0;min-height:116px;">Click "Redact &amp; Compute SHA-256 Proof" to generate buyer-safe preview...</pre>
+          </div>
+        </div>
+      </div>
+    </section>
+
     <!-- Interactive Fee & Speed Comparison Calculator -->
     <section id="calculator" style="padding:36px 0;">
       <div class="card">
@@ -937,6 +971,51 @@ export function renderSafePayLandingHtml(options: {
         setTimeout(() => {
           window.location.href = "/deal/" + created.dealId + "?demo=1";
         }, 900);
+      });
+
+      // Client-Side Data Redaction & SHA-256 Proof Seal Studio
+      let lastComputedSha256 = "";
+      const redactToken = (val) => {
+        const s = String(val || "").trim();
+        if (s.includes("@")) {
+          const [u, d] = s.split("@");
+          return (u.slice(0, 2) || "x") + "***@" + d;
+        }
+        if (/^(sk_|pk_|0x)[a-zA-Z0-9_]{8,}$/.test(s)) {
+          return s.slice(0, 6) + "••••••••" + s.slice(-4);
+        }
+        return s;
+      };
+
+      const computeClientProof = async () => {
+        const raw = document.getElementById("rawRedactInput").value.trim();
+        const outBox = document.getElementById("redactedOutputBox");
+        if (!raw) return;
+        const enc = new TextEncoder().encode(raw);
+        const hashBuf = await crypto.subtle.digest("SHA-256", enc);
+        const hashHex = Array.from(new Uint8Array(hashBuf)).map(b => b.toString(16).padStart(2, "0")).join("");
+        lastComputedSha256 = hashHex;
+
+        const lines = raw.split(/\r?\n/).filter(Boolean);
+        const headers = (lines[0] || "").split(",").map(h => h.trim());
+        const previewRows = lines.slice(1, 6).map(line =>
+          line.split(",").map(cell => redactToken(cell)).join(", ")
+        );
+
+        outBox.textContent =
+          "SHA-256 Deliverable Seal: " + hashHex + "\n" +
+          "Verified Row Count: " + Math.max(0, lines.length - 1) + " rows | Columns: [" + headers.join(", ") + "]\n" +
+          "--- Redacted Buyer Preview ---\n" +
+          headers.join(", ") + "\n" +
+          previewRows.join("\n");
+      };
+
+      document.getElementById("redactRunBtn").addEventListener("click", computeClientProof);
+      document.getElementById("useProofInDealBtn").addEventListener("click", async () => {
+        if (!lastComputedSha256) await computeClientProof();
+        updatePresetUi("sha256");
+        document.getElementById("expectedSha256").value = lastComputedSha256;
+        document.getElementById("expectedSha256").focus();
       });
     })();
   </script>

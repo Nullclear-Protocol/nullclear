@@ -16,7 +16,7 @@ export interface ClearRequest {
   method?: "GET" | "POST" | "PUT" | "DELETE";
   headers?: Record<string, string>;
   body?: unknown;
-  paymentSignatureHeader: string;
+  paymentSignatureHeader?: string;
   sellerAgentId?: string;
   minTrustScore?: number;
   twoPhaseRelease?: boolean;
@@ -28,12 +28,15 @@ export interface ClearRequest {
 export interface ClearResult<T = unknown> {
   cleared: boolean;
   settled: boolean;
+  tier?: string;
+  freeTrialRemaining?: number;
   clearingId?: string;
   buyerCharged: string;
   clearingFee?: string;
   settlementRouting?: string;
   transaction?: `0x${string}`;
   attestation?: unknown;
+  executionReceipt?: unknown;
   data?: T;
   stage?: string;
   error?: string;
@@ -54,7 +57,7 @@ export class NullClearClient {
   private customFetch: typeof fetch;
 
   constructor(config: NullClearClientConfig = {}) {
-    this.arbiterUrl = (config.arbiterUrl || "https://arbiter.nullclear.dev").replace(/\/$/, "");
+    this.arbiterUrl = (config.arbiterUrl || "https://api.nullclear.dev").replace(/\/$/, "");
     this.defaultChainId = config.defaultChainId || 8453;
     this.customFetch = config.fetch || fetch;
   }
@@ -71,14 +74,41 @@ export class NullClearClient {
   }
 
   async clear<T = unknown>(request: ClearRequest): Promise<ClearResult<T>> {
+    const headers: Record<string, string> = { "Content-Type": "application/json" };
+    if (!request.paymentSignatureHeader || request.paymentSignatureHeader === "free-trial") {
+      headers["x-nullclear-free-trial"] = "true";
+    }
     const res = await this.customFetch(`${this.arbiterUrl}/v1/clear`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers,
       body: JSON.stringify(request)
     });
 
     const data = (await res.json()) as ClearResult<T>;
     return data;
+  }
+
+  async safeFetch(targetUrl: string, init?: RequestInit): Promise<Response> {
+    return this.customFetch(`${this.arbiterUrl}/${targetUrl}`, init);
+  }
+
+  async createGateway(params: {
+    upstreamUrl: string;
+    sellerAddress: string;
+    priceUsdc?: string;
+    priceAtomic?: string;
+    slug?: string;
+    description?: string;
+    category?: "data" | "security" | "oracle" | "ai";
+    validationPreset?: "DEFAULT_JSON" | "STRICT_NO_REFUSAL" | "CUSTOM";
+    customSchema?: Record<string, unknown>;
+  }): Promise<any> {
+    const res = await this.customFetch(`${this.arbiterUrl}/v1/gateways`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(params)
+    });
+    return res.json();
   }
 
   async getKya(agentId: string, chainId?: number): Promise<any> {

@@ -1,0 +1,193 @@
+import type { Context, Next } from "hono";
+import { getArbiterStore, type Env } from "../env.js";
+
+export const FREE_TIER_DAILY_LIMIT = 10;
+
+export interface NullClearMetadata {
+  verified: boolean;
+  escrowProtection: string;
+  freeTrialRemaining: number;
+  quickProxyPrefix: string;
+  mcpEndpoint: string;
+}
+
+export function buildNullClearMetadata(
+  overrides?: Partial<NullClearMetadata>
+): NullClearMetadata {
+  return {
+    verified: overrides?.verified ?? true,
+    escrowProtection: overrides?.escrowProtection ?? "zero-loss-eip3009",
+    freeTrialRemaining: overrides?.freeTrialRemaining ?? 9,
+    quickProxyPrefix:
+      overrides?.quickProxyPrefix ?? "https://api.nullclear.dev/https://...",
+    mcpEndpoint: overrides?.mcpEndpoint ?? "https://api.nullclear.dev/mcp"
+  };
+}
+
+export function getClientIdentifier(c: Context<Env>): string {
+  const mcpSession =
+    c.req.header("x-mcp-session") ||
+    c.req.header("mcp-session-id") ||
+    c.req.header("x-nullclear-session");
+  if (mcpSession) {
+    return `mcp:${mcpSession.trim()}`;
+  }
+
+  const cfIp = c.req.header("cf-connecting-ip");
+  if (cfIp) {
+    return `ip:${cfIp.trim()}`;
+  }
+
+  const xff = c.req.header("x-forwarded-for");
+  if (xff) {
+    return `ip:${xff.split(",")[0].trim()}`;
+  }
+
+  const clientId = c.req.header("x-client-id");
+  if (clientId) {
+    return `client:${clientId.trim()}`;
+  }
+
+  return "ip:127.0.0.1";
+}
+
+export function isExplicitFreeTrialRequest(c: Context<Env>): boolean {
+  const trialHdr = (c.req.header("x-nullclear-free-trial") || "").toLowerCase();
+  const tierHdr = (c.req.header("x-nullclear-tier") || "").toLowerCase();
+  const paymentHdr = (
+    c.req.header("x-payment") ||
+    c.req.header("payment-signature") ||
+    ""
+  ).toLowerCase();
+  const trialQuery = (
+    c.req.query("trial") ||
+    c.req.query("free") ||
+    c.req.query("freeTrial") ||
+    ""
+  ).toLowerCase();
+
+  return (
+    trialHdr === "true" ||
+    trialHdr === "1" ||
+    tierHdr === "free-trial" ||
+    paymentHdr === "free-trial" ||
+    paymentHdr === "sponsored" ||
+    Boolean(c.req.header("x-mcp-session")) ||
+    Boolean(c.req.header("mcp-session-id")) ||
+    trialQuery === "true" ||
+    trialQuery === "1"
+  );
+}
+
+export function shouldUseFreeTierForBazaar(c: Context<Env>): boolean {
+  const paymentHdr =
+    c.req.header("payment-signature") || c.req.header("x-payment") || "";
+  if (
+    paymentHdr &&
+    paymentHdr.toLowerCase() !== "free-trial" &&
+    paymentHdr.toLowerCase() !== "sponsored"
+  ) {
+    return false;
+  }
+
+  if (
+    c.req.header("x-nullclear-escrow-hold") === "true" ||
+    c.req.header("x-nullclear-verified-escrow")
+  ) {
+    return false;
+  }
+
+  // Allow x402 discovery indexers (or explicit 402 probes) to inspect the 402 challenge
+  const ua = (c.req.header("user-agent") || "").toLowerCase();
+  if (
+    c.req.header("x-x402-probe") === "true" ||
+    c.req.query("x402") === "probe" ||
+    ua.includes("x402scan") ||
+    ua.includes("agentcash") ||
+    ua.includes("bazaar-indexer")
+  ) {
+    return false;
+  }
+
+  if (isExplicitFreeTrialRequest(c)) {
+    return true;
+  }
+
+  // On production domains or requests with real client IP headers, enable zero-config free trial by default
+  const url = new URL(c.req.url);
+  const host = url.hostname.toLowerCase();
+  if (
+    host === "api.nullclear.dev" ||
+    host === "nullclear.dev" ||
+    Boolean(c.req.header("cf-connecting-ip")) ||
+    Boolean(c.req.header("x-forwarded-for"))
+  ) {
+    return true;
+  }
+
+  return false;
+}
+
+export async function consumeSponsoredFreeCall(
+  c: Context<Env>,
+  dailyLimit = FREE_TIER_DAILY_LIMIT
+): Promise<{
+  allowed: boolean;
+  used: number;
+  remaining: number;
+  limit: number;
+  clientKey: string;
+}> {
+  const clientKey = getClientIdentifier(c);
+  const store = getArbiterStore(c.env);
+  const kv = c.env?.KV || c.env?.NULLCLEAR_CACHE;
+  const utcDate = new Date().toISOString().slice(0, 10);
+  const kvKey = `free_tier_usage:${utcDate}:${clientKey.toLowerCase()}`;
+
+  // Check KV first if available alongside store
+  if (kv && !c.env?.DB) {
+    const rawCount = await kv.get(kvKey);
+    const current = Number(rawCount || 0);
+    if (current >= dailyLimit) {
+      c.header("x-nullclear-tier", "free-trial-exhausted");
+      c.header("x-nullclear-remaining-free-calls", "0");
+      return {
+        allowed: false,
+        used: current,
+        remaining: 0,
+        limit: dailyLimit,
+        clientKey
+      };
+    }
+    const nextUsed = current + 1;
+    await kv.put(kvKey, String(nextUsed), { expirationTtl: 86400 });
+    const remaining = Math.max(0, dailyLimit - nextUsed);
+    c.header("x-nullclear-tier", "free-trial");
+    c.header("x-nullclear-remaining-free-calls", String(remaining));
+    return {
+      allowed: true,
+      used: nextUsed,
+      remaining,
+      limit: dailyLimit,
+      clientKey
+    };
+  }
+
+  const res = await store.consumeFreeTierCall(clientKey, dailyLimit);
+  if (res.allowed) {
+    c.header("x-nullclear-tier", "free-trial");
+    c.header("x-nullclear-remaining-free-calls", String(res.remaining));
+  } else {
+    c.header("x-nullclear-tier", "free-trial-exhausted");
+    c.header("x-nullclear-remaining-free-calls", "0");
+  }
+
+  return {
+    ...res,
+    clientKey
+  };
+}
+
+export async function sponsoredFreeTierMiddleware(c: Context<Env>, next: Next) {
+  await next();
+}

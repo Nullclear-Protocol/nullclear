@@ -13,7 +13,7 @@ discoveryRouter.get("/health", (c) => {
   });
 });
 
-// GET / - Technical documentation page in dark-mode HTML/CSS
+// GET / - Interactive Zero-Wallet Developer Portal & Technical Documentation
 discoveryRouter.get("/", (c) => {
   const html = `<!DOCTYPE html>
 <html lang="en">
@@ -30,8 +30,8 @@ discoveryRouter.get("/", (c) => {
   <style>
     :root {
       --bg: #090a0f;
-      --card-bg: rgba(22, 27, 34, 0.7);
-      --border: rgba(255, 255, 255, 0.1);
+      --card-bg: rgba(22, 27, 34, 0.78);
+      --border: rgba(255, 255, 255, 0.12);
       --accent: #38bdf8;
       --accent-glow: rgba(56, 189, 248, 0.25);
       --success: #34d399;
@@ -48,11 +48,11 @@ discoveryRouter.get("/", (c) => {
       line-height: 1.6;
       padding: 2rem 1rem;
     }
-    .container { max-width: 1000px; margin: 0 auto; }
+    .container { max-width: 1080px; margin: 0 auto; }
     header {
       text-align: center;
-      margin-bottom: 3rem;
-      padding: 3rem 1rem;
+      margin-bottom: 2.5rem;
+      padding: 2.75rem 1.25rem;
       background: radial-gradient(circle at 50% 30%, var(--accent-glow), transparent 70%);
       border-radius: 16px;
       border: 1px solid var(--border);
@@ -70,8 +70,20 @@ discoveryRouter.get("/", (c) => {
       letter-spacing: 0.05em;
     }
     h1 { font-size: 2.75rem; font-weight: 800; letter-spacing: -0.03em; margin-bottom: 0.75rem; }
-    .subtitle { color: var(--muted); font-size: 1.2rem; max-width: 680px; margin: 0 auto; }
-    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1.5rem; margin-bottom: 3rem; }
+    .subtitle { color: var(--muted); font-size: 1.15rem; max-width: 720px; margin: 0 auto 1.25rem; }
+    .quick-copy {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.6rem;
+      background: #0d1117;
+      border: 1px solid var(--border);
+      padding: 0.5rem 1rem;
+      border-radius: 8px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 0.85rem;
+      color: var(--accent);
+    }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1.5rem; margin-bottom: 2.5rem; }
     .card {
       background: var(--card-bg);
       border: 1px solid var(--border);
@@ -81,16 +93,47 @@ discoveryRouter.get("/", (c) => {
     }
     .card h3 { color: var(--accent); margin-bottom: 0.5rem; font-size: 1.25rem; }
     .card p { color: var(--muted); font-size: 0.95rem; }
+    .sim-buttons { display: flex; flex-wrap: wrap; gap: 0.75rem; margin: 1rem 0; }
+    .btn {
+      cursor: pointer;
+      padding: 0.65rem 1rem;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: #161b22;
+      color: var(--text);
+      font-weight: 600;
+      font-size: 0.88rem;
+      transition: all 0.15s ease;
+    }
+    .btn:hover { border-color: var(--accent); transform: translateY(-1px); }
+    .btn-success { border-color: rgba(52, 211, 153, 0.5); color: var(--success); }
+    .btn-danger { border-color: rgba(248, 113, 113, 0.5); color: var(--danger); }
+    .btn-primary { background: var(--accent); color: #090a0f; border-color: var(--accent); }
+    .input-row { display: flex; flex-wrap: wrap; gap: 0.75rem; margin-top: 0.75rem; }
+    .input {
+      flex: 1;
+      min-width: 220px;
+      background: #0d1117;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 0.65rem 0.9rem;
+      color: var(--text);
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 0.86rem;
+    }
     .code-block {
       background: #0d1117;
       border: 1px solid var(--border);
       border-radius: 8px;
       padding: 1rem;
       font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
-      font-size: 0.85rem;
+      font-size: 0.83rem;
       color: #7dd3fc;
       overflow-x: auto;
       margin-top: 1rem;
+      white-space: pre-wrap;
+      max-height: 340px;
+      overflow-y: auto;
     }
     .endpoints-table {
       width: 100%;
@@ -114,10 +157,55 @@ discoveryRouter.get("/", (c) => {
 <body>
   <div class="container">
     <header>
-      <div class="badge">PROTOCOL SPECIFICATION v1.1.1</div>
+      <div class="badge">PROTOCOL SPECIFICATION v1.2.0 &bull; 10 FREE DAILY CALLS</div>
       <h1>NullClear Arbiter</h1>
-      <p class="subtitle">Autonomous Non-Custodial Clearing, Deep Invariant Verification & Reputation Protocol for x402 AI Agents on Base</p>
+      <p class="subtitle">Autonomous Non-Custodial Clearing, Deep Invariant Verification, URL-Prefix Auto-Guard & 1-Click Seller Gateways for x402 AI Agents on Base</p>
+      <div class="quick-copy">
+        <span>npx -y @nullclear/mcp</span>
+        <span style="color:var(--muted)">|</span>
+        <span>https://api.nullclear.dev/https://api.example.com</span>
+      </div>
     </header>
+
+    <!-- Interactive Zero-Wallet x402 Chaos Simulator -->
+    <div class="card" style="margin-bottom: 2rem; border-color: rgba(56, 189, 248, 0.4);">
+      <h3>⚡ Live Zero-Wallet x402 Chaos Simulator (No Private Key Needed)</h3>
+      <p>Experience NullClear's non-custodial schema &amp; refusal verification pipeline right now using your 10 daily free trial credits:</p>
+      <div class="sim-buttons">
+        <button class="btn btn-success" onclick="runChaosSim('honest')">✅ Honest Market Oracle ($0.01 Free Trial)</button>
+        <button class="btn btn-danger" onclick="runChaosSim('hallucinate')">🛑 Hallucinating AI Seller (Refusal Shredded -> $0 Charged)</button>
+        <button class="btn btn-danger" onclick="runChaosSim('crash')">💥 Crashing 500 Upstream (Escrow Shredded -> $0 Charged)</button>
+        <button class="btn" onclick="runChaosSim('token')">🛡️ Base USDC Token Security Audit</button>
+      </div>
+      <pre id="chaos-output" class="code-block">// Click any scenario above to run a live edge verification call against NullClear Arbiter...</pre>
+    </div>
+
+    <!-- Jina-Reader Style URL-Prefix Auto-Guard Proxy & 1-Click Seller Gateway -->
+    <div class="grid">
+      <div class="card">
+        <h3>🔗 1-Line URL-Prefix Auto-Guard Proxy</h3>
+        <p>Prepend <code>https://api.nullclear.dev/</code> to any URL. Zero JSON Schema required—automatically blocks LLM refusals, HTTP 5xx crashes, and empty payloads.</p>
+        <div class="input-row">
+          <input id="proxy-url-input" class="input" value="https://api.nullclear.dev/v1/sandbox/market-feed" placeholder="https://api.example.com/v1/data" />
+          <button class="btn btn-primary" onclick="runPrefixProxy()">Verify URL</button>
+        </div>
+        <pre id="proxy-output" class="code-block">GET https://api.nullclear.dev/https://api.coinbase.com/v2/prices/ETH-USD/spot</pre>
+      </div>
+
+      <div class="card">
+        <h3>🚀 1-Click Seller Gateway Builder (<code>/g/:slug</code>)</h3>
+        <p>Turn any REST API into a NullClear-protected x402 endpoint in 10 seconds. Buyers pay your Base wallet only when your API returns valid data.</p>
+        <div class="input-row">
+          <input id="gw-upstream" class="input" placeholder="Upstream REST URL (https://...)" value="https://api.coinbase.com/v2/prices/ETH-USD/spot" />
+        </div>
+        <div class="input-row">
+          <input id="gw-wallet" class="input" placeholder="Your Base 0x Wallet" value="0xB586eFcCa41dF27ad3873BEcA54da0c30bf04d5c" />
+          <input id="gw-slug" class="input" style="max-width:160px" placeholder="Slug (e.g. my-api)" value="" />
+          <button class="btn btn-primary" onclick="createSellerGateway()">Create Gateway</button>
+        </div>
+        <pre id="gw-output" class="code-block">// Creates https://api.nullclear.dev/g/&lt;slug&gt; with automatic 402 challenge &amp; STRICT_NO_REFUSAL guard</pre>
+      </div>
+    </div>
 
     <div class="grid">
       <div class="card">
@@ -153,26 +241,112 @@ discoveryRouter.get("/", (c) => {
           <tr><th>Method</th><th>Endpoint</th><th>Description</th></tr>
         </thead>
         <tbody>
-          <tr><td><span class="method-post">POST</span></td><td><code>/v1/clear</code></td><td>Deferred schema escrow proxy, deep invariants & failover routing</td></tr>
-          <tr><td><span class="method-get">GET</span></td><td><code>/v1/score/:chainId/:agentId</code></td><td>Sybil-resistant trust score & cryptographic attestation</td></tr>
-          <tr><td><span class="method-get">GET</span></td><td><code>/v1/stats</code></td><td>Live protocol metrics & recent verified clearing events</td></tr>
-          <tr><td><span class="method-get">GET</span></td><td><code>/v1/bazaar/audit</code></td><td>x402 Bazaar auto-discovery oracle for agent reputation audits</td></tr>
-          <tr><td><span class="method-get">GET</span></td><td><code>/v1/sandbox/market-feed</code></td><td>Zero-config sandbox verified price feed ($0.001 USDC)</td></tr>
-          <tr><td><span class="method-get">GET</span></td><td><code>/v1/sandbox/hallucinating-seller</code></td><td>Zero-config sandbox failover & refusal testing seller</td></tr>
-          <tr><td><span class="method-get">GET</span></td><td><a href="/llms.txt"><code>/llms.txt</code></a></td><td>Agent-tailored integration instructions & menu</td></tr>
+          <tr><td><span class="method-get">GET/POST</span></td><td><code>/https://:target*</code></td><td>Jina-style URL-Prefix Proxy with zero-schema Auto-Guard &amp; x402 clearing</td></tr>
+          <tr><td><span class="method-post">POST</span></td><td><code>/v1/gateways</code> &amp; <code>/g/:slug</code></td><td>1-Click Seller Gateway registration &amp; x402 execution proxy</td></tr>
+          <tr><td><span class="method-post">POST</span></td><td><code>/v1/clear</code></td><td>Deferred schema escrow proxy, deep invariants &amp; failover routing (10 free/day)</td></tr>
+          <tr><td><span class="method-get">GET</span></td><td><code>/v1/score/:chainId/:agentId</code></td><td>Sybil-resistant trust score &amp; cryptographic attestation</td></tr>
+          <tr><td><span class="method-get">GET</span></td><td><a href="/v1/telemetry/dashboard"><code>/v1/telemetry/dashboard</code></a></td><td>Live D1 traffic attribution &amp; conversion funnel dashboard</td></tr>
+          <tr><td><span class="method-get">GET</span></td><td><code>/v1/bazaar/token-security</code></td><td>Base ERC-20 honeypot &amp; tax audit oracle (10 free/day)</td></tr>
+          <tr><td><span class="method-get">GET</span></td><td><code>/v1/bazaar/wallet-risk</code></td><td>Wallet sanctions, Sybil concentration &amp; reputation oracle (10 free/day)</td></tr>
+          <tr><td><span class="method-get">GET</span></td><td><code>/v1/bazaar/market-oracle</code></td><td>Multi-exchange spread-verified price feed (10 free/day)</td></tr>
+          <tr><td><span class="method-get">GET</span></td><td><a href="/llms.txt"><code>/llms.txt</code></a></td><td>Agent-tailored integration instructions &amp; menu</td></tr>
           <tr><td><span class="method-get">GET</span></td><td><a href="/openapi.json"><code>/openapi.json</code></a></td><td>Full OpenAPI 3.1.0 Specification</td></tr>
-          <tr><td><span class="method-get">GET</span></td><td><a href="/.well-known/agent-card.json"><code>/.well-known/agent-card.json</code></a></td><td>Google A2A + ERC-8004 Agent Card</td></tr>
-          <tr><td><span class="method-get">GET</span></td><td><a href="/.well-known/erc-8004.json"><code>/.well-known/erc-8004.json</code></a></td><td>Canonical ERC-8004 Domain Verification</td></tr>
-          <tr><td><span class="method-get">GET</span></td><td><a href="/.well-known/mcp.json"><code>/.well-known/mcp.json</code></a></td><td>Model Context Protocol server discovery</td></tr>
+          <tr><td><span class="method-get">GET</span></td><td><a href="/.well-known/mcp.json"><code>/.well-known/mcp.json</code></a></td><td>Model Context Protocol server discovery (7 first-class tools)</td></tr>
           <tr><td><span class="method-get">GET</span></td><td><a href="/.well-known/x402.json"><code>/.well-known/x402.json</code></a></td><td>x402 Service Manifest with Bazaar extensions</td></tr>
         </tbody>
       </table>
     </div>
 
     <footer>
-      <p>NullClear Protocol &bull; Base Mainnet (8453) &bull; Base Sepolia (84532) &bull; <a href="/openapi.json">OpenAPI Spec</a> &bull; <a href="/llms.txt">llms.txt</a></p>
+      <p>NullClear Protocol &bull; Base Mainnet (8453) &bull; Base Sepolia (84532) &bull; <a href="/openapi.json">OpenAPI Spec</a> &bull; <a href="/v1/telemetry/dashboard">Funnel Telemetry</a> &bull; <a href="/llms.txt">llms.txt</a></p>
     </footer>
   </div>
+
+  <script>
+    async function runChaosSim(mode) {
+      const out = document.getElementById('chaos-output');
+      out.textContent = '⏳ Running live verification through NullClear Arbiter...';
+      try {
+        if (mode === 'token') {
+          const res = await fetch('/v1/bazaar/token-security?tokenAddress=0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913&trial=true', {
+            headers: { 'x-nullclear-free-trial': 'true' }
+          });
+          const data = await res.json();
+          out.textContent = 'HTTP ' + res.status + ' | x-nullclear-tier: ' + (res.headers.get('x-nullclear-tier') || 'free-trial') +
+            ' | remaining: ' + (res.headers.get('x-nullclear-remaining-free-calls') || '9') + '\\n\\n' + JSON.stringify(data, null, 2);
+          return;
+        }
+        const targetMap = {
+          honest: 'https://api.nullclear.dev/v1/sandbox/market-feed',
+          hallucinate: 'https://api.nullclear.dev/v1/sandbox/hallucinating-seller',
+          crash: 'https://api.nullclear.dev/v1/sandbox/crashing-seller'
+        };
+        const res = await fetch('/v1/clear', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'x-nullclear-free-trial': 'true' },
+          body: JSON.stringify({
+            targetUrl: targetMap[mode],
+            paymentSignatureHeader: 'free-trial',
+            validation: {
+              expectedStatus: [200],
+              rejectRefusals: true,
+              invariants: [{ path: 'price', gt: 0 }]
+            }
+          })
+        });
+        const data = await res.json();
+        out.textContent = 'HTTP ' + res.status + (res.status === 200 ? ' (CLEARED & VERIFIED)' : ' (PAYMENT SHREDDED — $0.00 CHARGED)') +
+          '\\n\\n' + JSON.stringify(data, null, 2);
+      } catch (e) {
+        out.textContent = 'Error: ' + e.message;
+      }
+    }
+
+    async function runPrefixProxy() {
+      const url = document.getElementById('proxy-url-input').value.trim();
+      const out = document.getElementById('proxy-output');
+      out.textContent = '⏳ Fetching via Auto-Guard URL-Prefix Proxy...';
+      try {
+        const res = await fetch('/v1/proxy?url=' + encodeURIComponent(url), {
+          headers: { 'x-nullclear-free-trial': 'true' }
+        });
+        const text = await res.text();
+        let formatted = text;
+        try { formatted = JSON.stringify(JSON.parse(text), null, 2); } catch {}
+        out.textContent = 'HTTP ' + res.status +
+          ' | X-NullClear-Verified: ' + res.headers.get('X-NullClear-Verified') +
+          ' | Receipt: ' + (res.headers.get('X-NullClear-Receipt-Id') || 'none') +
+          '\\n\\n' + formatted;
+      } catch (e) {
+        out.textContent = 'Error: ' + e.message;
+      }
+    }
+
+    async function createSellerGateway() {
+      const upstreamUrl = document.getElementById('gw-upstream').value.trim();
+      const sellerAddress = document.getElementById('gw-wallet').value.trim();
+      const slug = document.getElementById('gw-slug').value.trim() || ('api-' + Math.random().toString(36).slice(2, 7));
+      const out = document.getElementById('gw-output');
+      out.textContent = '⏳ Registering 1-Click Seller Gateway...';
+      try {
+        const res = await fetch('/v1/gateways', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            upstreamUrl,
+            sellerAddress,
+            priceUsdc: '0.01',
+            slug,
+            validationPreset: 'STRICT_NO_REFUSAL'
+          })
+        });
+        const data = await res.json();
+        out.textContent = 'HTTP ' + res.status + '\\n\\n' + JSON.stringify(data, null, 2);
+      } catch (e) {
+        out.textContent = 'Error: ' + e.message;
+      }
+    }
+  </script>
 </body>
 </html>`;
   return c.html(html);
@@ -1099,7 +1273,7 @@ const getOpenApiSpec = () => ({
                     attestation: { type: "string" },
                     settlementTransaction: { type: "string" },
                     timestamp: { type: "integer" },
-                    _agentDirective: { type: "object" }
+                    _nullclear: { type: "object" }
                   }
                 }
               }
@@ -1332,7 +1506,7 @@ const getOpenApiSpec = () => ({
                     attestation: { type: "string" },
                     settlementTransaction: { type: "string" },
                     timestamp: { type: "integer" },
-                    _agentDirective: { type: "object" }
+                    _nullclear: { type: "object" }
                   }
                 }
               }
@@ -1438,7 +1612,7 @@ const getOpenApiSpec = () => ({
                     attestation: { type: "string" },
                     settlementTransaction: { type: "string" },
                     timestamp: { type: "integer" },
-                    _agentDirective: { type: "object" }
+                    _nullclear: { type: "object" }
                   }
                 }
               }
@@ -1499,7 +1673,7 @@ const getOpenApiSpec = () => ({
                     invariantsPassed: { type: "boolean" },
                     attestation: { type: "string" },
                     timestamp: { type: "integer" },
-                    _agentDirective: { type: "object" }
+                    _nullclear: { type: "object" }
                   }
                 }
               }
@@ -1544,7 +1718,7 @@ const getOpenApiSpec = () => ({
                     attestation: { type: "string" },
                     settlementTransaction: { type: "string" },
                     timestamp: { type: "integer" },
-                    _agentDirective: { type: "object" }
+                    _nullclear: { type: "object" }
                   }
                 }
               }
@@ -1743,7 +1917,7 @@ const getOpenApiSpec = () => ({
                     method: { type: "string" },
                     usage: { type: "string" },
                     documentation: { type: "string" },
-                    _agentDirective: { type: "object" }
+                    _nullclear: { type: "object" }
                   }
                 }
               }
@@ -1928,7 +2102,7 @@ const getOpenApiSpec = () => ({
                         metrics: { type: "object" }
                       }
                     },
-                    _agentDirective: { type: "object" }
+                    _nullclear: { type: "object" }
                   }
                 }
               }
@@ -1957,7 +2131,7 @@ const getOpenApiSpec = () => ({
                     voidedHallucinations: { type: "integer" },
                     totalAgentsIndexed: { type: "integer" },
                     recentClearings: { type: "array" },
-                    _agentDirective: { type: "object" }
+                    _nullclear: { type: "object" }
                   }
                 }
               }
