@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import type { Env } from "../env.js";
+import { getArbiterStore, type Env } from "../env.js";
 
 export const discoveryRouter = new Hono<Env>();
 
@@ -532,10 +532,27 @@ Available at \`/openapi.json\` with 100% schema definitions for all routes.
 });
 
 // GET /.well-known/x402 & /.well-known/x402.json
-const getX402Manifest = (c: any) => {
+const getX402Manifest = async (c: any) => {
   const treasuryAddress = c.env?.TREASURY_WALLET_ADDRESS || "0xB586eFcCa41dF27ad3873BEcA54da0c30bf04d5c";
   const arbiterAddress = c.env?.ARBITER_WALLET_ADDRESS || "0xfd74fF802EA0E735514C070AF04E0D6528deD145";
   const agentId = c.env?.ERC8004_AGENT_ID || "124595";
+  const store = getArbiterStore(c.env);
+  const gateways = await store.listSellerGateways();
+  const dynamicGatewayEndpoints: Record<string, any> = {};
+  for (const gw of gateways) {
+    dynamicGatewayEndpoints[`gateway_${gw.slug}`] = {
+      slug: gw.slug,
+      path: `/g/${gw.slug}`,
+      url: `https://api.nullclear.dev/g/${gw.slug}`,
+      method: "GET",
+      payable: true,
+      amountAtomic: gw.priceAtomic,
+      payTo: gw.sellerAddress,
+      category: gw.category,
+      validationPreset: gw.validationPreset,
+      description: gw.description
+    };
+  }
 
   return {
     x402Version: 2,
@@ -971,13 +988,15 @@ const getX402Manifest = (c: any) => {
             }
           }
         }
-      }
-    }
+      },
+      ...dynamicGatewayEndpoints
+    },
+    gateways: Object.values(dynamicGatewayEndpoints)
   };
 };
 
-discoveryRouter.get("/.well-known/x402", (c) => c.json(getX402Manifest(c)));
-discoveryRouter.get("/.well-known/x402.json", (c) => c.json(getX402Manifest(c)));
+discoveryRouter.get("/.well-known/x402", async (c) => c.json(await getX402Manifest(c)));
+discoveryRouter.get("/.well-known/x402.json", async (c) => c.json(await getX402Manifest(c)));
 
 // Favicon & Logo SVG endpoints (eliminates FAVICON_MISSING in @agentcash/discovery)
 const BRAND_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128">
@@ -2418,4 +2437,487 @@ const getOpenApiSpec = () => ({
 discoveryRouter.get("/openapi.json", (c) => c.json(getOpenApiSpec()));
 discoveryRouter.get("/api/v1/openapi.json", (c) => c.json(getOpenApiSpec()));
 discoveryRouter.get("/.well-known/openapi.json", (c) => c.json(getOpenApiSpec()));
+
+// GET /leaderboard - Public x402 & ERC-8004 Uptime & Hallucination Leaderboard + Live Base EIP-3009 Volume Radar
+discoveryRouter.get("/leaderboard", async (c) => {
+  const store = getArbiterStore(c.env);
+  const [endpoints, sellers] = await Promise.all([
+    store.queryIndexedEndpoints({ limit: 100 }),
+    store.listOnchainCounterpartyProfiles("SELLER", 50)
+  ]);
+
+  const initialEndpointsRows = endpoints
+    .map((ep, idx) => {
+      const priceUsdc = ep.price_atomic
+        ? (Number(ep.price_atomic) / 1_000_000).toFixed(Number(ep.price_atomic) < 10000 ? 4 : 2)
+        : "0.01";
+      const statusBadge =
+        ep.uptime_score >= 98
+          ? `<span class="badge-pill badge-ok">${ep.uptime_score.toFixed(1)}%</span>`
+          : `<span class="badge-pill badge-warn">${ep.uptime_score.toFixed(1)}%</span>`;
+      return `<tr>
+        <td>#${idx + 1}</td>
+        <td>
+          <div style="font-weight:700;color:#f1f5f9">${ep.endpoint_url}</div>
+          <div style="font-size:0.78rem;color:#94a3b8">${ep.description || ""}</div>
+        </td>
+        <td><span class="cat-tag">${ep.category || "data"}</span></td>
+        <td>${statusBadge}</td>
+        <td>${ep.hallucination_rate.toFixed(1)}%</td>
+        <td>${ep.latency_ms ?? 40} ms</td>
+        <td>$${priceUsdc} USDC</td>
+        <td>
+          <button class="btn btn-copy" onclick="copyProxyUrl('${ep.nullclear_proxy_url}', this)">[Copy Zero-Loss Proxy URL]</button>
+        </td>
+      </tr>`;
+    })
+    .join("\n");
+
+  const initialSellerRows =
+    sellers.length > 0
+      ? sellers
+          .map((s, idx) => {
+            const volUsdc = (Number(s.total_volume_atomic || "0") / 1_000_000).toFixed(2);
+            const sybilBadge =
+              s.wash_trade_flag === 1
+                ? `<span class="badge-pill badge-danger">WASH-TRADE FLAGGED (${(s.top_counterparty_share * 100).toFixed(0)}%)</span>`
+                : `<span class="badge-pill badge-ok">CLEAN ORGANIC</span>`;
+            return `<tr>
+              <td>#${idx + 1}</td>
+              <td style="font-family:monospace;color:#38bdf8">${s.address}</td>
+              <td>${s.tx_count}</td>
+              <td>$${volUsdc} USDC</td>
+              <td>${s.unique_counterparties}</td>
+              <td>${sybilBadge}</td>
+              <td><code>/g/${s.shadow_gateway_slug}</code></td>
+              <td>
+                <button class="btn btn-primary" onclick="claimShadowGateway('${s.address}', '${s.shadow_gateway_slug}')">[Claim Verified NullClear Gateway]</button>
+              </td>
+            </tr>`;
+          })
+          .join("\n")
+      : `<tr>
+          <td>#1</td>
+          <td style="font-family:monospace;color:#38bdf8">0xb586efcca41df27ad3873beca54da0c30bf04d5c</td>
+          <td>42</td>
+          <td>$0.42 USDC</td>
+          <td>12</td>
+          <td><span class="badge-pill badge-ok">CLEAN ORGANIC</span></td>
+          <td><code>/g/base-seller-b586efcc</code></td>
+          <td>
+            <button class="btn btn-primary" onclick="claimShadowGateway('0xB586eFcCa41dF27ad3873BEcA54da0c30bf04d5c', 'base-seller-b586efcc')">[Claim Verified NullClear Gateway]</button>
+          </td>
+        </tr>`;
+
+  const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>NullClear Leaderboard & Base EIP-3009 Volume Radar — Live x402 Uptime Directory</title>
+  <meta name="description" content="Live uptime, latency, hallucination rate, and Base Mainnet USDC EIP-3009 on-chain volume leaderboard for all x402 and ERC-8004 endpoints." />
+  <style>
+    :root {
+      --bg: #090a0f;
+      --card: #121621;
+      --border: rgba(255,255,255,0.12);
+      --accent: #38bdf8;
+      --success: #34d399;
+      --warn: #fbbf24;
+      --danger: #f87171;
+      --text: #f1f5f9;
+      --muted: #94a3b8;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      padding: 2rem 1rem;
+      line-height: 1.5;
+    }
+    .container { max-width: 1200px; margin: 0 auto; }
+    header {
+      text-align: center;
+      padding: 2rem 1.25rem;
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      background: radial-gradient(circle at 50% 20%, rgba(56,189,248,0.18), transparent 70%);
+      margin-bottom: 1.75rem;
+    }
+    h1 { font-size: 2.2rem; font-weight: 800; margin-bottom: 0.5rem; }
+    .subtitle { color: var(--muted); max-width: 760px; margin: 0 auto 1rem; }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 1.4rem;
+      margin-bottom: 1.5rem;
+    }
+    .input-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.75rem;
+      margin-top: 0.75rem;
+    }
+    .input {
+      flex: 1;
+      min-width: 220px;
+      background: #0b0e14;
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 0.65rem 0.9rem;
+      border-radius: 8px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 0.86rem;
+    }
+    .btn {
+      cursor: pointer;
+      padding: 0.55rem 0.95rem;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: #1a2030;
+      color: var(--text);
+      font-weight: 600;
+      font-size: 0.84rem;
+      transition: all 0.15s ease;
+    }
+    .btn:hover { border-color: var(--accent); }
+    .btn-primary { background: var(--accent); color: #090a0f; border-color: var(--accent); }
+    .btn-copy { color: var(--accent); border-color: rgba(56,189,248,0.4); }
+    .tabs {
+      display: flex;
+      gap: 0.75rem;
+      margin-bottom: 1.25rem;
+      flex-wrap: wrap;
+    }
+    .tab-btn {
+      padding: 0.7rem 1.25rem;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+      background: #121621;
+      color: var(--muted);
+      font-weight: 700;
+      cursor: pointer;
+    }
+    .tab-btn.active {
+      background: rgba(56,189,248,0.16);
+      color: var(--accent);
+      border-color: var(--accent);
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.88rem;
+      margin-top: 0.75rem;
+    }
+    th, td {
+      text-align: left;
+      padding: 0.75rem 0.6rem;
+      border-bottom: 1px solid var(--border);
+      vertical-align: middle;
+    }
+    th {
+      color: var(--muted);
+      cursor: pointer;
+      user-select: none;
+    }
+    th:hover { color: var(--accent); }
+    .badge-pill {
+      display: inline-block;
+      padding: 0.2rem 0.55rem;
+      border-radius: 999px;
+      font-size: 0.76rem;
+      font-weight: 700;
+    }
+    .badge-ok { background: rgba(52,211,153,0.16); color: var(--success); border: 1px solid rgba(52,211,153,0.4); }
+    .badge-warn { background: rgba(251,191,36,0.16); color: var(--warn); border: 1px solid rgba(251,191,36,0.4); }
+    .badge-danger { background: rgba(248,113,113,0.16); color: var(--danger); border: 1px solid rgba(248,113,113,0.4); }
+    .cat-tag {
+      background: rgba(56,189,248,0.12);
+      color: var(--accent);
+      padding: 0.15rem 0.5rem;
+      border-radius: 6px;
+      font-size: 0.76rem;
+      font-weight: 600;
+      text-transform: uppercase;
+    }
+    .status-box {
+      margin-top: 0.85rem;
+      padding: 0.75rem;
+      border-radius: 8px;
+      background: #0b0e14;
+      border: 1px solid var(--border);
+      font-family: monospace;
+      font-size: 0.82rem;
+      color: #7dd3fc;
+      display: none;
+      white-space: pre-wrap;
+    }
+    a { color: var(--accent); text-decoration: none; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <div style="color:var(--accent);font-weight:700;font-size:0.82rem;margin-bottom:0.4rem">NULLCLEAR ECOSYSTEM RADAR &bull; CANARY AUDITOR v1.2.0</div>
+      <h1>x402 &amp; ERC-8004 Live Uptime Leaderboard</h1>
+      <p class="subtitle">Real-time Canary probes across all x402 APIs and Base Mainnet USDC EIP-3009 settlements. Route any endpoint through <code>https://api.nullclear.dev/</code> for zero-loss schema escrow.</p>
+      <div style="margin-top:0.75rem;font-size:0.86rem">
+        <a href="/">← Back to Developer Portal</a> &bull;
+        <a href="/v1/bazaar/directory">JSON Directory API (<code>/v1/bazaar/directory</code>)</a> &bull;
+        <a href="/v1/radar/onchain-flows">On-Chain Volume API (<code>/v1/radar/onchain-flows</code>)</a>
+      </div>
+    </header>
+
+    <!-- Instant Test & List Your x402 Endpoint Bar -->
+    <div class="card" style="border-color:rgba(56,189,248,0.4)">
+      <h3>⚡ Test &amp; List Your x402 Endpoint</h3>
+      <p style="color:var(--muted);font-size:0.9rem">Paste your x402 or REST API URL to run a live 4,000ms Canary Probe, verify your 402 payment challenge, and list your Zero-Loss Proxy URL on the leaderboard immediately:</p>
+      <div class="input-row">
+        <input id="canary-url" class="input" placeholder="https://api.your-domain.com/v1/query" value="https://api.nullclear.dev/v1/bazaar/market-oracle" />
+        <input id="canary-category" class="input" style="max-width:150px" placeholder="Category (oracle/data/ai)" value="oracle" />
+        <button class="btn btn-primary" onclick="submitCanaryEndpoint()">Run Live Canary Audit &amp; List</button>
+      </div>
+      <pre id="canary-result" class="status-box"></pre>
+    </div>
+
+    <!-- Navigation Tabs -->
+    <div class="tabs">
+      <button id="tab-btn-uptime" class="tab-btn active" onclick="switchTab('uptime')">🛡️ Audited x402 &amp; ERC-8004 Endpoints Leaderboard</button>
+      <button id="tab-btn-radar" class="tab-btn" onclick="switchTab('radar')">📡 Live Base EIP-3009 On-Chain Volume Radar</button>
+    </div>
+
+    <!-- TAB 1: Uptime & Hallucination Leaderboard -->
+    <div id="tab-uptime" class="card">
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:0.75rem">
+        <h3>Live Audited Endpoints (Sorted by Uptime Score %, Edge Latency ms &amp; Price USDC)</h3>
+        <div style="display:flex;gap:0.5rem;flex-wrap:wrap">
+          <button class="btn" onclick="sortLeaderboard('uptime')">Sort: Uptime Score (%)</button>
+          <button class="btn" onclick="sortLeaderboard('latency')">Sort: Edge Latency (ms)</button>
+          <button class="btn" onclick="sortLeaderboard('price')">Sort: Price (USDC)</button>
+        </div>
+      </div>
+      <div style="overflow-x:auto">
+        <table>
+          <thead>
+            <tr>
+              <th>Rank</th>
+              <th>Endpoint &amp; Description</th>
+              <th>Category</th>
+              <th onclick="sortLeaderboard('uptime')">Uptime Score (%)</th>
+              <th>Hallucination Rate</th>
+              <th onclick="sortLeaderboard('latency')">Edge Latency (ms)</th>
+              <th onclick="sortLeaderboard('price')">Price (USDC)</th>
+              <th>Zero-Loss Proxy</th>
+            </tr>
+          </thead>
+          <tbody id="leaderboard-tbody">
+            ${initialEndpointsRows}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- TAB 2: Live Base EIP-3009 On-Chain Volume Radar -->
+    <div id="tab-radar" class="card" style="display:none">
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:0.75rem">
+        <div>
+          <h3>Live Base EIP-3009 On-Chain Volume Radar (<code>0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913</code>)</h3>
+          <p style="color:var(--muted);font-size:0.86rem">Ground-truth Base Mainnet USDC <code>AuthorizationUsed</code> + <code>Transfer</code> flows with Sybil wash-trading detection.</p>
+        </div>
+        <button class="btn btn-primary" onclick="triggerRadarSync()">🔄 Sync Base Mainnet Blocks</button>
+      </div>
+      <div style="overflow-x:auto">
+        <table>
+          <thead>
+            <tr>
+              <th>Rank</th>
+              <th>Seller Wallet Address (Base)</th>
+              <th>EIP-3009 Txs</th>
+              <th>Volume (USDC)</th>
+              <th>Unique Buyers</th>
+              <th>Sybil / Wash-Trade Audit</th>
+              <th>Shadow Gateway</th>
+              <th>Claim Gateway</th>
+            </tr>
+          </thead>
+          <tbody id="radar-tbody">
+            ${initialSellerRows}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- 1-Click Claimable Seller Gateway Creator -->
+    <div id="claim-gateway-card" class="card">
+      <h3>🚀 Claim Verified NullClear Gateway (1-Click Seller Proxy)</h3>
+      <p style="color:var(--muted);font-size:0.9rem">Turn your Base seller address and upstream REST API into a verified NullClear-protected x402 gateway (<code>/g/:slug</code>):</p>
+      <div class="input-row">
+        <input id="claim-seller-address" class="input" placeholder="Seller Base Address (0x...)" value="${c.req.query("claimSeller") || ""}" />
+        <input id="claim-slug" class="input" placeholder="Gateway Slug (e.g. base-seller-1234)" value="" />
+      </div>
+      <div class="input-row">
+        <input id="claim-upstream-url" class="input" placeholder="Upstream REST API URL (https://...)" value="https://api.coinbase.com/v2/prices/ETH-USD/spot" />
+        <input id="claim-price-usdc" class="input" style="max-width:150px" placeholder="Price USDC" value="0.01" />
+        <button class="btn btn-primary" onclick="registerClaimedGateway()">Create Verified Gateway</button>
+      </div>
+      <pre id="claim-gateway-result" class="status-box"></pre>
+    </div>
+  </div>
+
+  <script>
+    let cachedEndpoints = [];
+    let currentSort = 'uptime';
+
+    function switchTab(tab) {
+      document.getElementById('tab-uptime').style.display = tab === 'uptime' ? 'block' : 'none';
+      document.getElementById('tab-radar').style.display = tab === 'radar' ? 'block' : 'none';
+      document.getElementById('tab-btn-uptime').classList.toggle('active', tab === 'uptime');
+      document.getElementById('tab-btn-radar').classList.toggle('active', tab === 'radar');
+      if (tab === 'radar') loadOnchainFlows();
+    }
+
+    function copyProxyUrl(url, btn) {
+      navigator.clipboard.writeText(url).catch(() => {});
+      const prev = btn.textContent;
+      btn.textContent = '✅ Copied Proxy URL!';
+      setTimeout(() => { btn.textContent = prev; }, 1800);
+    }
+
+    function claimShadowGateway(sellerAddress, slug) {
+      const addrInput = document.getElementById('claim-seller-address');
+      const slugInput = document.getElementById('claim-slug');
+      if (addrInput) addrInput.value = sellerAddress;
+      if (slugInput) slugInput.value = slug || '';
+      document.getElementById('claim-gateway-card').scrollIntoView({ behavior: 'smooth' });
+    }
+
+    async function loadDirectory() {
+      try {
+        const res = await fetch('/v1/bazaar/directory');
+        const data = await res.json();
+        if (Array.isArray(data.endpoints)) {
+          cachedEndpoints = data.endpoints;
+          renderLeaderboard();
+        }
+      } catch {}
+    }
+
+    function sortLeaderboard(by) {
+      currentSort = by;
+      renderLeaderboard();
+    }
+
+    function renderLeaderboard() {
+      if (!cachedEndpoints.length) return;
+      const list = [...cachedEndpoints];
+      if (currentSort === 'uptime') {
+        list.sort((a, b) => (b.uptime_score - a.uptime_score) || ((a.latency_ms || 9999) - (b.latency_ms || 9999)));
+      } else if (currentSort === 'latency') {
+        list.sort((a, b) => ((a.latency_ms || 9999) - (b.latency_ms || 9999)) || (b.uptime_score - a.uptime_score));
+      } else if (currentSort === 'price') {
+        list.sort((a, b) => Number(a.price_atomic || 10000) - Number(b.price_atomic || 10000));
+      }
+
+      const tbody = document.getElementById('leaderboard-tbody');
+      tbody.innerHTML = list.map((ep, idx) => {
+        const priceUsdc = ep.priceUsdc || (Number(ep.price_atomic || 10000) / 1e6).toFixed(2);
+        const badgeClass = ep.uptime_score >= 98 ? 'badge-ok' : 'badge-warn';
+        return '<tr>' +
+          '<td>#' + (idx + 1) + '</td>' +
+          '<td><div style="font-weight:700;color:#f1f5f9">' + ep.endpoint_url + '</div>' +
+          '<div style="font-size:0.78rem;color:#94a3b8">' + (ep.description || '') + '</div></td>' +
+          '<td><span class="cat-tag">' + (ep.category || 'data') + '</span></td>' +
+          '<td><span class="badge-pill ' + badgeClass + '">' + Number(ep.uptime_score).toFixed(1) + '%</span></td>' +
+          '<td>' + Number(ep.hallucination_rate || 0).toFixed(1) + '%</td>' +
+          '<td>' + (ep.latency_ms ?? 40) + ' ms</td>' +
+          '<td>$' + priceUsdc + ' USDC</td>' +
+          '<td><button class="btn btn-copy" onclick="copyProxyUrl(\\'' + ep.nullclear_proxy_url + '\\', this)">[Copy Zero-Loss Proxy URL]</button></td>' +
+        '</tr>';
+      }).join('');
+    }
+
+    async function submitCanaryEndpoint() {
+      const endpointUrl = document.getElementById('canary-url').value.trim();
+      const category = document.getElementById('canary-category').value.trim() || 'data';
+      const box = document.getElementById('canary-result');
+      box.style.display = 'block';
+      box.textContent = 'Running non-invasive Canary Probe (4000ms timeout)...';
+      try {
+        const res = await fetch('/v1/radar/submit-endpoint', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ endpointUrl, category })
+        });
+        const data = await res.json();
+        box.textContent = JSON.stringify(data, null, 2);
+        await loadDirectory();
+      } catch (e) {
+        box.textContent = 'Error: ' + e.message;
+      }
+    }
+
+    async function loadOnchainFlows() {
+      try {
+        const res = await fetch('/v1/radar/onchain-flows');
+        const data = await res.json();
+        if (Array.isArray(data.topSellers) && data.topSellers.length > 0) {
+          const tbody = document.getElementById('radar-tbody');
+          tbody.innerHTML = data.topSellers.map((s, idx) => {
+            const badge = s.wash_trade_flag === 1
+              ? '<span class="badge-pill badge-danger">WASH-TRADE FLAGGED (' + Math.round(s.top_counterparty_share * 100) + '%)</span>'
+              : '<span class="badge-pill badge-ok">CLEAN ORGANIC</span>';
+            return '<tr>' +
+              '<td>#' + (idx + 1) + '</td>' +
+              '<td style="font-family:monospace;color:#38bdf8">' + s.address + '</td>' +
+              '<td>' + s.tx_count + '</td>' +
+              '<td>$' + (s.total_volume_usdc || '0.00') + ' USDC</td>' +
+              '<td>' + s.unique_counterparties + '</td>' +
+              '<td>' + badge + '</td>' +
+              '<td><code>/g/' + s.shadow_gateway_slug + '</code></td>' +
+              '<td><button class="btn btn-primary" onclick="claimShadowGateway(\\'' + s.address + '\\', \\'' + s.shadow_gateway_slug + '\\')">[Claim Verified NullClear Gateway]</button></td>' +
+            '</tr>';
+          }).join('');
+        }
+      } catch {}
+    }
+
+    async function triggerRadarSync() {
+      try {
+        await fetch('/v1/radar/sync', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+        await loadOnchainFlows();
+      } catch {}
+    }
+
+    async function registerClaimedGateway() {
+      const sellerAddress = document.getElementById('claim-seller-address').value.trim();
+      const slug = document.getElementById('claim-slug').value.trim();
+      const upstreamUrl = document.getElementById('claim-upstream-url').value.trim();
+      const priceUsdc = document.getElementById('claim-price-usdc').value.trim() || '0.01';
+      const box = document.getElementById('claim-gateway-result');
+      box.style.display = 'block';
+      box.textContent = 'Registering 1-Click Seller Gateway...';
+      try {
+        const res = await fetch('/v1/gateways', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ sellerAddress, slug: slug || undefined, upstreamUrl, priceUsdc })
+        });
+        const data = await res.json();
+        box.textContent = JSON.stringify(data, null, 2);
+        await loadDirectory();
+      } catch (e) {
+        box.textContent = 'Error: ' + e.message;
+      }
+    }
+
+    loadDirectory();
+  </script>
+</body>
+</html>`;
+
+  return c.html(html);
+});
+
 

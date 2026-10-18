@@ -13,8 +13,11 @@ import { safepayRouter } from "./routes/safepay.js";
 import { safepayWebRouter } from "./routes/safepay-web.js";
 import { proxyRouter, handleUrlProxyRequest } from "./routes/proxy.js";
 import { gatewaysRouter, gatewayProxyRouter } from "./routes/gateways.js";
+import { radarRouter } from "./routes/radar.js";
 import { telemetryMiddleware, telemetryRouter } from "./middleware/telemetry.js";
 import { buildNullClearMetadata } from "./middleware/free-tier.js";
+import { runEcosystemCrawlAndAudit } from "./services/ecosystem-crawler.js";
+import { syncBaseEip3009Logs } from "./services/base-eip3009-indexer.js";
 
 declare const process: any;
 
@@ -75,7 +78,7 @@ app.use("*", async (c, next) => {
 
 // Domain routing:
 // - On nullclear.com / www.nullclear.com:
-//   * Agent protocol discovery paths (/llms.txt, /openapi.json, /.well-known/*, /v1/*, /mcp, /a2a) 301-redirect to https://nullclear.dev
+//   * Agent protocol discovery paths (/llms.txt, /openapi.json, /.well-known/*, /v1/*, /mcp, /a2a, /leaderboard) 301-redirect to https://nullclear.dev
 //   * Human commercial routes (/, /deal/*, /for/*, /sitemap.xml, /robots.txt) render NullClear SafePay directly
 app.use("*", async (c, next) => {
   const url = new URL(c.req.url);
@@ -89,6 +92,7 @@ app.use("*", async (c, next) => {
       p === "/openapi.json" ||
       p === "/api/v1/openapi.json" ||
       p === "/agents.md" ||
+      p === "/leaderboard" ||
       p.startsWith("/.well-known/") ||
       p.startsWith("/v1/") ||
       p.startsWith("/mcp") ||
@@ -141,11 +145,12 @@ app.route("/safepay", safepayWebRouter);
 app.get("/deal/:dealId", (c) => safepayWebRouter.fetch(c.req.raw, c.env));
 app.get("/for/:vertical", (c) => safepayWebRouter.fetch(c.req.raw, c.env));
 
-// Telemetry, Proxy, and Seller Gateway Routes
+// Telemetry, Proxy, Seller Gateway, and Radar Routes
 app.route("/v1/telemetry", telemetryRouter);
 app.route("/v1/proxy", proxyRouter);
 app.route("/v1/gateways", gatewaysRouter);
 app.route("/g", gatewayProxyRouter);
+app.route("/v1/radar", radarRouter);
 
 // A2A & x402 Route mountings
 app.route("/v1/sandbox", sandboxRouter);
@@ -157,5 +162,25 @@ app.route("/mcp", mcpHttpRouter);
 app.route("/a2a", a2aRouter);
 app.route("/", discoveryRouter);
 
+// Scheduled Cron Handler for Autonomous Ecosystem Crawler & Base Mainnet EIP-3009 Volume Indexer
+export async function scheduled(
+  _event: any,
+  env: Env["Bindings"],
+  ctx?: { waitUntil?: (promise: Promise<unknown>) => void }
+): Promise<void> {
+  const task = Promise.all([
+    runEcosystemCrawlAndAudit(env),
+    syncBaseEip3009Logs(env)
+  ]);
+  if (ctx && typeof ctx.waitUntil === "function") {
+    ctx.waitUntil(task);
+  } else {
+    await task;
+  }
+}
+
+(app as any).scheduled = scheduled;
+
 export default app;
 export { app };
+

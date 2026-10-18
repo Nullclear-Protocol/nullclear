@@ -38,3 +38,7 @@ BASE_SEPOLIA_RPC_URL = "https://sepolia.base.org"
 MIN_ONCHAIN_ATOMIC = "5000"
 MAX_DAILY_ONCHAIN_PER_WALLET = "50"
 
+[triggers]
+crons = ["*/15 * * * *"]
+
+

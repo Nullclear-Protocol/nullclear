@@ -85,7 +85,11 @@ export function classifyActorType(
     (ua.includes("chrome/") ||
       ua.includes("safari/") ||
       ua.includes("firefox/") ||
-      ua.includes("edg/")) &&
+      ua.includes("edg/") ||
+      ua.includes("macintosh") ||
+      ua.includes("windows nt") ||
+      ua.includes("applewebkit") ||
+      ua.includes("x11")) &&
     !ua.includes("headless") &&
     !ua.includes("bot") &&
     !ua.includes("spider") &&

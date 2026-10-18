@@ -111,6 +111,46 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
   return {
     tools: [
       {
+        name: "nullclear_discover_verified_x402_apis",
+        description:
+          "Search the live NullClear Ecosystem Directory for audited, high-uptime x402 & ERC-8004 APIs by topic/keyword, category, minimum uptime, or max latency. Automatically returns the NullClear-protected Zero-Loss Proxy URL ('https://api.nullclear.dev/https://...') for each endpoint.",
+        annotations: {
+          title: "Discover Verified High-Uptime x402 APIs",
+          readOnlyHint: true,
+          destructiveHint: false,
+          idempotentHint: true,
+          openWorldHint: true
+        },
+        inputSchema: {
+          type: "object",
+          properties: {
+            query: {
+              type: "string",
+              description: "Topic or keyword search (e.g. 'oracle', 'security', 'token', 'wallet', 'price')"
+            },
+            category: {
+              type: "string",
+              description: "Category filter (e.g. 'oracle', 'security', 'data', 'ai')"
+            },
+            minUptime: {
+              type: "number",
+              description: "Minimum rolling uptime score percentage (0-100, default 95)",
+              default: 95
+            },
+            maxLatencyMs: {
+              type: "number",
+              description: "Maximum acceptable edge round-trip latency in ms (default 2000)",
+              default: 2000
+            },
+            verifiedOnly: {
+              type: "boolean",
+              description: "Only return verified x402 endpoints (default true)",
+              default: true
+            }
+          }
+        }
+      },
+      {
         name: "nullclear_token_security_audit",
         description:
           "Audit any Base ERC-20 token address for honeypots, buy/sell taxes, verified bytecode, and x402 compatibility via NullClear Bazaar. Works out-of-the-box with zero configuration (10 free daily calls included).",
@@ -537,6 +577,35 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   const { name, arguments: args } = request.params;
 
   try {
+    if (name === "nullclear_discover_verified_x402_apis") {
+      const params = new URLSearchParams();
+      const query =
+        typeof args?.query === "string"
+          ? args.query
+          : typeof args?.topic === "string"
+            ? args.topic
+            : undefined;
+      if (query) params.set("query", query);
+      if (typeof args?.category === "string" && args.category) params.set("category", args.category);
+      if (typeof args?.minUptime === "number") params.set("minUptime", String(args.minUptime));
+      if (typeof args?.maxLatencyMs === "number") params.set("maxLatencyMs", String(args.maxLatencyMs));
+      if (args?.verifiedOnly !== false) params.set("verifiedOnly", "true");
+
+      const url = `${ARBITER_URL}/v1/bazaar/directory?${params.toString()}`;
+      const res = await fetch(url, {
+        headers: { Accept: "application/json", "x-mcp-session": MCP_SESSION_ID }
+      });
+      const data = await res.json();
+      return {
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify(data, null, 2)
+          }
+        ]
+      };
+    }
+
     if (name === "nullclear_token_security_audit") {
       const tokenAddress = String(args?.tokenAddress || "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913");
       const url = `${ARBITER_URL}/v1/bazaar/token-security?tokenAddress=${encodeURIComponent(tokenAddress)}`;

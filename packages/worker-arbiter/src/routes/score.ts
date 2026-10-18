@@ -22,6 +22,26 @@ scoreRouter.get("/", async (c) => {
   });
 });
 
+scoreRouter.get("/:agentId", async (c) => {
+  let agentId = c.req.param("agentId");
+  if (!agentId || agentId === "{agentId}") {
+    agentId = "124595";
+  }
+
+  const store = getArbiterStore(c.env);
+  const result = await computeTrustScore(agentId, 8453, store, {
+    arbiterPrivateKey: c.env.ARBITER_PRIVATE_KEY,
+    rpcUrl: c.env.BASE_MAINNET_RPC_URL || c.env.BASE_RPC_URL
+  });
+
+  return c.json({
+    success: true,
+    ...result,
+    data: result,
+    _nullclear: buildNullClearMetadata()
+  });
+});
+
 scoreRouter.get("/:chainId/:agentId", async (c) => {
   let chainIdParam = c.req.param("chainId");
   let agentId = c.req.param("agentId");
@@ -49,7 +69,9 @@ scoreRouter.get("/:chainId/:agentId", async (c) => {
 
   return c.json({
     success: true,
+    ...result,
     data: result,
     _nullclear: buildNullClearMetadata()
   });
 });
+

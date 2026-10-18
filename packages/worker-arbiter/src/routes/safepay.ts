@@ -374,7 +374,39 @@ safepayRouter.post("/deals", async (c) => {
 safepayRouter.get("/deals/:dealId", async (c) => {
   const dealId = c.req.param("dealId");
   const store = getArbiterStore(c.env);
-  const deal = await store.getSafePayDeal(dealId);
+  let deal = await store.getSafePayDeal(dealId);
+
+  if (!deal && dealId === "demo-ai-audit-101") {
+    const now = Date.now();
+    deal = {
+      id: "demo-ai-audit-101",
+      title: "Demo: AI Smart Contract Audit & Dataset Bundle",
+      description: "Zero-wallet interactive SafePay escrow sandbox deal",
+      creatorRole: "seller",
+      sellerAddress: "0x70997970C51812dc3A010C7d01b50e0d17dc79C8",
+      chainId: 8453,
+      amountAtomic: "500000000",
+      feePayer: "seller",
+      sellerNetAtomic: "495000000",
+      protocolFeeAtomic: "5000000",
+      totalBuyerSignAtomic: "500000000",
+      status: "CREATED",
+      expiresAt: Math.floor(now / 1000) + 7 * 86400,
+      verificationMode: "DATASET_SCHEMA",
+      verificationSpec: {
+        requiredColumns: ["email", "company", "domain", "revenueUsd"],
+        minRows: 3,
+        disallowNulls: true,
+        rejectRefusals: true,
+        inspectionWindowSeconds: 0,
+        autoSettleOnPass: true,
+        strictSingleShot: false
+      },
+      createdAt: now,
+      updatedAt: now
+    };
+    await store.saveSafePayDeal(deal);
+  }
 
   if (!deal) {
     return c.json({ success: false, error: "DEAL_NOT_FOUND", message: `Deal ${dealId} not found` }, 404);

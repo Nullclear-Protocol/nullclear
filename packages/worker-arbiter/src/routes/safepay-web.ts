@@ -526,7 +526,7 @@ export function renderSafePayLandingHtml(options: {
               <div style="color:var(--muted);font-size:12px;">Watch a real Dual EIP-3009 Lock + Edge Dataset Verification + Atomic Base Payout</div>
             </div>
             <button type="button" id="runDemoBtn" class="btn-secondary" style="border-color:var(--emerald);color:var(--emerald);">
-              ▶ Simulate $500 Escrow in 10s
+              ▶ Launch Instant Demo Deal (No Wallet Needed)
             </button>
           </div>
           <div id="demoTerminal" class="terminal mono" style="display:none;"></div>
@@ -966,10 +966,11 @@ carol.cto@base.org,Base Ecosystem,sk_live_555666777aaaa,890000</textarea>
           })
         });
         const created = await createRes.json();
-        append("[0.4s] ✓ Deal created: " + created.dealId + " (Seller Net: $495.00 USDC | Fee: $5.00 USDC -> 0xB586...d5c)");
-        append("[0.8s] ✓ Ready! Opening live interactive Deal Room for " + created.dealId + "...", "#10B981");
+        const targetDealId = created.dealId || "demo-ai-audit-101";
+        append("[0.4s] ✓ Deal created: " + targetDealId + " (Seller Net: $495.00 USDC | Fee: $5.00 USDC -> 0xB586...d5c)");
+        append("[0.8s] ✓ Ready! Opening live interactive Deal Room for " + targetDealId + " (/deal/demo-ai-audit-101)...", "#10B981");
         setTimeout(() => {
-          window.location.href = "/deal/" + created.dealId + "?demo=1";
+          window.location.href = "/deal/" + targetDealId + "?demo=1";
         }, 900);
       });
 
@@ -1621,8 +1622,37 @@ safepayWebRouter.get("/for/:vertical", (c) => {
 safepayWebRouter.get("/deal/:dealId", async (c) => {
   const dealId = c.req.param("dealId");
   const store = getArbiterStore(c.env);
-  // Pre-warm deal lookup if exists
-  await store.getSafePayDeal(dealId);
+  let existing = await store.getSafePayDeal(dealId);
+  if (!existing && dealId === "demo-ai-audit-101") {
+    const now = Date.now();
+    await store.saveSafePayDeal({
+      id: "demo-ai-audit-101",
+      title: "Demo: AI Smart Contract Audit & Dataset Bundle",
+      description: "Zero-wallet interactive SafePay escrow sandbox deal",
+      creatorRole: "seller",
+      sellerAddress: "0x70997970C51812dc3A010C7d01b50e0d17dc79C8",
+      chainId: 8453,
+      amountAtomic: "500000000",
+      feePayer: "seller",
+      sellerNetAtomic: "495000000",
+      protocolFeeAtomic: "5000000",
+      totalBuyerSignAtomic: "500000000",
+      status: "CREATED",
+      expiresAt: Math.floor(now / 1000) + 7 * 86400,
+      verificationMode: "DATASET_SCHEMA",
+      verificationSpec: {
+        requiredColumns: ["email", "company", "domain", "revenueUsd"],
+        minRows: 3,
+        disallowNulls: true,
+        rejectRefusals: true,
+        inspectionWindowSeconds: 0,
+        autoSettleOnPass: true,
+        strictSingleShot: false
+      },
+      createdAt: now,
+      updatedAt: now
+    });
+  }
   return c.html(renderSafePayDealRoomHtml(dealId));
 });
 

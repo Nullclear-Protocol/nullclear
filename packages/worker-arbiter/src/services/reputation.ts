@@ -24,6 +24,8 @@ export interface TrustScoreResult {
   score: number;
   grade: "A" | "B" | "C" | "D" | "F";
   sybilFlags: string[];
+  wash_trade_flag?: number;
+  top_counterparty_share?: number;
   metrics: TrustScoreMetrics;
   timestamp: number;
   arbiterSignature: `0x${string}`;
@@ -98,13 +100,16 @@ export async function computeTrustScore(
     }
   }
 
-  // 2. Fetch local store metrics
-  const stats = await store.getAgentStats(agentId);
-  const edges = await store.getCounterpartyEdges(agentId);
+  // 2. Fetch local store metrics & Base EIP-3009 On-Chain Volume Radar profile
+  const [stats, edges, onchainProfile] = await Promise.all([
+    store.getAgentStats(agentId),
+    store.getCounterpartyEdges(agentId),
+    store.getOnchainCounterpartyProfile(agentId)
+  ]);
 
-  const totalCleared = stats.totalClearedTx;
+  let totalCleared = stats.totalClearedTx;
   const totalFailed = stats.totalFailedValidations;
-  const uniqueCounterparties = edges.length;
+  let uniqueCounterparties = edges.length;
 
   let totalEdgeTx = 0;
   let maxEdgeTx = 0;
@@ -114,7 +119,13 @@ export async function computeTrustScore(
       maxEdgeTx = edge.txCount;
     }
   }
-  const maxSingleBuyerShare = totalEdgeTx > 0 ? maxEdgeTx / totalEdgeTx : 0;
+  let maxSingleBuyerShare = totalEdgeTx > 0 ? maxEdgeTx / totalEdgeTx : 0;
+
+  if (onchainProfile) {
+    totalCleared = Math.max(totalCleared, onchainProfile.tx_count);
+    uniqueCounterparties = Math.max(uniqueCounterparties, onchainProfile.unique_counterparties);
+    maxSingleBuyerShare = Math.max(maxSingleBuyerShare, onchainProfile.top_counterparty_share);
+  }
 
   // 3. Check active corporate KYA Mandate
   const kya = await store.getKyaMandate(agentId, chainId);
@@ -138,14 +149,23 @@ export async function computeTrustScore(
   const sybilFlags: string[] = [];
   let washPenalty = 0;
 
-  if (totalCleared >= 3 && maxSingleBuyerShare > 0.6) {
+  const isOnchainWashFlagged = Boolean(
+    onchainProfile &&
+      (onchainProfile.wash_trade_flag === 1 ||
+        (onchainProfile.tx_count >= 5 && onchainProfile.top_counterparty_share > 0.6))
+  );
+
+  if ((totalCleared >= 3 && maxSingleBuyerShare > 0.6) || isOnchainWashFlagged) {
     washPenalty = 25;
     sybilFlags.push("HIGH_COUNTERPARTY_CONCENTRATION_WASH_RISK");
+    if (isOnchainWashFlagged) {
+      sybilFlags.push("ONCHAIN_EIP3009_WASH_TRADE_DETECTED");
+    }
   }
 
   // Counterparty diversity & volume track record (up to 23 points for clean composite scores up to 100)
   let diversityBonus = 0;
-  if (totalCleared > 0 && uniqueCounterparties > 1 && maxSingleBuyerShare <= 0.6) {
+  if (totalCleared > 0 && uniqueCounterparties > 1 && maxSingleBuyerShare <= 0.6 && !isOnchainWashFlagged) {
     const counterpartyPoints = Math.min(15, uniqueCounterparties * 3);
     const volumePoints = Math.min(8, Math.floor(totalCleared / 3));
     diversityBonus = counterpartyPoints + volumePoints;
@@ -183,6 +203,8 @@ export async function computeTrustScore(
     score,
     grade,
     sybilFlags,
+    wash_trade_flag: sybilFlags.length > 0 ? 1 : 0,
+    top_counterparty_share: maxSingleBuyerShare,
     metrics: {
       totalClearedTx: totalCleared,
       totalFailedValidations: totalFailed,

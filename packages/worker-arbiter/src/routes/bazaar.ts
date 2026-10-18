@@ -1586,3 +1586,167 @@ bazaarRouter.all("/verify", async (c) => {
     })
   });
 });
+
+// 7. GET /v1/bazaar/directory - Machine-Readable x402 & ERC-8004 Ecosystem Directory
+bazaarRouter.get("/directory", async (c) => {
+  const store = getArbiterStore(c.env);
+
+  const minUptimeParam = c.req.query("minUptime");
+  const maxLatencyParam = c.req.query("maxLatencyMs");
+  const verifiedOnlyParam = c.req.query("verifiedOnly");
+  const categoryParam = c.req.query("category");
+  const queryParam =
+    c.req.query("query") ||
+    c.req.query("q") ||
+    c.req.query("topic") ||
+    c.req.query("search") ||
+    undefined;
+
+  const minUptime =
+    minUptimeParam !== undefined && minUptimeParam !== "" ? Number(minUptimeParam) : undefined;
+  const maxLatencyMs =
+    maxLatencyParam !== undefined && maxLatencyParam !== "" ? Number(maxLatencyParam) : undefined;
+  const verifiedOnly =
+    verifiedOnlyParam !== undefined
+      ? verifiedOnlyParam.toLowerCase() === "true" || verifiedOnlyParam === "1"
+      : undefined;
+
+  const endpoints = await store.queryIndexedEndpoints({
+    minUptime,
+    maxLatencyMs,
+    verifiedOnly,
+    category: categoryParam || undefined,
+    query: queryParam
+  });
+
+  return c.json({
+    service: "NullClear x402 & ERC-8004 Verified Ecosystem Directory",
+    totalEndpoints: endpoints.length,
+    filters: {
+      minUptime: minUptime ?? null,
+      maxLatencyMs: maxLatencyMs ?? null,
+      verifiedOnly: verifiedOnly ?? false,
+      category: categoryParam || null,
+      query: queryParam || null
+    },
+    endpoints: endpoints.map((ep) => ({
+      ...ep,
+      endpointUrl: ep.endpoint_url,
+      originDomain: ep.origin_domain,
+      agentIdErc8004: ep.agent_id_erc8004,
+      sellerAddress: ep.seller_address,
+      priceAtomic: ep.price_atomic,
+      priceUsdc: ep.price_atomic
+        ? (Number(ep.price_atomic) / 1_000_000).toFixed(Number(ep.price_atomic) < 10000 ? 4 : 2)
+        : "0.01",
+      httpStatus: ep.http_status,
+      isValidX402: ep.is_valid_x402 === 1,
+      latencyMs: ep.latency_ms,
+      uptimeScore: ep.uptime_score,
+      hallucinationRate: ep.hallucination_rate,
+      totalAudits: ep.total_audits,
+      failedAudits: ep.failed_audits,
+      nullclearProxyUrl: ep.nullclear_proxy_url
+    })),
+    _nullclear: buildNullClearMetadata()
+  });
+});
+
+// 8. GET /v1/bazaar - Master Bazaar Catalog (Native Intelligence Suite + Registered 1-Click Seller Gateways)
+bazaarRouter.get("/", async (c) => {
+  const store = getArbiterStore(c.env);
+  const [gateways, indexedEndpoints] = await Promise.all([
+    store.listSellerGateways(),
+    store.queryIndexedEndpoints({ limit: 50 })
+  ]);
+
+  const nativeResources = [
+    {
+      id: "bazaar-market-oracle",
+      slug: "market-oracle",
+      path: "/v1/bazaar/market-oracle",
+      url: "https://api.nullclear.dev/v1/bazaar/market-oracle",
+      method: "GET",
+      priceAtomic: "10000",
+      priceUsdc: "0.01",
+      sellerAddress: NULLCLEAR_TREASURY_ADDRESS,
+      category: "oracle",
+      description: BAZAAR_MARKET_ORACLE_EXTENSION.description
+    },
+    {
+      id: "bazaar-token-security",
+      slug: "token-security",
+      path: "/v1/bazaar/token-security",
+      url: "https://api.nullclear.dev/v1/bazaar/token-security",
+      method: "GET",
+      priceAtomic: "10000",
+      priceUsdc: "0.01",
+      sellerAddress: NULLCLEAR_TREASURY_ADDRESS,
+      category: "security",
+      description: BAZAAR_TOKEN_SECURITY_EXTENSION.description
+    },
+    {
+      id: "bazaar-wallet-risk",
+      slug: "wallet-risk",
+      path: "/v1/bazaar/wallet-risk",
+      url: "https://api.nullclear.dev/v1/bazaar/wallet-risk",
+      method: "GET",
+      priceAtomic: "10000",
+      priceUsdc: "0.01",
+      sellerAddress: NULLCLEAR_TREASURY_ADDRESS,
+      category: "security",
+      description: BAZAAR_WALLET_RISK_EXTENSION.description
+    },
+    {
+      id: "bazaar-verified-fetch",
+      slug: "verified-fetch",
+      path: "/v1/bazaar/verified-fetch",
+      url: "https://api.nullclear.dev/v1/bazaar/verified-fetch",
+      method: "GET",
+      priceAtomic: "10000",
+      priceUsdc: "0.01",
+      sellerAddress: NULLCLEAR_TREASURY_ADDRESS,
+      category: "data",
+      description: BAZAAR_VERIFIED_FETCH_EXTENSION.description
+    },
+    {
+      id: "bazaar-audit",
+      slug: "audit",
+      path: "/v1/bazaar/audit",
+      url: "https://api.nullclear.dev/v1/bazaar/audit",
+      method: "GET",
+      priceAtomic: "10000",
+      priceUsdc: "0.01",
+      sellerAddress: NULLCLEAR_TREASURY_ADDRESS,
+      category: "security",
+      description: BAZAAR_AUDIT_EXTENSION.description
+    }
+  ];
+
+  const gatewayResources = gateways.map((gw) => ({
+    id: gw.id,
+    slug: gw.slug,
+    path: `/g/${gw.slug}`,
+    url: `https://api.nullclear.dev/g/${gw.slug}`,
+    upstreamUrl: gw.upstreamUrl,
+    method: "GET",
+    priceAtomic: gw.priceAtomic,
+    priceUsdc: (Number(gw.priceAtomic) / 1_000_000).toFixed(Number(gw.priceAtomic) < 10000 ? 4 : 2),
+    sellerAddress: gw.sellerAddress,
+    category: gw.category,
+    validationPreset: gw.validationPreset,
+    description: gw.description
+  }));
+
+  return c.json({
+    service: "NullClear x402 Bazaar & Seller Gateway Catalog",
+    network: "eip155:8453",
+    freeTierDailyLimit: 10,
+    resources: [...nativeResources, ...gatewayResources],
+    gateways: gatewayResources,
+    indexedEndpointsCount: indexedEndpoints.length,
+    _nullclear: buildNullClearMetadata()
+  });
+});
+
+

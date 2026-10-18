@@ -180,6 +180,200 @@ export interface SellerGatewayRecord {
   createdAt: number;
 }
 
+export type IndexedEndpointSource =
+  | "ERC8004_ONCHAIN"
+  | "X402_MANIFEST"
+  | "ONCHAIN_EIP3009"
+  | "USER_SUBMITTED";
+
+export interface IndexedEndpointRecord {
+  id: string;
+  endpoint_url: string;
+  origin_domain: string;
+  agent_id_erc8004?: string | null;
+  seller_address?: string | null;
+  price_atomic?: string | null;
+  http_status?: number | null;
+  is_valid_x402: number;
+  latency_ms?: number | null;
+  uptime_score: number;
+  hallucination_rate: number;
+  total_audits: number;
+  failed_audits: number;
+  category?: string | null;
+  description?: string | null;
+  nullclear_proxy_url: string;
+  last_audited_at: number;
+  source: IndexedEndpointSource;
+}
+
+export interface IndexedEndpointQueryFilter {
+  minUptime?: number;
+  maxLatencyMs?: number;
+  verifiedOnly?: boolean;
+  category?: string;
+  query?: string;
+  limit?: number;
+}
+
+export interface IndexerStateRecord {
+  key: string;
+  last_indexed_block: number;
+  updated_at: number;
+}
+
+export interface OnchainEip3009TransferRecord {
+  tx_hash: string;
+  block_number: number;
+  timestamp: number;
+  buyer_address: string;
+  seller_address: string;
+  amount_atomic: string;
+  nonce: string;
+  is_micropayment: number;
+}
+
+export interface OnchainCounterpartyProfileRecord {
+  address: string;
+  role: "SELLER" | "BUYER" | "BOTH";
+  tx_count: number;
+  total_volume_atomic: string;
+  unique_counterparties: number;
+  top_counterparty_share: number;
+  wash_trade_flag: number;
+  shadow_gateway_slug: string;
+  last_seen_block: number;
+}
+
+export const DEFAULT_SEEDED_ENDPOINTS: IndexedEndpointRecord[] = [
+  {
+    id: "ep_bazaar_market_oracle",
+    endpoint_url: "https://api.nullclear.dev/v1/bazaar/market-oracle",
+    origin_domain: "api.nullclear.dev",
+    agent_id_erc8004: "124595",
+    seller_address: "0xB586eFcCa41dF27ad3873BEcA54da0c30bf04d5c",
+    price_atomic: "10000",
+    http_status: 402,
+    is_valid_x402: 1,
+    latency_ms: 38,
+    uptime_score: 100.0,
+    hallucination_rate: 0.0,
+    total_audits: 24,
+    failed_audits: 0,
+    category: "oracle",
+    description:
+      "Live cross-verified crypto price oracle (BTC, ETH, SOL, BASE tokens) with deterministic spread invariant check and cryptographic attestation.",
+    nullclear_proxy_url: "https://api.nullclear.dev/https://api.nullclear.dev/v1/bazaar/market-oracle",
+    last_audited_at: 1776400000000,
+    source: "X402_MANIFEST"
+  },
+  {
+    id: "ep_bazaar_token_security",
+    endpoint_url: "https://api.nullclear.dev/v1/bazaar/token-security",
+    origin_domain: "api.nullclear.dev",
+    agent_id_erc8004: "124595",
+    seller_address: "0xB586eFcCa41dF27ad3873BEcA54da0c30bf04d5c",
+    price_atomic: "5000",
+    http_status: 402,
+    is_valid_x402: 1,
+    latency_ms: 42,
+    uptime_score: 100.0,
+    hallucination_rate: 0.0,
+    total_audits: 24,
+    failed_audits: 0,
+    category: "security",
+    description:
+      "Base Mainnet ERC-20 token security, contract bytecode verification, liquidity & honeypot risk scanner for AI trading agents.",
+    nullclear_proxy_url: "https://api.nullclear.dev/https://api.nullclear.dev/v1/bazaar/token-security",
+    last_audited_at: 1776400000000,
+    source: "X402_MANIFEST"
+  },
+  {
+    id: "ep_bazaar_wallet_risk",
+    endpoint_url: "https://api.nullclear.dev/v1/bazaar/wallet-risk",
+    origin_domain: "api.nullclear.dev",
+    agent_id_erc8004: "124595",
+    seller_address: "0xB586eFcCa41dF27ad3873BEcA54da0c30bf04d5c",
+    price_atomic: "5000",
+    http_status: 402,
+    is_valid_x402: 1,
+    latency_ms: 45,
+    uptime_score: 100.0,
+    hallucination_rate: 0.0,
+    total_audits: 24,
+    failed_audits: 0,
+    category: "security",
+    description:
+      "Base Mainnet counterparty wallet OFAC sanctions screening, Sybil wash-trading concentration flags, and ERC-8004 reputation score.",
+    nullclear_proxy_url: "https://api.nullclear.dev/https://api.nullclear.dev/v1/bazaar/wallet-risk",
+    last_audited_at: 1776400000000,
+    source: "X402_MANIFEST"
+  },
+  {
+    id: "ep_bazaar_verified_fetch",
+    endpoint_url: "https://api.nullclear.dev/v1/bazaar/verified-fetch",
+    origin_domain: "api.nullclear.dev",
+    agent_id_erc8004: "124595",
+    seller_address: "0xB586eFcCa41dF27ad3873BEcA54da0c30bf04d5c",
+    price_atomic: "10000",
+    http_status: 402,
+    is_valid_x402: 1,
+    latency_ms: 54,
+    uptime_score: 99.5,
+    hallucination_rate: 0.0,
+    total_audits: 20,
+    failed_audits: 0,
+    category: "data",
+    description:
+      "Cryptographically verified HTTP URL fetcher with canonical LLM refusal detection, JSON schema validation, and deep value invariants.",
+    nullclear_proxy_url: "https://api.nullclear.dev/https://api.nullclear.dev/v1/bazaar/verified-fetch",
+    last_audited_at: 1776400000000,
+    source: "X402_MANIFEST"
+  },
+  {
+    id: "ep_bazaar_audit",
+    endpoint_url: "https://api.nullclear.dev/v1/bazaar/audit",
+    origin_domain: "api.nullclear.dev",
+    agent_id_erc8004: "124595",
+    seller_address: "0xB586eFcCa41dF27ad3873BEcA54da0c30bf04d5c",
+    price_atomic: "10000",
+    http_status: 402,
+    is_valid_x402: 1,
+    latency_ms: 35,
+    uptime_score: 100.0,
+    hallucination_rate: 0.0,
+    total_audits: 18,
+    failed_audits: 0,
+    category: "security",
+    description:
+      "ERC-8004 agent Sybil reputation score, wash-trading cluster risk, and x402 schema-escrow readiness audit on Base Mainnet.",
+    nullclear_proxy_url: "https://api.nullclear.dev/https://api.nullclear.dev/v1/bazaar/audit",
+    last_audited_at: 1776400000000,
+    source: "ERC8004_ONCHAIN"
+  },
+  {
+    id: "ep_bazaar_verify",
+    endpoint_url: "https://api.nullclear.dev/v1/bazaar/verify",
+    origin_domain: "api.nullclear.dev",
+    agent_id_erc8004: "124595",
+    seller_address: "0xB586eFcCa41dF27ad3873BEcA54da0c30bf04d5c",
+    price_atomic: "10000",
+    http_status: 402,
+    is_valid_x402: 1,
+    latency_ms: 31,
+    uptime_score: 100.0,
+    hallucination_rate: 0.0,
+    total_audits: 18,
+    failed_audits: 0,
+    category: "ai",
+    description:
+      "Cryptographically verify an autonomous agent's x402 schema contract compatibility and active clearing readiness on Base Mainnet.",
+    nullclear_proxy_url: "https://api.nullclear.dev/https://api.nullclear.dev/v1/bazaar/verify",
+    last_audited_at: 1776400000000,
+    source: "ERC8004_ONCHAIN"
+  }
+];
+
 export interface ProtocolStats {
   totalClearings: number;
   validSettlements: number;
@@ -205,6 +399,7 @@ export interface IArbiterStore {
   saveKyaMandate(mandate: StoredKyaRecord): Promise<void>;
   getAgent(agentId: string, chainId: number): Promise<StoredAgentRecord | null>;
   saveAgent(agent: StoredAgentRecord): Promise<void>;
+  listAgents(): Promise<StoredAgentRecord[]>;
   getProtocolStats(): Promise<ProtocolStats>;
   saveSafePayDeal(deal: SafePayDealRecord): Promise<void>;
   getSafePayDeal(dealId: string): Promise<SafePayDealRecord | null>;
@@ -216,6 +411,16 @@ export interface IArbiterStore {
   getSellerGatewayBySlug(slug: string): Promise<SellerGatewayRecord | null>;
   listSellerGateways(category?: string): Promise<SellerGatewayRecord[]>;
   incrementSellerGatewayCalls(slug: string): Promise<void>;
+  upsertIndexedEndpoint(record: IndexedEndpointRecord): Promise<void>;
+  getIndexedEndpointByUrl(endpointUrl: string): Promise<IndexedEndpointRecord | null>;
+  queryIndexedEndpoints(filter?: IndexedEndpointQueryFilter): Promise<IndexedEndpointRecord[]>;
+  getIndexerState(key: string): Promise<IndexerStateRecord | null>;
+  setIndexerState(key: string, lastIndexedBlock: number): Promise<void>;
+  saveOnchainEip3009Transfer(transfer: OnchainEip3009TransferRecord): Promise<boolean>;
+  listOnchainEip3009Transfers(limit?: number): Promise<OnchainEip3009TransferRecord[]>;
+  upsertOnchainCounterpartyProfile(profile: OnchainCounterpartyProfileRecord): Promise<void>;
+  getOnchainCounterpartyProfile(address: string): Promise<OnchainCounterpartyProfileRecord | null>;
+  listOnchainCounterpartyProfiles(roleFilter?: "SELLER" | "BUYER" | "BOTH", limit?: number): Promise<OnchainCounterpartyProfileRecord[]>;
   reset(): void;
 }
 
@@ -234,6 +439,20 @@ export class MemoryArbiterStore implements IArbiterStore {
   private trafficEvents: TrafficEventRecord[] = [];
   private freeTierUsage = new Map<string, number>();
   private sellerGateways = new Map<string, SellerGatewayRecord>();
+  private indexedEndpoints = new Map<string, IndexedEndpointRecord>();
+  private indexerState = new Map<string, IndexerStateRecord>();
+  private onchainTransfers = new Map<string, OnchainEip3009TransferRecord>();
+  private counterpartyProfiles = new Map<string, OnchainCounterpartyProfileRecord>();
+
+  constructor() {
+    this.seedDefaults();
+  }
+
+  private seedDefaults(): void {
+    for (const ep of DEFAULT_SEEDED_ENDPOINTS) {
+      this.indexedEndpoints.set(ep.endpoint_url, { ...ep });
+    }
+  }
 
   reset(): void {
     this.stats.clear();
@@ -246,6 +465,11 @@ export class MemoryArbiterStore implements IArbiterStore {
     this.trafficEvents = [];
     this.freeTierUsage.clear();
     this.sellerGateways.clear();
+    this.indexedEndpoints.clear();
+    this.indexerState.clear();
+    this.onchainTransfers.clear();
+    this.counterpartyProfiles.clear();
+    this.seedDefaults();
   }
 
   async hasUsedNonce(network: string, buyerAddress: string, nonce: string): Promise<boolean> {
@@ -345,6 +569,10 @@ export class MemoryArbiterStore implements IArbiterStore {
   async saveAgent(agent: StoredAgentRecord): Promise<void> {
     const key = `${agent.agentId}:${agent.chainId}`;
     this.agents.set(key, agent);
+  }
+
+  async listAgents(): Promise<StoredAgentRecord[]> {
+    return Array.from(this.agents.values()).map((a) => ({ ...a }));
   }
 
   async getProtocolStats(): Promise<ProtocolStats> {
@@ -452,6 +680,148 @@ export class MemoryArbiterStore implements IArbiterStore {
       found.totalCalls = (found.totalCalls || 0) + 1;
     }
   }
+
+  async upsertIndexedEndpoint(record: IndexedEndpointRecord): Promise<void> {
+    this.indexedEndpoints.set(record.endpoint_url, {
+      ...record,
+      nullclear_proxy_url: record.nullclear_proxy_url || `https://api.nullclear.dev/${record.endpoint_url}`
+    });
+  }
+
+  async getIndexedEndpointByUrl(endpointUrl: string): Promise<IndexedEndpointRecord | null> {
+    const found = this.indexedEndpoints.get(endpointUrl);
+    return found ? { ...found } : null;
+  }
+
+  async queryIndexedEndpoints(filter?: IndexedEndpointQueryFilter): Promise<IndexedEndpointRecord[]> {
+    const all = Array.from(this.indexedEndpoints.values());
+    return filterAndSortIndexedEndpoints(all, filter);
+  }
+
+  async getIndexerState(key: string): Promise<IndexerStateRecord | null> {
+    const found = this.indexerState.get(key);
+    return found ? { ...found } : null;
+  }
+
+  async setIndexerState(key: string, lastIndexedBlock: number): Promise<void> {
+    this.indexerState.set(key, {
+      key,
+      last_indexed_block: lastIndexedBlock,
+      updated_at: Date.now()
+    });
+  }
+
+  async saveOnchainEip3009Transfer(transfer: OnchainEip3009TransferRecord): Promise<boolean> {
+    const normHash = transfer.tx_hash.toLowerCase();
+    if (this.onchainTransfers.has(normHash)) {
+      return false;
+    }
+    this.onchainTransfers.set(normHash, {
+      ...transfer,
+      tx_hash: normHash,
+      buyer_address: transfer.buyer_address.toLowerCase(),
+      seller_address: transfer.seller_address.toLowerCase()
+    });
+    return true;
+  }
+
+  async listOnchainEip3009Transfers(limit = 50): Promise<OnchainEip3009TransferRecord[]> {
+    return Array.from(this.onchainTransfers.values())
+      .sort((a, b) => b.block_number - a.block_number || b.timestamp - a.timestamp)
+      .slice(0, limit);
+  }
+
+  async upsertOnchainCounterpartyProfile(profile: OnchainCounterpartyProfileRecord): Promise<void> {
+    const normAddr = profile.address.toLowerCase();
+    this.counterpartyProfiles.set(normAddr, {
+      ...profile,
+      address: normAddr
+    });
+  }
+
+  async getOnchainCounterpartyProfile(address: string): Promise<OnchainCounterpartyProfileRecord | null> {
+    const found = this.counterpartyProfiles.get(address.toLowerCase());
+    return found ? { ...found } : null;
+  }
+
+  async listOnchainCounterpartyProfiles(
+    roleFilter?: "SELLER" | "BUYER" | "BOTH",
+    limit = 50
+  ): Promise<OnchainCounterpartyProfileRecord[]> {
+    let all = Array.from(this.counterpartyProfiles.values());
+    if (roleFilter === "SELLER") {
+      all = all.filter((p) => p.role === "SELLER" || p.role === "BOTH");
+    } else if (roleFilter === "BUYER") {
+      all = all.filter((p) => p.role === "BUYER" || p.role === "BOTH");
+    } else if (roleFilter === "BOTH") {
+      all = all.filter((p) => p.role === "BOTH");
+    }
+    return all
+      .sort((a, b) => {
+        if (a.wash_trade_flag !== b.wash_trade_flag) {
+          return a.wash_trade_flag - b.wash_trade_flag;
+        }
+        if (b.tx_count !== a.tx_count) {
+          return b.tx_count - a.tx_count;
+        }
+        const volDiff = BigInt(b.total_volume_atomic || "0") - BigInt(a.total_volume_atomic || "0");
+        return volDiff > 0n ? 1 : volDiff < 0n ? -1 : 0;
+      })
+      .slice(0, limit);
+  }
+}
+
+export function filterAndSortIndexedEndpoints(
+  endpoints: IndexedEndpointRecord[],
+  filter?: IndexedEndpointQueryFilter
+): IndexedEndpointRecord[] {
+  let list = endpoints.map((e) => ({ ...e }));
+
+  if (filter) {
+    if (typeof filter.minUptime === "number" && !Number.isNaN(filter.minUptime)) {
+      list = list.filter((e) => Number(e.uptime_score) >= filter.minUptime!);
+    }
+    if (typeof filter.maxLatencyMs === "number" && !Number.isNaN(filter.maxLatencyMs)) {
+      list = list.filter((e) => (e.latency_ms ?? 999999) <= filter.maxLatencyMs!);
+    }
+    if (filter.verifiedOnly === true) {
+      list = list.filter((e) => Number(e.is_valid_x402) === 1);
+    }
+    if (filter.category && filter.category.trim() !== "") {
+      const cat = filter.category.trim().toLowerCase();
+      list = list.filter((e) => (e.category || "").toLowerCase() === cat);
+    }
+    if (filter.query && filter.query.trim() !== "") {
+      const terms = filter.query
+        .trim()
+        .toLowerCase()
+        .split(/\s+/)
+        .filter(Boolean);
+      list = list.filter((e) => {
+        const haystack = [
+          e.endpoint_url,
+          e.origin_domain,
+          e.description || "",
+          e.category || "",
+          e.agent_id_erc8004 || "",
+          e.seller_address || ""
+        ]
+          .join(" ")
+          .toLowerCase();
+        return terms.every((t) => haystack.includes(t));
+      });
+    }
+  }
+
+  list.sort((a, b) => {
+    if (b.uptime_score !== a.uptime_score) {
+      return b.uptime_score - a.uptime_score;
+    }
+    return (a.latency_ms ?? 999999) - (b.latency_ms ?? 999999);
+  });
+
+  const limit = filter?.limit && filter.limit > 0 ? filter.limit : 100;
+  return list.slice(0, limit);
 }
 
 function buildTelemetryWindow(
@@ -806,6 +1176,44 @@ export class D1ArbiterStore implements IArbiterStore {
       )
       .bind(agent.agentId, agent.chainId, agent.ownerAddress || null, agent.agentUri || null, agent.createdAt)
       .run();
+  }
+
+  async listAgents(): Promise<StoredAgentRecord[]> {
+    const results: StoredAgentRecord[] = [];
+    const seen = new Set<string>();
+    try {
+      const res = await this.db
+        .prepare("SELECT agent_id, chain_id, owner_address, agent_uri, created_at FROM agents ORDER BY created_at DESC LIMIT 200")
+        .all<{ agent_id: string; chain_id: number; owner_address?: string; agent_uri?: string; created_at: number }>();
+      for (const r of res.results || []) {
+        seen.add(r.agent_id);
+        results.push({
+          agentId: r.agent_id,
+          chainId: Number(r.chain_id || 8453),
+          ownerAddress: r.owner_address,
+          agentUri: r.agent_uri,
+          createdAt: Number(r.created_at || Date.now())
+        });
+      }
+    } catch {}
+    try {
+      const res2 = await this.db
+        .prepare("SELECT agent_id, chain_id, owner_address, agent_uri, created_at FROM erc8004_agents ORDER BY created_at DESC LIMIT 200")
+        .all<{ agent_id: string; chain_id: number; owner_address?: string; agent_uri?: string; created_at: number }>();
+      for (const r of res2.results || []) {
+        if (!seen.has(r.agent_id)) {
+          seen.add(r.agent_id);
+          results.push({
+            agentId: r.agent_id,
+            chainId: Number(r.chain_id || 8453),
+            ownerAddress: r.owner_address,
+            agentUri: r.agent_uri,
+            createdAt: Number(r.created_at || Date.now())
+          });
+        }
+      }
+    } catch {}
+    return results;
   }
 
   async getProtocolStats(): Promise<ProtocolStats> {
@@ -1244,6 +1652,329 @@ export class D1ArbiterStore implements IArbiterStore {
       .bind(slug.toLowerCase())
       .run();
   }
+
+  private async ensureRadarAndCrawlerTables(): Promise<void> {
+    await this.db.batch([
+      this.db.prepare(
+        `CREATE TABLE IF NOT EXISTS indexed_endpoints (
+          id TEXT PRIMARY KEY,
+          endpoint_url TEXT UNIQUE NOT NULL,
+          origin_domain TEXT NOT NULL,
+          agent_id_erc8004 TEXT,
+          seller_address TEXT,
+          price_atomic TEXT,
+          http_status INTEGER,
+          is_valid_x402 INTEGER DEFAULT 0,
+          latency_ms INTEGER,
+          uptime_score REAL DEFAULT 100.0,
+          hallucination_rate REAL DEFAULT 0.0,
+          total_audits INTEGER DEFAULT 0,
+          failed_audits INTEGER DEFAULT 0,
+          category TEXT,
+          description TEXT,
+          nullclear_proxy_url TEXT NOT NULL,
+          last_audited_at INTEGER,
+          source TEXT
+        )`
+      ),
+      this.db.prepare(
+        `CREATE TABLE IF NOT EXISTS indexer_state (
+          key TEXT PRIMARY KEY,
+          last_indexed_block INTEGER NOT NULL,
+          updated_at INTEGER
+        )`
+      ),
+      this.db.prepare(
+        `CREATE TABLE IF NOT EXISTS onchain_eip3009_transfers (
+          tx_hash TEXT PRIMARY KEY,
+          block_number INTEGER,
+          timestamp INTEGER,
+          buyer_address TEXT NOT NULL,
+          seller_address TEXT NOT NULL,
+          amount_atomic TEXT NOT NULL,
+          nonce TEXT,
+          is_micropayment INTEGER DEFAULT 0
+        )`
+      ),
+      this.db.prepare(
+        `CREATE TABLE IF NOT EXISTS onchain_counterparty_profiles (
+          address TEXT PRIMARY KEY,
+          role TEXT,
+          tx_count INTEGER DEFAULT 0,
+          total_volume_atomic TEXT DEFAULT '0',
+          unique_counterparties INTEGER DEFAULT 0,
+          top_counterparty_share REAL DEFAULT 0.0,
+          wash_trade_flag INTEGER DEFAULT 0,
+          shadow_gateway_slug TEXT,
+          last_seen_block INTEGER
+        )`
+      )
+    ]);
+  }
+
+  private mapIndexedEndpointRow(row: any): IndexedEndpointRecord {
+    return {
+      id: row.id,
+      endpoint_url: row.endpoint_url,
+      origin_domain: row.origin_domain,
+      agent_id_erc8004: row.agent_id_erc8004 ?? null,
+      seller_address: row.seller_address ?? null,
+      price_atomic: row.price_atomic ?? null,
+      http_status: row.http_status !== null && row.http_status !== undefined ? Number(row.http_status) : null,
+      is_valid_x402: Number(row.is_valid_x402 || 0),
+      latency_ms: row.latency_ms !== null && row.latency_ms !== undefined ? Number(row.latency_ms) : null,
+      uptime_score: row.uptime_score !== null && row.uptime_score !== undefined ? Number(row.uptime_score) : 100.0,
+      hallucination_rate:
+        row.hallucination_rate !== null && row.hallucination_rate !== undefined ? Number(row.hallucination_rate) : 0.0,
+      total_audits: Number(row.total_audits || 0),
+      failed_audits: Number(row.failed_audits || 0),
+      category: row.category ?? null,
+      description: row.description ?? null,
+      nullclear_proxy_url: row.nullclear_proxy_url || `https://api.nullclear.dev/${row.endpoint_url}`,
+      last_audited_at: Number(row.last_audited_at || Date.now()),
+      source: (row.source || "X402_MANIFEST") as IndexedEndpointSource
+    };
+  }
+
+  async upsertIndexedEndpoint(record: IndexedEndpointRecord): Promise<void> {
+    await this.ensureRadarAndCrawlerTables();
+    const proxyUrl = record.nullclear_proxy_url || `https://api.nullclear.dev/${record.endpoint_url}`;
+    await this.db
+      .prepare(
+        `INSERT INTO indexed_endpoints (
+          id, endpoint_url, origin_domain, agent_id_erc8004, seller_address, price_atomic,
+          http_status, is_valid_x402, latency_ms, uptime_score, hallucination_rate,
+          total_audits, failed_audits, category, description, nullclear_proxy_url, last_audited_at, source
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(endpoint_url) DO UPDATE SET
+          origin_domain = excluded.origin_domain,
+          agent_id_erc8004 = COALESCE(excluded.agent_id_erc8004, indexed_endpoints.agent_id_erc8004),
+          seller_address = COALESCE(excluded.seller_address, indexed_endpoints.seller_address),
+          price_atomic = COALESCE(excluded.price_atomic, indexed_endpoints.price_atomic),
+          http_status = excluded.http_status,
+          is_valid_x402 = excluded.is_valid_x402,
+          latency_ms = excluded.latency_ms,
+          uptime_score = excluded.uptime_score,
+          hallucination_rate = excluded.hallucination_rate,
+          total_audits = excluded.total_audits,
+          failed_audits = excluded.failed_audits,
+          category = COALESCE(excluded.category, indexed_endpoints.category),
+          description = COALESCE(excluded.description, indexed_endpoints.description),
+          nullclear_proxy_url = excluded.nullclear_proxy_url,
+          last_audited_at = excluded.last_audited_at,
+          source = excluded.source`
+      )
+      .bind(
+        record.id,
+        record.endpoint_url,
+        record.origin_domain,
+        record.agent_id_erc8004 ?? null,
+        record.seller_address ?? null,
+        record.price_atomic ?? null,
+        record.http_status ?? null,
+        record.is_valid_x402,
+        record.latency_ms ?? null,
+        record.uptime_score,
+        record.hallucination_rate,
+        record.total_audits,
+        record.failed_audits,
+        record.category ?? null,
+        record.description ?? null,
+        proxyUrl,
+        record.last_audited_at,
+        record.source
+      )
+      .run();
+  }
+
+  async getIndexedEndpointByUrl(endpointUrl: string): Promise<IndexedEndpointRecord | null> {
+    await this.ensureRadarAndCrawlerTables();
+    const row = await this.db
+      .prepare("SELECT * FROM indexed_endpoints WHERE endpoint_url = ? LIMIT 1")
+      .bind(endpointUrl)
+      .first<any>();
+    if (!row) {
+      const seed = DEFAULT_SEEDED_ENDPOINTS.find((e) => e.endpoint_url === endpointUrl);
+      return seed ? { ...seed } : null;
+    }
+    return this.mapIndexedEndpointRow(row);
+  }
+
+  async queryIndexedEndpoints(filter?: IndexedEndpointQueryFilter): Promise<IndexedEndpointRecord[]> {
+    await this.ensureRadarAndCrawlerTables();
+    const res = await this.db
+      .prepare("SELECT * FROM indexed_endpoints ORDER BY uptime_score DESC, latency_ms ASC LIMIT 300")
+      .all<any>();
+    const stored = (res.results || []).map((r: any) => this.mapIndexedEndpointRow(r));
+    const storedUrls = new Set(stored.map((s) => s.endpoint_url));
+    const merged = [
+      ...stored,
+      ...DEFAULT_SEEDED_ENDPOINTS.filter((d) => !storedUrls.has(d.endpoint_url))
+    ];
+    return filterAndSortIndexedEndpoints(merged, filter);
+  }
+
+  async getIndexerState(key: string): Promise<IndexerStateRecord | null> {
+    await this.ensureRadarAndCrawlerTables();
+    const row = await this.db
+      .prepare("SELECT key, last_indexed_block, updated_at FROM indexer_state WHERE key = ? LIMIT 1")
+      .bind(key)
+      .first<any>();
+    if (!row) return null;
+    return {
+      key: row.key,
+      last_indexed_block: Number(row.last_indexed_block),
+      updated_at: Number(row.updated_at || Date.now())
+    };
+  }
+
+  async setIndexerState(key: string, lastIndexedBlock: number): Promise<void> {
+    await this.ensureRadarAndCrawlerTables();
+    await this.db
+      .prepare(
+        `INSERT INTO indexer_state (key, last_indexed_block, updated_at)
+         VALUES (?, ?, ?)
+         ON CONFLICT(key) DO UPDATE SET
+           last_indexed_block = excluded.last_indexed_block,
+           updated_at = excluded.updated_at`
+      )
+      .bind(key, lastIndexedBlock, Date.now())
+      .run();
+  }
+
+  async saveOnchainEip3009Transfer(transfer: OnchainEip3009TransferRecord): Promise<boolean> {
+    await this.ensureRadarAndCrawlerTables();
+    const normHash = transfer.tx_hash.toLowerCase();
+    const existing = await this.db
+      .prepare("SELECT tx_hash FROM onchain_eip3009_transfers WHERE tx_hash = ? LIMIT 1")
+      .bind(normHash)
+      .first<{ tx_hash: string }>();
+    if (existing) {
+      return false;
+    }
+    await this.db
+      .prepare(
+        `INSERT INTO onchain_eip3009_transfers (
+          tx_hash, block_number, timestamp, buyer_address, seller_address, amount_atomic, nonce, is_micropayment
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+      )
+      .bind(
+        normHash,
+        transfer.block_number,
+        transfer.timestamp,
+        transfer.buyer_address.toLowerCase(),
+        transfer.seller_address.toLowerCase(),
+        transfer.amount_atomic,
+        transfer.nonce,
+        transfer.is_micropayment
+      )
+      .run();
+    return true;
+  }
+
+  async listOnchainEip3009Transfers(limit = 50): Promise<OnchainEip3009TransferRecord[]> {
+    await this.ensureRadarAndCrawlerTables();
+    const res = await this.db
+      .prepare("SELECT * FROM onchain_eip3009_transfers ORDER BY block_number DESC, timestamp DESC LIMIT ?")
+      .bind(limit)
+      .all<any>();
+    return (res.results || []).map((r: any) => ({
+      tx_hash: r.tx_hash,
+      block_number: Number(r.block_number || 0),
+      timestamp: Number(r.timestamp || 0),
+      buyer_address: r.buyer_address,
+      seller_address: r.seller_address,
+      amount_atomic: String(r.amount_atomic || "0"),
+      nonce: r.nonce || "",
+      is_micropayment: Number(r.is_micropayment || 0)
+    }));
+  }
+
+  async upsertOnchainCounterpartyProfile(profile: OnchainCounterpartyProfileRecord): Promise<void> {
+    await this.ensureRadarAndCrawlerTables();
+    const normAddr = profile.address.toLowerCase();
+    await this.db
+      .prepare(
+        `INSERT INTO onchain_counterparty_profiles (
+          address, role, tx_count, total_volume_atomic, unique_counterparties,
+          top_counterparty_share, wash_trade_flag, shadow_gateway_slug, last_seen_block
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(address) DO UPDATE SET
+          role = excluded.role,
+          tx_count = excluded.tx_count,
+          total_volume_atomic = excluded.total_volume_atomic,
+          unique_counterparties = excluded.unique_counterparties,
+          top_counterparty_share = excluded.top_counterparty_share,
+          wash_trade_flag = excluded.wash_trade_flag,
+          shadow_gateway_slug = excluded.shadow_gateway_slug,
+          last_seen_block = excluded.last_seen_block`
+      )
+      .bind(
+        normAddr,
+        profile.role,
+        profile.tx_count,
+        profile.total_volume_atomic,
+        profile.unique_counterparties,
+        profile.top_counterparty_share,
+        profile.wash_trade_flag,
+        profile.shadow_gateway_slug,
+        profile.last_seen_block
+      )
+      .run();
+  }
+
+  async getOnchainCounterpartyProfile(address: string): Promise<OnchainCounterpartyProfileRecord | null> {
+    await this.ensureRadarAndCrawlerTables();
+    const row = await this.db
+      .prepare("SELECT * FROM onchain_counterparty_profiles WHERE address = ? LIMIT 1")
+      .bind(address.toLowerCase())
+      .first<any>();
+    if (!row) return null;
+    return {
+      address: row.address,
+      role: (row.role || "SELLER") as "SELLER" | "BUYER" | "BOTH",
+      tx_count: Number(row.tx_count || 0),
+      total_volume_atomic: String(row.total_volume_atomic || "0"),
+      unique_counterparties: Number(row.unique_counterparties || 0),
+      top_counterparty_share: Number(row.top_counterparty_share || 0),
+      wash_trade_flag: Number(row.wash_trade_flag || 0),
+      shadow_gateway_slug: row.shadow_gateway_slug || `base-seller-${String(row.address).replace(/^0x/i, "").slice(0, 8)}`,
+      last_seen_block: Number(row.last_seen_block || 0)
+    };
+  }
+
+  async listOnchainCounterpartyProfiles(
+    roleFilter?: "SELLER" | "BUYER" | "BOTH",
+    limit = 50
+  ): Promise<OnchainCounterpartyProfileRecord[]> {
+    await this.ensureRadarAndCrawlerTables();
+    const res = await this.db
+      .prepare(
+        "SELECT * FROM onchain_counterparty_profiles ORDER BY wash_trade_flag ASC, tx_count DESC LIMIT 200"
+      )
+      .all<any>();
+    let rows = (res.results || []).map((row: any) => ({
+      address: row.address,
+      role: (row.role || "SELLER") as "SELLER" | "BUYER" | "BOTH",
+      tx_count: Number(row.tx_count || 0),
+      total_volume_atomic: String(row.total_volume_atomic || "0"),
+      unique_counterparties: Number(row.unique_counterparties || 0),
+      top_counterparty_share: Number(row.top_counterparty_share || 0),
+      wash_trade_flag: Number(row.wash_trade_flag || 0),
+      shadow_gateway_slug: row.shadow_gateway_slug || `base-seller-${String(row.address).replace(/^0x/i, "").slice(0, 8)}`,
+      last_seen_block: Number(row.last_seen_block || 0)
+    }));
+
+    if (roleFilter === "SELLER") {
+      rows = rows.filter((p) => p.role === "SELLER" || p.role === "BOTH");
+    } else if (roleFilter === "BUYER") {
+      rows = rows.filter((p) => p.role === "BUYER" || p.role === "BOTH");
+    } else if (roleFilter === "BOTH") {
+      rows = rows.filter((p) => p.role === "BOTH");
+    }
+
+    return rows.slice(0, limit);
+  }
 }
 
 // Shared singleton memory store for fallback execution
@@ -1255,3 +1986,4 @@ export function getArbiterStore(bindings?: Env["Bindings"]): IArbiterStore {
   }
   return globalMemoryStore;
 }
+

@@ -12,15 +12,17 @@ export interface NullClearMetadata {
 }
 
 export function buildNullClearMetadata(
-  overrides?: Partial<NullClearMetadata>
+  overrides?: Partial<NullClearMetadata> | number
 ): NullClearMetadata {
+  const opts: Partial<NullClearMetadata> =
+    typeof overrides === "number" ? { freeTrialRemaining: overrides } : overrides || {};
   return {
-    verified: overrides?.verified ?? true,
-    escrowProtection: overrides?.escrowProtection ?? "zero-loss-eip3009",
-    freeTrialRemaining: overrides?.freeTrialRemaining ?? 9,
+    verified: opts.verified ?? true,
+    escrowProtection: opts.escrowProtection ?? "zero-loss-eip3009",
+    freeTrialRemaining: opts.freeTrialRemaining ?? 9,
     quickProxyPrefix:
-      overrides?.quickProxyPrefix ?? "https://api.nullclear.dev/https://...",
-    mcpEndpoint: overrides?.mcpEndpoint ?? "https://api.nullclear.dev/mcp"
+      opts.quickProxyPrefix ?? "https://api.nullclear.dev/https://...",
+    mcpEndpoint: opts.mcpEndpoint ?? "https://api.nullclear.dev/mcp"
   };
 }
 

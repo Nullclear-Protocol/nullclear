@@ -34,6 +34,8 @@ export const BASE_MAINNET: ChainConfig = {
   blockExplorer: "https://basescan.org"
 };
 
+export const BASE_MAINNET_USDC = BASE_MAINNET.usdc;
+
 export const BASE_SEPOLIA: ChainConfig = {
   name: "Base Sepolia",
   chainId: 84532,

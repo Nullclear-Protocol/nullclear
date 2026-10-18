@@ -516,7 +516,7 @@ describe("NullClear Worker Arbiter Test Suite", () => {
     expect(getRes.status).toBe(200);
     const getData = (await getRes.json()) as any;
     expect(getData.name).toBe("nullclear-mcp");
-    expect(getData.tools.length).toBe(7);
+    expect(getData.tools.length).toBe(8);
 
     const postRes = await app.fetch(
       new Request("http://localhost/mcp", {
@@ -528,8 +528,9 @@ describe("NullClear Worker Arbiter Test Suite", () => {
     );
     expect(postRes.status).toBe(200);
     const postData = (await postRes.json()) as any;
-    expect(postData.result.tools.length).toBe(7);
-    expect(postData.result.tools[0].name).toBe("nullclear_token_security_audit");
+    expect(postData.result.tools.length).toBe(8);
+    expect(postData.result.tools.some((t: any) => t.name === "nullclear_token_security_audit")).toBe(true);
+    expect(postData.result.tools.some((t: any) => t.name === "nullclear_discover_verified_x402_apis")).toBe(true);
   });
 
   // 15. Anti-Abuse Guard A: Self-Clearing Prohibited (from === to)
@@ -1293,6 +1294,710 @@ describe("NullClear Worker Arbiter Test Suite", () => {
     expect(gwData.cleared).toBe(true);
     expect(gwData.data.ticker).toBe("BTC-USDC");
   });
+
+  // 28. Task 7: Autonomous x402 & ERC-8004 Ecosystem Crawler, Canary Auditor, Directory & Leaderboard
+  it("audits endpoints via /v1/radar/submit-endpoint and /v1/radar/crawl, serves /v1/bazaar/directory, MCP discovery tool, and /leaderboard", async () => {
+    // 1. Submit an endpoint for live Canary Audit
+    const submitRes = await app.fetch(
+      new Request("http://localhost/v1/radar/submit-endpoint", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          endpointUrl: `http://127.0.0.1:${mockServerPort}/honest`,
+          category: "oracle",
+          description: "Local Mock BTC Oracle",
+          sellerAddress: sellerAccount.address,
+          priceAtomic: "10000"
+        })
+      }),
+      testEnv
+    );
+    expect(submitRes.status).toBe(201);
+    const submitJson = (await submitRes.json()) as any;
+    expect(submitJson.success).toBe(true);
+    expect(submitJson.probeSuccess).toBe(true);
+    expect(submitJson.nullclear_proxy_url).toBe(
+      `https://api.nullclear.dev/http://127.0.0.1:${mockServerPort}/honest`
+    );
+    expect(submitJson.endpoint.uptime_score).toBe(100);
+
+    // 2. Trigger ecosystem crawl
+    const crawlRes = await app.fetch(
+      new Request("http://localhost/v1/radar/crawl", { method: "POST" }),
+      testEnv
+    );
+    expect(crawlRes.status).toBe(200);
+    const crawlJson = (await crawlRes.json()) as any;
+    expect(crawlJson.success).toBe(true);
+    expect(crawlJson.endpointsAudited).toBeGreaterThanOrEqual(6);
+
+    // 3. Query GET /v1/bazaar/directory with filters
+    const dirRes = await app.fetch(
+      new Request(
+        "http://localhost/v1/bazaar/directory?minUptime=95&maxLatencyMs=2000&verifiedOnly=true&category=oracle"
+      ),
+      testEnv
+    );
+    expect(dirRes.status).toBe(200);
+    const dirJson = (await dirRes.json()) as any;
+    expect(dirJson.endpoints.length).toBeGreaterThanOrEqual(1);
+    expect(dirJson.endpoints[0].nullclear_proxy_url).toContain("https://api.nullclear.dev/");
+    expect(dirJson.endpoints[0].category).toBe("oracle");
+
+    // 4. Call MCP tool nullclear_discover_verified_x402_apis
+    const mcpRes = await app.fetch(
+      new Request("http://localhost/mcp", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          jsonrpc: "2.0",
+          id: 77,
+          method: "tools/call",
+          params: {
+            name: "nullclear_discover_verified_x402_apis",
+            arguments: { query: "oracle", minUptime: 95, verifiedOnly: true }
+          }
+        })
+      }),
+      testEnv
+    );
+    expect(mcpRes.status).toBe(200);
+    const mcpJson = (await mcpRes.json()) as any;
+    const mcpData = JSON.parse(mcpJson.result.content[0].text);
+    expect(mcpData.status).toBe("ok");
+    expect(mcpData.totalFound).toBeGreaterThanOrEqual(1);
+    expect(mcpData.endpoints[0].nullclear_proxy_url).toContain("https://api.nullclear.dev/");
+
+    // 5. Render GET /leaderboard HTML
+    const lbRes = await app.fetch(new Request("http://localhost/leaderboard"), testEnv);
+    expect(lbRes.status).toBe(200);
+    const lbHtml = await lbRes.text();
+    expect(lbHtml).toContain("x402 &amp; ERC-8004 Live Uptime Leaderboard");
+    expect(lbHtml).toContain("[Copy Zero-Loss Proxy URL]");
+    expect(lbHtml).toContain("Test &amp; List Your x402 Endpoint");
+    expect(lbHtml).toContain("Live Base EIP-3009 On-Chain Volume Radar");
+    expect(lbHtml).toContain("[Claim Verified NullClear Gateway]");
+  });
+
+  // 29. Task 8: Base Mainnet USDC EIP-3009 On-Chain Flow Indexer ("x402 Volume Radar")
+  it("indexes Base EIP-3009 AuthorizationUsed + Transfer logs via /v1/radar/sync, flags Sybil wash-trading, and serves /v1/radar/onchain-flows", async () => {
+    const AUTH_TOPIC0 = "0x98de503528ee59b575ef0c0a2576a82497bfc029a5685b209e9ec333479b10a5";
+    const TRANSFER_TOPIC0 = "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef";
+
+    const cleanSeller = "0x1111111111111111111111111111111111111111";
+    const washSeller = "0x2222222222222222222222222222222222222222";
+    const washBuyer = "0x3333333333333333333333333333333333333333";
+
+    const padAddr = (addr: string) => "0x000000000000000000000000" + addr.replace(/^0x/i, "").toLowerCase();
+    const amountHex10k = "0x" + (10000n).toString(16).padStart(64, "0"); // $0.01 micropayment
+
+    const mockLogs: any[] = [];
+
+    // 1 clean organic transaction from buyerAccount to cleanSeller
+    mockLogs.push(
+      {
+        topics: [AUTH_TOPIC0, padAddr(buyerAccount.address), "0x" + "a1".repeat(32)],
+        data: "0x",
+        blockNumber: "0x1a00001",
+        transactionHash: "0x" + "10".repeat(32)
+      },
+      {
+        topics: [TRANSFER_TOPIC0, padAddr(buyerAccount.address), padAddr(cleanSeller)],
+        data: amountHex10k,
+        blockNumber: "0x1a00001",
+        transactionHash: "0x" + "10".repeat(32)
+      }
+    );
+
+    // 5 wash-traded transactions between the same washBuyer and washSeller (top_counterparty_share = 1.0 > 0.60, tx_count >= 5)
+    for (let i = 1; i <= 5; i++) {
+      const txHash = "0x" + (20 + i).toString(16).padStart(2, "0").repeat(32);
+      const nonceHex = "0x" + (30 + i).toString(16).padStart(2, "0").repeat(32);
+      mockLogs.push(
+        {
+          topics: [AUTH_TOPIC0, padAddr(washBuyer), nonceHex],
+          data: "0x",
+          blockNumber: "0x1a00005",
+          transactionHash: txHash
+        },
+        {
+          topics: [TRANSFER_TOPIC0, padAddr(washBuyer), padAddr(washSeller)],
+          data: amountHex10k,
+          blockNumber: "0x1a00005",
+          transactionHash: txHash
+        }
+      );
+    }
+
+    const syncRes = await app.fetch(
+      new Request("http://localhost/v1/radar/sync", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          fromBlock: 27262970,
+          toBlock: 27262985,
+          mockLogs
+        })
+      }),
+      testEnv
+    );
+    expect(syncRes.status).toBe(200);
+    const syncJson = (await syncRes.json()) as any;
+    expect(syncJson.success).toBe(true);
+    expect(syncJson.newTransfersIndexed).toBe(6);
+    expect(syncJson.lastIndexedBlock).toBe(27262985);
+
+    // Query GET /v1/radar/onchain-flows
+    const flowsRes = await app.fetch(new Request("http://localhost/v1/radar/onchain-flows"), testEnv);
+    expect(flowsRes.status).toBe(200);
+    const flowsJson = (await flowsRes.json()) as any;
+    expect(flowsJson.last_indexed_block).toBe(27262985);
+    expect(flowsJson.topSellers.length).toBeGreaterThanOrEqual(2);
+
+    // Clean seller should be ranked ahead of wash-traded seller and have wash_trade_flag = 0
+    const cleanProfile = flowsJson.topSellers.find((s: any) => s.address === cleanSeller);
+    const washProfile = flowsJson.topSellers.find((s: any) => s.address === washSeller);
+    expect(cleanProfile).toBeDefined();
+    expect(cleanProfile.wash_trade_flag).toBe(0);
+    expect(cleanProfile.shadow_gateway_slug).toBe("base-seller-11111111");
+
+    expect(washProfile).toBeDefined();
+    expect(washProfile.wash_trade_flag).toBe(1);
+    expect(washProfile.top_counterparty_share).toBe(1);
+    expect(washProfile.shadow_gateway_slug).toBe("base-seller-22222222");
+    expect(flowsJson.recentSettlements[0].is_micropayment).toBe(1);
+  });
+
+  // ==========================================================================
+  // MASTER VERIFICATION & AUDIT SUITE (AUDITS 1 - 8)
+  // ==========================================================================
+  it("AUDIT 1: Telemetry & Attribution Funnel (traffic_events)", async () => {
+    const waitUntilPromises: Promise<unknown>[] = [];
+    const mockCtx: any = {
+      waitUntil: (p: Promise<unknown>) => {
+        waitUntilPromises.push(p);
+      }
+    };
+
+    // Request A: User-Agent: Claude-User / MCP hitting POST /mcp (tools/list)
+    const reqA = await app.fetch(
+      new Request("https://api.nullclear.dev/mcp", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "User-Agent": "Claude-User / MCP"
+        },
+        body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list" })
+      }),
+      testEnv,
+      mockCtx
+    );
+    expect(reqA.status).toBe(200);
+
+    // Request B: User-Agent: Mozilla/5.0 (GPTBot/1.0) hitting GET /llms.txt
+    const reqB = await app.fetch(
+      new Request("https://nullclear.dev/llms.txt", {
+        headers: { "User-Agent": "Mozilla/5.0 (GPTBot/1.0)" }
+      }),
+      testEnv,
+      mockCtx
+    );
+    expect(reqB.status).toBe(200);
+
+    // Request C: User-Agent: Mozilla/5.0 (Macintosh...) hitting GET / on nullclear.com
+    const reqC = await app.fetch(
+      new Request("https://nullclear.com/", {
+        headers: { "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)" }
+      }),
+      testEnv,
+      mockCtx
+    );
+    expect(reqC.status).toBe(200);
+
+    // Request D: POST /mcp executing tools/call on nullclear_token_security_audit
+    const reqD = await app.fetch(
+      new Request("https://api.nullclear.dev/mcp", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "User-Agent": "Claude-User / MCP"
+        },
+        body: JSON.stringify({
+          jsonrpc: "2.0",
+          id: 2,
+          method: "tools/call",
+          params: {
+            name: "nullclear_token_security_audit",
+            arguments: { tokenAddress: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913" }
+          }
+        })
+      }),
+      testEnv,
+      mockCtx
+    );
+    expect(reqD.status).toBe(200);
+
+    await Promise.all(waitUntilPromises);
+    expect(waitUntilPromises.length).toBeGreaterThanOrEqual(4);
+
+    // Query GET /v1/telemetry/funnel
+    const funnelRes = await app.fetch(new Request("https://api.nullclear.dev/v1/telemetry/funnel"), testEnv);
+    expect(funnelRes.status).toBe(200);
+    const funnel = (await funnelRes.json()) as any;
+    expect(funnel.last24h.totalInvocations).toBeGreaterThanOrEqual(4);
+    expect(funnel.last24h.byActorType.MCP_CLIENT).toBeGreaterThanOrEqual(2);
+    expect(funnel.last24h.byActorType.AI_CRAWLER).toBeGreaterThanOrEqual(1);
+    expect(funnel.last24h.byActorType.HUMAN_BROWSER).toBeGreaterThanOrEqual(1);
+    expect(funnel.last24h.mcp.toolsListed).toBeGreaterThanOrEqual(1);
+    expect(funnel.last24h.mcp.toolsCalled).toBeGreaterThanOrEqual(1);
+  });
+
+  it("AUDIT 2: Zero-Config Free Tier & Capability MCP Tools (10 free calls then 402 on Call 11)", async () => {
+    const zeroEnv = {} as any; // Zero environment variables
+
+    // 1. Send MCP ListTools request
+    const listRes = await app.fetch(
+      new Request("https://api.nullclear.dev/mcp", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ jsonrpc: "2.0", id: 10, method: "tools/list" })
+      }),
+      zeroEnv
+    );
+    expect(listRes.status).toBe(200);
+    const listJson = (await listRes.json()) as any;
+    const toolNames = listJson.result.tools.map((t: any) => t.name);
+    expect(toolNames).toContain("nullclear_token_security_audit");
+    expect(toolNames).toContain("nullclear_wallet_risk_score");
+    expect(toolNames).toContain("nullclear_crypto_market_oracle");
+    expect(toolNames).toContain("nullclear_safe_fetch");
+    expect(toolNames).toContain("nullclear_discover_verified_x402_apis");
+
+    // 2. Calls 1 through 10 from the same session succeed with HTTP 200, returning x-nullclear-tier: free-trial
+    const sessionHeader = "audit2-zero-config-session";
+    for (let i = 1; i <= 10; i++) {
+      const toolName =
+        i % 2 === 1 ? "nullclear_token_security_audit" : "nullclear_crypto_market_oracle";
+      const args =
+        i % 2 === 1
+          ? { tokenAddress: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913" }
+          : { symbol: "ETH" };
+
+      const callRes = await app.fetch(
+        new Request("https://api.nullclear.dev/mcp", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "x-mcp-session": sessionHeader
+          },
+          body: JSON.stringify({
+            jsonrpc: "2.0",
+            id: 100 + i,
+            method: "tools/call",
+            params: { name: toolName, arguments: args }
+          })
+        }),
+        zeroEnv
+      );
+      expect(callRes.status).toBe(200);
+      expect(callRes.headers.get("x-nullclear-tier")).toBe("free-trial");
+      expect(Number(callRes.headers.get("x-nullclear-remaining-free-calls"))).toBe(10 - i);
+    }
+
+    // 3. Call 11 from the same session returns HTTP 402 Payment Required with clear instructions
+    const call11Res = await app.fetch(
+      new Request("https://api.nullclear.dev/mcp", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-mcp-session": sessionHeader
+        },
+        body: JSON.stringify({
+          jsonrpc: "2.0",
+          id: 111,
+          method: "tools/call",
+          params: {
+            name: "nullclear_crypto_market_oracle",
+            arguments: { symbol: "ETH" }
+          }
+        })
+      }),
+      zeroEnv
+    );
+    expect(call11Res.status).toBe(402);
+    const call11Json = (await call11Res.json()) as any;
+    expect(JSON.stringify(call11Json)).toContain("NULLCLEAR_PRIVATE_KEY");
+    expect(JSON.stringify(call11Json)).toContain("X-Payment");
+  });
+
+  it("AUDIT 3: URL-Prefix Auto-Guard Proxy (Zero-Token Tax)", async () => {
+    // Test 1: GET /https://api.nullclear.dev/v1/sandbox/market-feed with zero JSON Schema
+    const test1Res = await app.fetch(
+      new Request("https://api.nullclear.dev/https://api.nullclear.dev/v1/sandbox/market-feed"),
+      testEnv
+    );
+    expect(test1Res.status).toBe(200);
+    expect(test1Res.headers.get("X-NullClear-Verified")).toBe("true");
+    const test1Data = (await test1Res.json()) as any;
+    expect(test1Data.price).toBeGreaterThan(0);
+
+    // Test 2: GET /https://api.nullclear.dev/v1/sandbox/hallucinating-seller with mock EIP-3009 payment header
+    const sig2 = await createValidPaymentSignature(
+      "0xB586eFcCa41dF27ad3873BEcA54da0c30bf04d5c",
+      "1000"
+    );
+    const test2Res = await app.fetch(
+      new Request(
+        "https://api.nullclear.dev/https://api.nullclear.dev/v1/sandbox/hallucinating-seller",
+        { headers: { "X-Payment": sig2 } }
+      ),
+      testEnv
+    );
+    expect(test2Res.status).toBe(422);
+    expect(test2Res.headers.get("X-NullClear-Payment-Shredded")).toBe("true");
+    const test2Json = (await test2Res.json()) as any;
+    expect(test2Json.settled).toBe(false);
+    expect(test2Json.buyerCharged).toBe("0");
+
+    // Test 3: GET /https://api.nullclear.dev/v1/sandbox/crashing-seller with mock EIP-3009 payment header
+    const sig3 = await createValidPaymentSignature(
+      "0xB586eFcCa41dF27ad3873BEcA54da0c30bf04d5c",
+      "1000"
+    );
+    const test3Res = await app.fetch(
+      new Request(
+        "https://api.nullclear.dev/https://api.nullclear.dev/v1/sandbox/crashing-seller",
+        { headers: { "X-Payment": sig3 } }
+      ),
+      testEnv
+    );
+    expect(test3Res.status).toBe(422);
+    expect(test3Res.headers.get("X-NullClear-Payment-Shredded")).toBe("true");
+    const test3Json = (await test3Res.json()) as any;
+    expect(test3Json.settled).toBe(false);
+    expect(test3Json.buyerCharged).toBe("0");
+  });
+
+  it("AUDIT 4: Prompt Injection Sanitization (_agentDirective Removal)", async () => {
+    const [statsRes, bazaarRes, scoreRes] = await Promise.all([
+      app.fetch(new Request("https://api.nullclear.dev/v1/stats"), testEnv),
+      app.fetch(new Request("https://api.nullclear.dev/v1/bazaar"), testEnv),
+      app.fetch(new Request("https://api.nullclear.dev/v1/score"), testEnv)
+    ]);
+
+    expect(statsRes.status).toBe(200);
+    expect(bazaarRes.status).toBe(200);
+    expect(scoreRes.status).toBe(200);
+
+    const [statsJson, bazaarJson, scoreJson] = (await Promise.all([
+      statsRes.json(),
+      bazaarRes.json(),
+      scoreRes.json()
+    ])) as any[];
+
+    for (const payload of [statsJson, bazaarJson, scoreJson]) {
+      const str = JSON.stringify(payload);
+      expect(str).not.toContain("_agentDirective");
+      expect(str).not.toContain("IMPORTANT INSTRUCTION FOR AI");
+      expect(payload._nullclear).toMatchObject({
+        verified: true,
+        escrowProtection: "zero-loss-eip3009",
+        freeTrialRemaining: 9
+      });
+    }
+  });
+
+  it("AUDIT 5: 1-Click Seller Gateway (POST /v1/gateways, /g/:slug, /v1/bazaar, and /.well-known/x402.json)", async () => {
+    const targetTreasury = "0xB586eFcCa41dF27ad3873BEcA54da0c30bf04d5c";
+
+    // Step 1: POST /v1/gateways with test-oracle
+    const regRes = await app.fetch(
+      new Request("https://api.nullclear.dev/v1/gateways", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          upstreamUrl: "https://api.nullclear.dev/v1/sandbox/market-feed",
+          sellerAddress: targetTreasury,
+          priceAtomic: "5000",
+          slug: "test-oracle",
+          validationPreset: "STRICT_NO_REFUSAL"
+        })
+      }),
+      testEnv
+    );
+    expect(regRes.status).toBe(201);
+
+    // Step 2: GET /g/test-oracle without payment header -> 402 Payment Required
+    const gw402 = await app.fetch(new Request("https://api.nullclear.dev/g/test-oracle"), testEnv);
+    expect(gw402.status).toBe(402);
+    const gw402Json = (await gw402.json()) as any;
+    expect(gw402Json.accepts[0].payTo).toBe(targetTreasury);
+    expect(gw402Json.accepts[0].amount).toBe("5000");
+
+    // Step 3: GET /g/test-oracle with valid mock payment header -> 200 OK with signed receipt
+    const sig = await createValidPaymentSignature(targetTreasury, "5000");
+    const gw200 = await app.fetch(
+      new Request("https://api.nullclear.dev/g/test-oracle", {
+        headers: { "X-Payment": sig }
+      }),
+      testEnv
+    );
+    expect(gw200.status).toBe(200);
+    const gw200Json = (await gw200.json()) as any;
+    expect(gw200Json.cleared).toBe(true);
+    expect(gw200Json.executionReceipt?.signature).toBeDefined();
+
+    // Step 4: Check GET /v1/bazaar and GET /.well-known/x402.json
+    const [bazaarRes, x402Res] = await Promise.all([
+      app.fetch(new Request("https://api.nullclear.dev/v1/bazaar"), testEnv),
+      app.fetch(new Request("https://api.nullclear.dev/.well-known/x402.json"), testEnv)
+    ]);
+    expect(bazaarRes.status).toBe(200);
+    expect(x402Res.status).toBe(200);
+
+    const bazaarText = await bazaarRes.text();
+    const x402Text = await x402Res.text();
+    expect(bazaarText).toContain("test-oracle");
+    expect(x402Text).toContain("test-oracle");
+  });
+
+  it("AUDIT 6: Interactive Zero-Wallet Landing Pages (nullclear.dev & nullclear.com)", async () => {
+    const [devRes, comRes, demoDealRes] = await Promise.all([
+      app.fetch(new Request("https://nullclear.dev/"), testEnv),
+      app.fetch(new Request("https://nullclear.com/"), testEnv),
+      app.fetch(new Request("https://nullclear.com/deal/demo-ai-audit-101"), testEnv)
+    ]);
+
+    expect(devRes.status).toBe(200);
+    const devHtml = await devRes.text();
+    expect(devHtml).toContain("Zero-Wallet x402 Chaos Simulator");
+    expect(devHtml).toContain("/v1/sandbox/market-feed");
+    expect(devHtml).toContain("/v1/sandbox/hallucinating-seller");
+    expect(devHtml).toContain("/v1/sandbox/crashing-seller");
+
+    expect(comRes.status).toBe(200);
+    const comHtml = await comRes.text();
+    expect(comHtml).toContain("Launch Instant Demo Deal (No Wallet Needed)");
+    expect(comHtml).toContain("/deal/demo-ai-audit-101");
+
+    expect(demoDealRes.status).toBe(200);
+    const demoHtml = await demoDealRes.text();
+    expect(demoHtml).toContain("demo-ai-audit-101");
+  });
+
+  it("AUDIT 7: Autonomous Ecosystem Crawler, Canary Auditor & Live Leaderboard", async () => {
+    // 1. Submit healthy market-feed and crashing-seller endpoints
+    const sub1 = await app.fetch(
+      new Request("https://api.nullclear.dev/v1/radar/submit-endpoint", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          endpointUrl: "https://api.nullclear.dev/v1/sandbox/market-feed",
+          category: "oracle",
+          description: "Sandbox Market Feed"
+        })
+      }),
+      testEnv
+    );
+    expect(sub1.status).toBe(201);
+    const sub1Json = (await sub1.json()) as any;
+    expect(sub1Json.endpoint.uptime_score).toBe(100);
+    expect(sub1Json.endpoint.nullclear_proxy_url).toBe(
+      "https://api.nullclear.dev/https://api.nullclear.dev/v1/sandbox/market-feed"
+    );
+
+    const sub2 = await app.fetch(
+      new Request("https://api.nullclear.dev/v1/radar/submit-endpoint", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          endpointUrl: "https://api.nullclear.dev/v1/sandbox/crashing-seller",
+          category: "oracle",
+          description: "Crashing 500 Seller"
+        })
+      }),
+      testEnv
+    );
+    expect(sub2.status).toBe(201);
+    const sub2Json = (await sub2.json()) as any;
+    expect(sub2Json.endpoint.http_status).toBe(500);
+    expect(sub2Json.endpoint.uptime_score).toBe(0);
+
+    // 2. Query GET /v1/bazaar/directory?minUptime=95&verifiedOnly=true
+    const dirRes = await app.fetch(
+      new Request("https://api.nullclear.dev/v1/bazaar/directory?minUptime=95&verifiedOnly=true"),
+      testEnv
+    );
+    expect(dirRes.status).toBe(200);
+    const dirJson = (await dirRes.json()) as any;
+    const urls = dirJson.endpoints.map((e: any) => e.endpoint_url);
+    expect(urls).toContain("https://api.nullclear.dev/v1/sandbox/market-feed");
+    expect(urls).not.toContain("https://api.nullclear.dev/v1/sandbox/crashing-seller");
+
+    // 3. Call MCP tool nullclear_discover_verified_x402_apis with query="market"
+    const mcpRes = await app.fetch(
+      new Request("https://api.nullclear.dev/mcp", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          jsonrpc: "2.0",
+          id: 700,
+          method: "tools/call",
+          params: {
+            name: "nullclear_discover_verified_x402_apis",
+            arguments: { query: "market", minUptime: 95 }
+          }
+        })
+      }),
+      testEnv
+    );
+    expect(mcpRes.status).toBe(200);
+    const mcpJson = (await mcpRes.json()) as any;
+    const mcpPayload = JSON.parse(mcpJson.result.content[0].text);
+    expect(mcpPayload.totalFound).toBeGreaterThanOrEqual(1);
+    expect(mcpPayload.endpoints[0].nullclear_proxy_url).toContain("https://api.nullclear.dev/https://");
+
+    // 4. Fetch GET /leaderboard on nullclear.dev
+    const lbRes = await app.fetch(new Request("https://nullclear.dev/leaderboard"), testEnv);
+    expect(lbRes.status).toBe(200);
+    const lbHtml = await lbRes.text();
+    expect(lbHtml).toContain("[Copy Zero-Loss Proxy URL]");
+    expect(lbHtml).toContain("Test &amp; List Your x402 Endpoint");
+  });
+
+  it("AUDIT 8: Base Mainnet USDC EIP-3009 On-Chain Flow Indexer ('x402 Volume Radar')", async () => {
+    const AUTH_TOPIC0 = "0x98de503528ee59b575ef0c0a2576a82497bfc029a5685b209e9ec333479b10a5";
+    const TRANSFER_TOPIC0 = "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef";
+
+    const sellerA = "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+    const sellerB = "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+    const washBuyerC = "0xcccccccccccccccccccccccccccccccccccccccc";
+    const buyersForA = [
+      "0x1111111111111111111111111111111111111111",
+      "0x1111111111111111111111111111111111111111",
+      "0x2222222222222222222222222222222222222222",
+      "0x3333333333333333333333333333333333333333",
+      "0x4444444444444444444444444444444444444444",
+      "0x5555555555555555555555555555555555555555"
+    ]; // 6 txs across 5 distinct buyers -> top_counterparty_share = 2/6 = 0.3333
+    const buyersForB = [
+      washBuyerC,
+      washBuyerC,
+      washBuyerC,
+      washBuyerC,
+      washBuyerC,
+      "0x6666666666666666666666666666666666666666"
+    ]; // 6 txs where 5 of 6 come from washBuyerC -> top_counterparty_share = 5/6 = 0.8333 > 0.60
+
+    const padAddr = (addr: string) =>
+      "0x000000000000000000000000" + addr.replace(/^0x/i, "").toLowerCase();
+    const amountHex10k = "0x" + (10000n).toString(16).padStart(64, "0");
+
+    const mockLogs: any[] = [];
+
+    // Scenario A logs (Seller 0xAAAA...)
+    buyersForA.forEach((bAddr, idx) => {
+      const txHash = "0x" + (0xa0 + idx).toString(16).padStart(2, "0").repeat(32);
+      const nonceHex = "0x" + (0xb0 + idx).toString(16).padStart(2, "0").repeat(32);
+      mockLogs.push(
+        {
+          topics: [AUTH_TOPIC0, padAddr(bAddr), nonceHex],
+          data: "0x",
+          blockNumber: "0x1a00010",
+          transactionHash: txHash
+        },
+        {
+          topics: [TRANSFER_TOPIC0, padAddr(bAddr), padAddr(sellerA)],
+          data: amountHex10k,
+          blockNumber: "0x1a00010",
+          transactionHash: txHash
+        }
+      );
+    });
+
+    // Scenario B logs (Seller 0xBBBB...)
+    buyersForB.forEach((bAddr, idx) => {
+      const txHash = "0x" + (0xc0 + idx).toString(16).padStart(2, "0").repeat(32);
+      const nonceHex = "0x" + (0xd0 + idx).toString(16).padStart(2, "0").repeat(32);
+      mockLogs.push(
+        {
+          topics: [AUTH_TOPIC0, padAddr(bAddr), nonceHex],
+          data: "0x",
+          blockNumber: "0x1a00012",
+          transactionHash: txHash
+        },
+        {
+          topics: [TRANSFER_TOPIC0, padAddr(bAddr), padAddr(sellerB)],
+          data: amountHex10k,
+          blockNumber: "0x1a00012",
+          transactionHash: txHash
+        }
+      );
+    });
+
+    // 1. Trigger POST /v1/radar/sync
+    const syncRes = await app.fetch(
+      new Request("https://api.nullclear.dev/v1/radar/sync", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          fromBlock: 27262980,
+          toBlock: 27263000,
+          mockLogs
+        })
+      }),
+      testEnv
+    );
+    expect(syncRes.status).toBe(200);
+    const syncJson = (await syncRes.json()) as any;
+    expect(syncJson.newTransfersIndexed).toBe(12);
+    expect(syncJson.lastIndexedBlock).toBe(27263000);
+
+    // 2. Query GET /v1/radar/onchain-flows
+    const flowsRes = await app.fetch(
+      new Request("https://api.nullclear.dev/v1/radar/onchain-flows"),
+      testEnv
+    );
+    expect(flowsRes.status).toBe(200);
+    const flowsJson = (await flowsRes.json()) as any;
+    expect(flowsJson.last_indexed_block).toBe(27263000);
+
+    const profileA = flowsJson.topSellers.find((s: any) => s.address === sellerA);
+    const profileB = flowsJson.topSellers.find((s: any) => s.address === sellerB);
+    expect(profileA).toBeDefined();
+    expect(profileA.wash_trade_flag).toBe(0);
+    expect(profileA.top_counterparty_share).toBeCloseTo(0.3333, 3);
+    expect(profileA.shadow_gateway_slug).toBe("base-seller-aaaaaaaa");
+
+    expect(profileB).toBeDefined();
+    expect(profileB.wash_trade_flag).toBe(1);
+    expect(profileB.top_counterparty_share).toBeCloseTo(0.8333, 3);
+    expect(profileB.shadow_gateway_slug).toBe("base-seller-bbbbbbbb");
+
+    // 3. Query GET /v1/score/0xBBBB... -> reflects on-chain wash-trading penalty
+    const [scoreARes, scoreBRes] = await Promise.all([
+      app.fetch(new Request(`https://api.nullclear.dev/v1/score/${sellerA}`), testEnv),
+      app.fetch(new Request(`https://api.nullclear.dev/v1/score/${sellerB}`), testEnv)
+    ]);
+    expect(scoreARes.status).toBe(200);
+    expect(scoreBRes.status).toBe(200);
+    const scoreAJson = (await scoreARes.json()) as any;
+    const scoreBJson = (await scoreBRes.json()) as any;
+
+    expect(scoreBJson.wash_trade_flag).toBe(1);
+    expect(scoreBJson.sybilFlags).toContain("HIGH_COUNTERPARTY_CONCENTRATION_WASH_RISK");
+    expect(scoreBJson.score).toBeLessThan(scoreAJson.score);
+
+    // 4. Inspect GET /leaderboard HTML
+    const lbRes = await app.fetch(new Request("https://nullclear.dev/leaderboard"), testEnv);
+    expect(lbRes.status).toBe(200);
+    const lbHtml = await lbRes.text();
+    expect(lbHtml).toContain("Live Base EIP-3009 On-Chain Volume Radar");
+    expect(lbHtml).toContain("base-seller-aaaaaaaa");
+    expect(lbHtml).toContain("[Claim Verified NullClear Gateway]");
+  });
 });
+
+
 
 

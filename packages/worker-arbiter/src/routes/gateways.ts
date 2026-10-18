@@ -116,7 +116,8 @@ export const gatewayProxyRouter = new Hono<Env>();
  */
 gatewaysRouter.get("/", async (c) => {
   const store = getArbiterStore(c.env);
-  const stored = await store.listSellerGateways(50);
+  const category = c.req.query("category");
+  const stored = await store.listSellerGateways(category);
   const storedSlugs = new Set(stored.map((g) => g.slug));
   const merged = [
     ...stored,
@@ -167,7 +168,10 @@ gatewaysRouter.get("/:slug", async (c) => {
       description: gw.description,
       category: gw.category,
       validationPreset: gw.validationPreset,
-      customSchema: gw.customSchema ? JSON.parse(gw.customSchema) : undefined,
+      customSchema:
+        typeof gw.customSchema === "string"
+          ? JSON.parse(gw.customSchema)
+          : gw.customSchema || undefined,
       totalCalls: gw.totalCalls,
       createdAt: gw.createdAt
     },
@@ -241,14 +245,14 @@ gatewaysRouter.post("/", async (c) => {
     );
   }
 
-  let customSchemaStr: string | undefined;
+  let customSchemaObj: Record<string, unknown> | undefined;
   if (body.customSchema) {
     try {
       const schemaObj = typeof body.customSchema === "string" ? JSON.parse(body.customSchema) : body.customSchema;
       if (!schemaObj || typeof schemaObj !== "object") {
         throw new Error("customSchema must be a valid JSON Schema object");
       }
-      customSchemaStr = JSON.stringify(schemaObj);
+      customSchemaObj = schemaObj as Record<string, unknown>;
     } catch (err: any) {
       return c.json({ success: false, error: `Invalid customSchema: ${err.message}` }, 400);
     }
@@ -257,18 +261,38 @@ gatewaysRouter.post("/", async (c) => {
   const record: SellerGatewayRecord = {
     id: `gw_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`,
     slug,
-    sellerAddress,
+    sellerAddress: sellerAddress as `0x${string}`,
     upstreamUrl,
     priceAtomic,
     description,
     category,
     validationPreset,
-    customSchema: customSchemaStr,
+    customSchema: customSchemaObj,
     totalCalls: 0,
     createdAt: Date.now()
   };
 
   await store.saveSellerGateway(record);
+  await store.upsertIndexedEndpoint({
+    id: `ep_gw_${record.slug}`,
+    endpoint_url: `https://api.nullclear.dev/g/${record.slug}`,
+    origin_domain: "api.nullclear.dev",
+    agent_id_erc8004: null,
+    seller_address: record.sellerAddress,
+    price_atomic: record.priceAtomic,
+    http_status: 402,
+    is_valid_x402: 1,
+    latency_ms: 35,
+    uptime_score: 100.0,
+    hallucination_rate: 0.0,
+    total_audits: 1,
+    failed_audits: 0,
+    category: record.category,
+    description: record.description,
+    nullclear_proxy_url: `https://api.nullclear.dev/https://api.nullclear.dev/g/${record.slug}`,
+    last_audited_at: record.createdAt,
+    source: "USER_SUBMITTED"
+  });
 
   return c.json(
     {
@@ -298,7 +322,7 @@ gatewaysRouter.post("/", async (c) => {
  */
 async function executeGatewayProxy(c: Context<Env>): Promise<Response> {
   const store = getArbiterStore(c.env);
-  const slug = c.req.param("slug");
+  const slug = c.req.param("slug") || "";
   const gateway = await resolveGateway(c, slug);
 
   if (!gateway) {
@@ -362,7 +386,10 @@ async function executeGatewayProxy(c: Context<Env>): Promise<Response> {
     }
 
     if (gateway.validationPreset === "CUSTOM" && gateway.customSchema) {
-      const customSchemaObj = JSON.parse(gateway.customSchema);
+      const customSchemaObj =
+        typeof gateway.customSchema === "string"
+          ? JSON.parse(gateway.customSchema)
+          : gateway.customSchema;
       const res = await validateUpstreamResponse(status, rawText, parsedJson, {
         expectedStatus: [200, 201],
         rejectRefusals: true,
@@ -472,7 +499,7 @@ async function executeGatewayProxy(c: Context<Env>): Promise<Response> {
       }
     };
 
-    const paymentRequired: X402PaymentRequired = {
+    const paymentRequired: X402PaymentRequired & { extensions?: Record<string, unknown> } = {
       x402Version: 2,
       error: "Payment Required: Submit EIP-3009 authorization via PAYMENT-SIGNATURE or X-Payment header",
       resource: {

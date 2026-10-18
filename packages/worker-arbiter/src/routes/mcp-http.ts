@@ -17,6 +17,46 @@ export const mcpHttpRouter = new Hono<Env>();
 
 export const MCP_TOOLS = [
   {
+    name: "nullclear_discover_verified_x402_apis",
+    description:
+      "Search the live NullClear Ecosystem Directory for audited, high-uptime x402 & ERC-8004 APIs by topic/keyword, category, minimum uptime, or max latency. Automatically returns the NullClear-protected Zero-Loss Proxy URL ('https://api.nullclear.dev/https://...') for each endpoint.",
+    annotations: {
+      title: "Discover Verified High-Uptime x402 APIs",
+      readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: true
+    },
+    inputSchema: {
+      type: "object",
+      properties: {
+        query: {
+          type: "string",
+          description: "Topic or keyword search (e.g. 'oracle', 'security', 'token', 'wallet', 'price')"
+        },
+        category: {
+          type: "string",
+          description: "Category filter (e.g. 'oracle', 'security', 'data', 'ai')"
+        },
+        minUptime: {
+          type: "number",
+          description: "Minimum rolling uptime score percentage (0-100, default 95)",
+          default: 95
+        },
+        maxLatencyMs: {
+          type: "number",
+          description: "Maximum acceptable edge round-trip latency in ms (default 2000)",
+          default: 2000
+        },
+        verifiedOnly: {
+          type: "boolean",
+          description: "Only return verified x402 endpoints (default true)",
+          default: true
+        }
+      }
+    }
+  },
+  {
     name: "nullclear_token_security_audit",
     description:
       "Audit any Base ERC-20 token address for honeypot risk, buy/sell taxes, verified bytecode, and x402 compatibility via NullClear Bazaar. Works out-of-the-box with zero configuration (10 free daily calls included).",
@@ -409,29 +449,98 @@ mcpHttpRouter.post("/", async (c) => {
     const args = params?.arguments || {};
 
     try {
+      // Tool 0: nullclear_discover_verified_x402_apis
+      if (toolName === "nullclear_discover_verified_x402_apis") {
+        const query =
+          typeof args.query === "string"
+            ? args.query
+            : typeof args.topic === "string"
+              ? args.topic
+              : undefined;
+        const category = typeof args.category === "string" ? args.category : undefined;
+        const minUptime = typeof args.minUptime === "number" ? args.minUptime : 95;
+        const maxLatencyMs = typeof args.maxLatencyMs === "number" ? args.maxLatencyMs : 2000;
+        const verifiedOnly = args.verifiedOnly !== false;
+
+        const endpoints = await store.queryIndexedEndpoints({
+          query,
+          category,
+          minUptime,
+          maxLatencyMs,
+          verifiedOnly
+        });
+
+        return c.json({
+          jsonrpc: "2.0",
+          id,
+          result: {
+            content: [
+              {
+                type: "text",
+                text: JSON.stringify(
+                  {
+                    status: "ok",
+                    totalFound: endpoints.length,
+                    endpoints: endpoints.map((ep) => ({
+                      endpointUrl: ep.endpoint_url,
+                      nullclearProxyUrl: ep.nullclear_proxy_url,
+                      nullclear_proxy_url: ep.nullclear_proxy_url,
+                      category: ep.category,
+                      description: ep.description,
+                      uptimeScore: ep.uptime_score,
+                      latencyMs: ep.latency_ms,
+                      priceAtomic: ep.price_atomic,
+                      sellerAddress: ep.seller_address,
+                      agentIdErc8004: ep.agent_id_erc8004,
+                      isValidX402: ep.is_valid_x402 === 1
+                    })),
+                    _nullclear: buildNullClearMetadata()
+                  },
+                  null,
+                  2
+                )
+              }
+            ]
+          }
+        });
+      }
+
       // Tool 1: nullclear_token_security_audit
       if (toolName === "nullclear_token_security_audit") {
         const freeTier = await consumeSponsoredFreeCall(c);
-        c.header("x-nullclear-tier", "free-trial");
+        c.header("x-nullclear-tier", freeTier.allowed ? "free-trial" : "free-trial-exhausted");
         c.header("x-nullclear-remaining-free-calls", String(freeTier.remaining));
 
         if (!freeTier.allowed) {
-          return c.json({
-            jsonrpc: "2.0",
-            id,
-            result: {
-              content: [
-                {
-                  type: "text",
-                  text: JSON.stringify({
-                    status: "free_trial_exhausted",
-                    message: "Daily free tier limit (10 calls/day) reached. Configure NULLCLEAR_PRIVATE_KEY in your MCP environment to continue with automatic $0.005 USDC x402 settlement.",
-                    _nullclear: buildNullClearMetadata(0)
-                  }, null, 2)
-                }
-              ]
-            }
-          });
+          return c.json(
+            {
+              jsonrpc: "2.0",
+              id,
+              error: {
+                code: 402,
+                message:
+                  "Payment Required: Daily free tier limit (10 calls/day) reached. Configure NULLCLEAR_PRIVATE_KEY in your MCP environment or pass an X-Payment header to continue."
+              },
+              result: {
+                content: [
+                  {
+                    type: "text",
+                    text: JSON.stringify(
+                      {
+                        status: "free_trial_exhausted",
+                        message:
+                          "Daily free tier limit (10 calls/day) reached. Configure NULLCLEAR_PRIVATE_KEY in your MCP environment or pass an X-Payment header to continue with automatic $0.005 USDC x402 settlement.",
+                        _nullclear: buildNullClearMetadata(0)
+                      },
+                      null,
+                      2
+                    )
+                  }
+                ]
+              }
+            },
+            402
+          );
         }
 
         const tokenAddress = String(args.tokenAddress || "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913").toLowerCase();
@@ -502,26 +611,39 @@ mcpHttpRouter.post("/", async (c) => {
       // Tool 2: nullclear_wallet_risk_score
       if (toolName === "nullclear_wallet_risk_score") {
         const freeTier = await consumeSponsoredFreeCall(c);
-        c.header("x-nullclear-tier", "free-trial");
+        c.header("x-nullclear-tier", freeTier.allowed ? "free-trial" : "free-trial-exhausted");
         c.header("x-nullclear-remaining-free-calls", String(freeTier.remaining));
 
         if (!freeTier.allowed) {
-          return c.json({
-            jsonrpc: "2.0",
-            id,
-            result: {
-              content: [
-                {
-                  type: "text",
-                  text: JSON.stringify({
-                    status: "free_trial_exhausted",
-                    message: "Daily free tier limit (10 calls/day) reached. Configure NULLCLEAR_PRIVATE_KEY in your MCP environment to continue.",
-                    _nullclear: buildNullClearMetadata(0)
-                  }, null, 2)
-                }
-              ]
-            }
-          });
+          return c.json(
+            {
+              jsonrpc: "2.0",
+              id,
+              error: {
+                code: 402,
+                message:
+                  "Payment Required: Daily free tier limit (10 calls/day) reached. Configure NULLCLEAR_PRIVATE_KEY in your MCP environment or pass an X-Payment header to continue."
+              },
+              result: {
+                content: [
+                  {
+                    type: "text",
+                    text: JSON.stringify(
+                      {
+                        status: "free_trial_exhausted",
+                        message:
+                          "Daily free tier limit (10 calls/day) reached. Configure NULLCLEAR_PRIVATE_KEY in your MCP environment or pass an X-Payment header to continue.",
+                        _nullclear: buildNullClearMetadata(0)
+                      },
+                      null,
+                      2
+                    )
+                  }
+                ]
+              }
+            },
+            402
+          );
         }
 
         const walletAddress = String(args.walletAddress || "0xB586eFcCa41dF27ad3873BEcA54da0c30bf04d5c");
@@ -586,26 +708,39 @@ mcpHttpRouter.post("/", async (c) => {
       // Tool 3: nullclear_crypto_market_oracle
       if (toolName === "nullclear_crypto_market_oracle") {
         const freeTier = await consumeSponsoredFreeCall(c);
-        c.header("x-nullclear-tier", "free-trial");
+        c.header("x-nullclear-tier", freeTier.allowed ? "free-trial" : "free-trial-exhausted");
         c.header("x-nullclear-remaining-free-calls", String(freeTier.remaining));
 
         if (!freeTier.allowed) {
-          return c.json({
-            jsonrpc: "2.0",
-            id,
-            result: {
-              content: [
-                {
-                  type: "text",
-                  text: JSON.stringify({
-                    status: "free_trial_exhausted",
-                    message: "Daily free tier limit (10 calls/day) reached. Configure NULLCLEAR_PRIVATE_KEY in your MCP environment to continue.",
-                    _nullclear: buildNullClearMetadata(0)
-                  }, null, 2)
-                }
-              ]
-            }
-          });
+          return c.json(
+            {
+              jsonrpc: "2.0",
+              id,
+              error: {
+                code: 402,
+                message:
+                  "Payment Required: Daily free tier limit (10 calls/day) reached. Configure NULLCLEAR_PRIVATE_KEY in your MCP environment or pass an X-Payment header to continue."
+              },
+              result: {
+                content: [
+                  {
+                    type: "text",
+                    text: JSON.stringify(
+                      {
+                        status: "free_trial_exhausted",
+                        message:
+                          "Daily free tier limit (10 calls/day) reached. Configure NULLCLEAR_PRIVATE_KEY in your MCP environment or pass an X-Payment header to continue.",
+                        _nullclear: buildNullClearMetadata(0)
+                      },
+                      null,
+                      2
+                    )
+                  }
+                ]
+              }
+            },
+            402
+          );
         }
 
         const pair = String(args.pair || "ETH/USDC").toUpperCase();
