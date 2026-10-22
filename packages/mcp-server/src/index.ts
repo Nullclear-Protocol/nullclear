@@ -19,7 +19,7 @@ const client = new NullClearClient({ arbiterUrl: ARBITER_URL });
 const server = new Server(
   {
     name: "nullclear-mcp-server",
-    version: "1.2.0"
+    version: "1.3.0"
   },
   {
     capabilities: {

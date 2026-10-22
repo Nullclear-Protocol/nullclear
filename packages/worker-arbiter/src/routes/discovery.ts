@@ -157,7 +157,7 @@ discoveryRouter.get("/", (c) => {
 <body>
   <div class="container">
     <header>
-      <div class="badge">PROTOCOL SPECIFICATION v1.2.0 &bull; 10 FREE DAILY CALLS</div>
+      <div class="badge">PROTOCOL SPECIFICATION v1.3.0 &bull; 10 FREE DAILY CALLS</div>
       <h1>NullClear Arbiter</h1>
       <p class="subtitle">Autonomous Non-Custodial Clearing, Deep Invariant Verification, URL-Prefix Auto-Guard & 1-Click Seller Gateways for x402 AI Agents on Base</p>
       <div class="quick-copy">
@@ -2660,7 +2660,7 @@ discoveryRouter.get("/leaderboard", async (c) => {
 <body>
   <div class="container">
     <header>
-      <div style="color:var(--accent);font-weight:700;font-size:0.82rem;margin-bottom:0.4rem">NULLCLEAR ECOSYSTEM RADAR &bull; CANARY AUDITOR v1.2.0</div>
+      <div style="color:var(--accent);font-weight:700;font-size:0.82rem;margin-bottom:0.4rem">NULLCLEAR ECOSYSTEM RADAR &bull; CANARY AUDITOR v1.3.0</div>
       <h1>x402 &amp; ERC-8004 Live Uptime Leaderboard</h1>
       <p class="subtitle">Real-time Canary probes across all x402 APIs and Base Mainnet USDC EIP-3009 settlements. Route any endpoint through <code>https://api.nullclear.dev/</code> for zero-loss schema escrow.</p>
       <div style="margin-top:0.75rem;font-size:0.86rem">

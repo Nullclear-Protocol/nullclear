@@ -131,7 +131,7 @@ async function probeDomainM2M(domain: string, baseHeaders: Record<string, string
           capabilities: {},
           clientInfo: {
             name: "nullclear-arbiter-directory",
-            version: "1.2.0",
+            version: "1.3.0",
             url: "https://nullclear.dev/leaderboard"
           }
         }

@@ -292,7 +292,7 @@ mcpHttpRouter.get("/", (c) => {
   return c.json({
     status: "active",
     name: "nullclear-mcp",
-    version: "1.2.0",
+    version: "1.3.0",
     protocolVersion: "2024-11-05",
     description: "NullClear Model Context Protocol Remote Server (Zero-Config Free Trial Enabled)",
     endpoint: "https://api.nullclear.dev/mcp",
@@ -1160,7 +1160,7 @@ mcpHttpRouter.post("/", async (c) => {
         },
         serverInfo: {
           name: "nullclear-mcp",
-          version: "1.2.0"
+          version: "1.3.0"
         }
       }
     });
