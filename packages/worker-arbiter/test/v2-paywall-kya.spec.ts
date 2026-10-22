@@ -401,5 +401,41 @@ describe("Next-Gen Protocol Upgrades: x402 V1/V2 Headers, Soft-Paywall Guard & P
       expect(verifyJson.payload.maxPerCallAtomic).toBe("50000000");
       expect(verifyJson.payload.arbiterAgentId).toBe(124595);
     });
+
+    it("GET /v1/bazaar/audit strictly returns 402 Payment Required by default even on production host / client IP", async () => {
+      const res = await app.fetch(
+        new Request("https://api.nullclear.dev/v1/bazaar/audit", {
+          headers: {
+            "cf-connecting-ip": "203.0.113.195",
+            "x-forwarded-for": "203.0.113.195"
+          }
+        }),
+        testEnv
+      );
+
+      expect(res.status).toBe(402);
+      expect(res.headers.get("PAYMENT-REQUIRED")).toBeTruthy();
+      expect(res.headers.get("X-Payment-Required")).toBeTruthy();
+
+      const json = (await res.json()) as any;
+      expect(json.error).toBe("Payment Required");
+      expect(json.x402Version).toBe(2);
+      expect(Array.isArray(json.accepts)).toBe(true);
+      expect(json.accepts[0].scheme).toBe("exact");
+      expect(json.accepts[0].amount).toBe("10000");
+    });
+
+    it("URL-prefix proxy returns 403 Publisher Opt-Out for blacklisted domain x402-trust.com", async () => {
+      const res = await app.fetch(
+        new Request("https://api.nullclear.dev/https://x402-trust.com/v1/data"),
+        testEnv
+      );
+
+      expect(res.status).toBe(403);
+      const json = (await res.json()) as any;
+      expect(json.stage).toBe("PUBLISHER_OPT_OUT");
+      expect(json.error).toBe("Publisher Opt-Out");
+      expect(json.message).toContain("opted out");
+    });
   });
 });

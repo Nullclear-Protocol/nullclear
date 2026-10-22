@@ -1,6 +1,11 @@
 export const MAX_PAYLOAD_BYTES = 1048576; // 1 MB
 export const UPSTREAM_TIMEOUT_MS = 8000; // 8000 ms max timeout
 
+export const OPT_OUT_DOMAINS = new Set<string>([
+  "x402-trust.com",
+  "www.x402-trust.com"
+]);
+
 export interface SsrfCheckResult {
   allowed: boolean;
   reason?: string;
@@ -17,9 +22,19 @@ export function validateTargetUrl(targetUrl: string, environment?: string): Ssrf
     return { allowed: false, reason: "SSRF_GUARD: Malformed or unparseable target URL" };
   }
 
+  const hostname = url.hostname.toLowerCase();
+
+  // 1. Publisher Opt-Out Check (Applies in all environments)
+  if (OPT_OUT_DOMAINS.has(hostname)) {
+    return {
+      allowed: false,
+      reason: `PUBLISHER_OPT_OUT: Domain "${hostname}" has opted out of third-party proxy wrapping and directory indexing.`
+    };
+  }
+
   const isProduction = environment === "production";
 
-  // 1. Protocol validation
+  // 2. Protocol validation
   if (url.protocol !== "https:") {
     if (!isProduction && (url.protocol === "http:" && (url.hostname === "localhost" || url.hostname === "127.0.0.1" || url.hostname === "::1"))) {
       // Allowed strictly for local test/dev environments

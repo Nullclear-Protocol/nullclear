@@ -172,16 +172,20 @@ export async function handleUrlProxyRequest(c: Context<Env>, explicitTargetUrl?:
     );
   }
 
-  // 1. SSRF Guard
+  // 1. SSRF & Opt-Out Guard
   const ssrfCheck = validateTargetUrl(targetUrl, c.env.ENVIRONMENT);
   if (!ssrfCheck.allowed) {
+    const isOptOut = ssrfCheck.reason?.includes("PUBLISHER_OPT_OUT");
     return c.json(
       {
         verified: false,
-        stage: "SSRF_BLOCKED",
-        error: ssrfCheck.reason || "Target URL blocked by SSRF filter"
+        stage: isOptOut ? "PUBLISHER_OPT_OUT" : "SSRF_BLOCKED",
+        error: isOptOut ? "Publisher Opt-Out" : (ssrfCheck.reason || "Target URL blocked by SSRF filter"),
+        message: isOptOut
+          ? "This publisher has opted out of third-party proxy wrapping. Please query the upstream endpoint directly."
+          : undefined
       },
-      400
+      isOptOut ? 403 : 400
     );
   }
 

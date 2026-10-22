@@ -99,35 +99,9 @@ export function shouldUseFreeTierForBazaar(c: Context<Env>): boolean {
     return false;
   }
 
-  // Allow x402 discovery indexers (or explicit 402 probes) to inspect the 402 challenge
-  const ua = (c.req.header("user-agent") || "").toLowerCase();
-  if (
-    c.req.header("x-x402-probe") === "true" ||
-    c.req.query("x402") === "probe" ||
-    ua.includes("x402scan") ||
-    ua.includes("agentcash") ||
-    ua.includes("bazaar-indexer")
-  ) {
-    return false;
-  }
-
-  if (isExplicitFreeTrialRequest(c)) {
-    return true;
-  }
-
-  // On production domains or requests with real client IP headers, enable zero-config free trial by default
-  const url = new URL(c.req.url);
-  const host = url.hostname.toLowerCase();
-  if (
-    host === "api.nullclear.dev" ||
-    host === "nullclear.dev" ||
-    Boolean(c.req.header("cf-connecting-ip")) ||
-    Boolean(c.req.header("x-forwarded-for"))
-  ) {
-    return true;
-  }
-
-  return false;
+  // Strictly require an explicit free trial opt-in (header, query param, or active MCP session).
+  // Paid routes must always emit a 402 Payment Required challenge by default to comply with x402 specifications.
+  return isExplicitFreeTrialRequest(c);
 }
 
 export async function consumeSponsoredFreeCall(
