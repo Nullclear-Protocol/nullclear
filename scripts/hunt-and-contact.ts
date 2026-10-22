@@ -25,8 +25,13 @@ const CONTACTED_LEDGER_PATH = path.join(OUTPUT_DIR, "contacted-leads.json");
 const LEADS_OUTPUT_PATH = path.join(OUTPUT_DIR, "leads.json");
 const OUTREACH_QUEUE_PATH = path.join(OUTPUT_DIR, "outreach-queue.json");
 
-const MAX_ISSUES_PER_RUN = 3;
-const MIN_DELAY_MS = 45_000;
+const MAX_ISSUES_PER_RUN = 5;
+const MIN_DELAY_MS = 60_000;
+const MAX_DELAY_MS = 120_000;
+
+function getRandomPacingDelayMs(): number {
+  return Math.floor(MIN_DELAY_MS + Math.random() * (MAX_DELAY_MS - MIN_DELAY_MS));
+}
 
 const SKIP_ORGS = new Set([
   "coinbase",
@@ -201,15 +206,37 @@ const SEED_KNOWN_X402_REPOS: Array<{
     preferredRole: "seller"
   },
   {
-    repoFullName: "Rasukarusan/x402-nextjs-example",
-    owner: "Rasukarusan",
-    repoName: "x402-nextjs-example",
-    description: "HTTP 402 Next.js middleware implementation with paymentMiddleware",
-    stars: 0,
-    updatedAt: "2026-10-16T08:36:21Z",
+    repoFullName: "ar-io/wayfinder",
+    owner: "ar-io",
+    repoName: "wayfinder",
+    description: "Arweave & Turbo Gateway decentralized data retrieval with x402 micropayments.",
+    stars: 1,
+    updatedAt: "2026-10-18T12:00:00Z",
     defaultBranch: "main",
-    filePath: "proxy.ts",
-    preferredRole: "seller"
+    filePath: "scripts/x402-fetch.ts",
+    preferredRole: "buyer"
+  },
+  {
+    repoFullName: "tatdz/antidote",
+    owner: "tatdz",
+    repoName: "antidote",
+    description: "Client-side Web3 fetch wrapper for x402 payments on Base & Base Sepolia.",
+    stars: 0,
+    updatedAt: "2026-10-18T10:00:00Z",
+    defaultBranch: "main",
+    filePath: "frontend/lib/x402-fetch-wrapper.ts",
+    preferredRole: "buyer"
+  },
+  {
+    repoFullName: "jonahthan433/cortexcloud-mcp",
+    owner: "jonahthan433",
+    repoName: "cortexcloud-mcp",
+    description: "Self-funding Model Context Protocol proxy for CortexCloud resources using @x402/fetch.",
+    stars: 0,
+    updatedAt: "2026-10-18T15:00:00Z",
+    defaultBranch: "main",
+    filePath: "proxy/src/pay.ts",
+    preferredRole: "buyer"
   }
 ];
 
@@ -963,7 +990,10 @@ const PRIORITY_ACTIVE_REPOS = new Set([
   "krishna-aga/x402-api-marketplace",
   "brkddd/kite-x402-hono",
   "forgemeshlabs/pay-per-crawl-js",
-  "jimmyplup/x402-multirail"
+  "jimmyplup/x402-multirail",
+  "ar-io/wayfinder",
+  "tatdz/antidote",
+  "jonahthan433/cortexcloud-mcp"
 ]);
 
 function isPassiveTutorialOrExampleRepo(repoFullName: string, description: string): boolean {
@@ -978,6 +1008,109 @@ function isPassiveTutorialOrExampleRepo(repoFullName: string, description: strin
  * STEP 2.3: Construct hyper-specific GitHub issue Title & Body using the exact templates
  */
 function buildIssueForLead(lead: DiscoveredLead): { title: string; body: string } {
+  const repoLower = lead.repoFullName.toLowerCase();
+
+  // 1. forgemeshlabs/pay-per-crawl-js — publisher pay-per-crawl, Cloudflare Turnstile, soft-paywalls & dual V1/V2 wire
+  if (repoLower === "forgemeshlabs/pay-per-crawl-js") {
+    return {
+      title: "Publisher bot-trap & soft-paywall edge case in packages/core/src/x402.js: validating HTTP 200 crawler responses pre-settlement",
+      body: `Hey @${lead.owner} — was reading through \`packages/core/src/x402.js#L83\` where you construct \`bodyV1\`, \`envelopeV2\`, and handle payment extraction across x402 V1, V2 (\`PAYMENT-SIGNATURE\`), and MPP wire formats.
+
+Love how cleanly you handle multi-wire envelopes for crawlers across Cloudflare Workers, Next.js, and Express.
+
+One edge case we kept seeing with pay-per-crawl traffic in production: when crawlers hit publishers behind Cloudflare or bot management layers, broken or misconfigured edge rules frequently return \`HTTP 200 OK\` containing a Cloudflare Turnstile challenge (\`cf-turnstile\`, \`_cf_chl_opt\`), a captcha, or a 150-byte teaser instead of the full article. If settlement executes purely on receiving HTTP 200, the crawler's wallet burns Base USDC for an unusable bot page.
+
+In NullClear's arbiter (\`https://api.nullclear.dev\`), we implemented a Pre-Settlement Soft-Paywall Guard that inspects the 200 response body for bot-challenge signatures and minimum readable content density before executing EIP-3009 settlement. If the upstream returned a CAPTCHA or teaser, the payment authorization is shredded and never submitted to the facilitator.
+
+Also, we've indexed pay-per-crawl compatibility in our public directory (\`https://nullclear.dev/leaderboard\`). If you're testing crawler clients against edge edge-cases, we host free sandbox routes (e.g. \`https://api.nullclear.dev/v1/sandbox/soft-paywall-seller\` and \`crashing-seller\`) that intentionally trigger Turnstile/refusal states without spending real USDC.
+
+Kudos on the clean MPP & dual-x402 implementation!`
+    };
+  }
+
+  // 2. jimmyplup/x402-multirail — Express multi-rail routing, Celo/Base/Arc, V1 header fallback, leaderboard indexing
+  if (repoLower === "jimmyplup/x402-multirail") {
+    return {
+      title: "Indexing x402-multirail in NullClear Leaderboard + V1/V2 dual-header fallback in server.example.js",
+      body: `Hey @${lead.owner} — was reading through \`server.example.js#L50\` where you configure multi-rail routing across Celo, Base, and Arc with \`rails.accepts(PRICE_USD)\`.
+
+Really cool multi-chain settlement architecture. Two quick things that might be helpful:
+
+1. **V1 Client Backward Compatibility:** In \`server.example.js#L47\`, you check \`req.get('PAYMENT-SIGNATURE')\` and emit \`PAYMENT-REQUIRED\` (V2). Many older agent runtimes and \`@x402/fetch\` 1.x clients still send \`X-Payment\` and look for \`X-Payment-Required\`. If you emit both headers simultaneously on 402/200 responses, legacy V1 clients can consume your multi-rail routes without changes.
+
+2. **Live Directory & Latency Radar:** We run an uptime radar and directory for live x402 endpoints at \`https://nullclear.dev/leaderboard\` and an MCP server (\`@nullclear/mcp\`) so autonomous agents can discover paid API routes. If you deploy a live testnet or mainnet instance of this multi-rail server, feel free to submit the URL via \`POST https://api.nullclear.dev/v1/radar/submit-endpoint\` so our canary probes can index it with measured p95 latency and health badges.
+
+Great work on the multi-rail setup!`
+    };
+  }
+
+  // 3. ar-io/wayfinder — Arweave & Turbo Gateway data retrieval, preventing lost USDC on gateway 502/504 timeouts or truncated streams
+  if (repoLower === "ar-io/wayfinder") {
+    return {
+      title: "Preventing lost USDC on Turbo Gateway 502/504 timeouts or truncated streams in scripts/x402-fetch.ts",
+      body: `Hey @${lead.owner} — was looking at \`scripts/x402-fetch.ts#L45\` where you initialize \`createX402Fetch\` with \`privateKeyToAccount\` to query Turbo Gateway (\`\${gatewayUrl}/\${txId}\`) using x402 micropayments.
+
+Decentralized data retrieval via x402 is an awesome use-case for Arweave. One failure mode we ran into with storage gateway queries:
+
+When storage nodes or gateway edge points experience upstream timeouts (\`502 Bad Gateway\` / \`504 Gateway Timeout\`), or stream aborts on large blobs after the EIP-3009 authorization is transmitted, standard facilitators often settle the transaction on Base anyway. The client script ends up paying USDC for a failed or truncated chunk retrieval.
+
+If you want pre-settlement protection, you can run the gateway URL through NullClear's zero-loss clearing proxy:
+\`\`\`ts
+const gatewayUrl = 'https://api.nullclear.dev/https://turbo-gateway.com';
+\`\`\`
+The proxy inspects the gateway response status and body integrity before releasing the settlement. If Turbo Gateway or an upstream storage node 500s or hangs, the authorization is shredded and your wallet spends 0 USDC.
+
+We also host chaos-testing endpoints at \`https://api.nullclear.dev/v1/sandbox/crashing-seller\` to test gateway failure loops locally without risking funds.
+
+Awesome project!`
+    };
+  }
+
+  // 4. tatdz/antidote — Client-side Web3 fetch wrapper for x402 on Base & Base Sepolia, protecting user wallets against 500s/refusals
+  if (repoLower === "tatdz/antidote") {
+    return {
+      title: "Preventing user fund loss on upstream 5xx / soft-paywalls in frontend/lib/x402-fetch-wrapper.ts",
+      body: `Hey @${lead.owner} — was checking out \`frontend/lib/x402-fetch-wrapper.ts#L53\` where you build the compliant \`walletClient\` wrapper around \`wrapFetchWithPayment\` with client-side \`signTypedData\`.
+
+Really neat frontend abstraction for Next.js and Web3 wallets.
+
+One critical UX issue we noticed with client-side x402 wrappers: when end users trigger paid requests from the browser, if an upstream API endpoint throws a \`500/502\` error, returns an empty body, or triggers a Cloudflare challenge page on HTTP 200, standard x402 facilitators still settle the EIP-3009 authorization on Base. From the user's perspective, their wallet was charged USDC and they got an error screen in your dApp.
+
+To protect end-user balances against broken endpoints, you can route the target fetch through NullClear's zero-loss edge arbiter:
+\`\`\`ts
+// Prefix upstream URL with the zero-loss proxy
+const safeUrl = 'https://api.nullclear.dev/' + targetApiUrl;
+\`\`\`
+The arbiter buffers the response and only settles the EIP-3009 transfer if the upstream actually delivered valid, non-error content. If it fails or returns a bot wall, the auth signature is shredded and the user's wallet is never charged.
+
+You can also test your error-handling UI against our sandbox endpoints (\`https://api.nullclear.dev/v1/sandbox/crashing-seller\` and \`soft-paywall-seller\`) without burning testnet or mainnet USDC.
+
+Clean wrapper implementation!`
+    };
+  }
+
+  // 5. jonahthan433/cortexcloud-mcp — Self-funding Model Context Protocol proxy for CortexCloud resources using @x402/fetch
+  if (repoLower === "jonahthan433/cortexcloud-mcp") {
+    return {
+      title: "Self-funding MCP proxy budget guard in proxy/src/pay.ts: trapping LLM refusals & 5xx before USDC settlement",
+      body: `Hey @${lead.owner} — was checking out \`proxy/src/pay.ts#L23\` where you configure \`wrapFetchWithPayment\` with \`x402Client\` and \`registerExactEvmScheme\` to create self-funding MCP proxies querying \`api.cortexcloud.org\` on Base.
+
+Love the autonomous self-funding MCP pattern — this is exactly where agentic tooling is heading.
+
+One problem we frequently encountered with unattended MCP agent loops paying per-call: if the upstream inference endpoint returns an LLM refusal (\`"I am unable to fulfill this request"\`, \`"As an AI language model..."\`), a gateway 502/503 during high load, or a 100-byte truncated error on HTTP 200, the \`@x402/fetch\` wrapper still settles the EIP-3009 transfer on Base. In automated agent workflows, this burns the agent's wallet balance on failed tool calls.
+
+If you want pre-settlement protection for CortexCloud calls, you can prefix the upstream URL in your proxy:
+\`\`\`ts
+const endpoint = 'https://api.nullclear.dev/https://api.cortexcloud.org';
+\`\`\`
+NullClear's arbiter inspects response bodies for standard LLM refusal signatures and HTTP 5xx errors before broadcasting the transfer to the facilitator. If the inference fails or refuses, the authorization is shredded and zero USDC is deducted from your agent's account.
+
+We also provide chaos-test routes like \`https://api.nullclear.dev/v1/sandbox/hallucinating-seller\` and \`crashing-seller\` to test MCP tool fallback handling without spending real USDC.
+
+Great work on the MCP proxy setup!`
+    };
+  }
+
   const filename = path.posix.basename(lead.filePath);
 
   if (lead.role === "buyer") {
@@ -1188,11 +1321,17 @@ async function main() {
     });
   }
 
-  const actionableBatch = outreachQueue.slice(0, MAX_ISSUES_PER_RUN);
+  const limitArgIdx = args.indexOf("--limit");
+  const maxIssues =
+    limitArgIdx !== -1 && args[limitArgIdx + 1]
+      ? parseInt(args[limitArgIdx + 1], 10)
+      : MAX_ISSUES_PER_RUN;
+
+  const actionableBatch = outreachQueue.slice(0, maxIssues);
 
   if (mode === "dry-run") {
     console.log(
-      `\n[DRY-RUN] Generated ${outreachQueue.length} code-specific outreach issues (capped at ${MAX_ISSUES_PER_RUN} per live run):`
+      `\n[DRY-RUN] Generated ${outreachQueue.length} code-specific outreach issues (capped at ${maxIssues} per live run):`
     );
     for (let i = 0; i < actionableBatch.length; i++) {
       const item = actionableBatch[i];
@@ -1203,7 +1342,7 @@ async function main() {
       console.log(`Issue Body  :\n${item.issueBody}\n`);
     }
   } else {
-    console.log(`\n[LIVE MODE] Opening up to ${MAX_ISSUES_PER_RUN} GitHub issues with 45s pacing...`);
+    console.log(`\n[LIVE MODE] Opening up to ${actionableBatch.length} GitHub issues with 1-2 min random pacing...`);
     for (let i = 0; i < actionableBatch.length; i++) {
       const item = actionableBatch[i];
       if (isAlreadyContacted(ledger, item.repoFullName, item.owner)) {
@@ -1212,8 +1351,10 @@ async function main() {
       }
 
       if (i > 0) {
-        console.log(`  -> Waiting ${MIN_DELAY_MS / 1000}s before next GitHub issue creation...`);
-        await sleep(MIN_DELAY_MS);
+        const delayMs = getRandomPacingDelayMs();
+        const delaySec = Math.round(delayMs / 1000);
+        console.log(`  -> Waiting ${delaySec}s (random 1-2 min pacing) before next GitHub issue creation...`);
+        await sleep(delayMs);
       }
 
       try {

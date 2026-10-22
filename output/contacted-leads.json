@@ -1,5 +1,5 @@
 {
-  "updatedAt": "2026-10-22T10:20:09.096Z",
+  "updatedAt": "2026-10-22T12:01:13.640Z",
   "contactedRepos": [
     "ToolSnap-app/toolsnap-mcp",
     "withgrokbot/x402-spotcheck",
@@ -9,7 +9,12 @@
     "gibrancorbin11-hub/wayleave",
     "nirholas/x402-fetch",
     "krishna-aga/x402-API-Marketplace",
-    "BrKDDD/kite-x402-hono"
+    "BrKDDD/kite-x402-hono",
+    "forgemeshlabs/pay-per-crawl-js",
+    "jimmyplup/x402-multirail",
+    "ar-io/wayfinder",
+    "tatdz/antidote",
+    "jonahthan433/cortexcloud-mcp"
   ],
   "contactedOwners": [
     "ToolSnap-app",
@@ -20,7 +25,12 @@
     "gibrancorbin11-hub",
     "nirholas",
     "krishna-aga",
-    "BrKDDD"
+    "BrKDDD",
+    "forgemeshlabs",
+    "jimmyplup",
+    "ar-io",
+    "tatdz",
+    "jonahthan433"
   ],
   "history": [
     {
@@ -84,6 +94,41 @@
       "owner": "BrKDDD",
       "issueUrl": "https://github.com/BrKDDD/kite-x402-hono/issues/23",
       "contactedAt": "2026-10-22T10:20:09.096Z",
+      "mode": "live"
+    },
+    {
+      "repoFullName": "forgemeshlabs/pay-per-crawl-js",
+      "owner": "forgemeshlabs",
+      "issueUrl": "https://github.com/forgemeshlabs/pay-per-crawl-js/issues/1",
+      "contactedAt": "2026-10-22T11:54:57.281Z",
+      "mode": "live"
+    },
+    {
+      "repoFullName": "jimmyplup/x402-multirail",
+      "owner": "jimmyplup",
+      "issueUrl": "https://github.com/jimmyplup/x402-multirail/issues/1",
+      "contactedAt": "2026-10-22T11:56:56.769Z",
+      "mode": "live"
+    },
+    {
+      "repoFullName": "ar-io/wayfinder",
+      "owner": "ar-io",
+      "issueUrl": "https://github.com/ar-io/wayfinder/issues/259",
+      "contactedAt": "2026-10-22T11:58:25.470Z",
+      "mode": "live"
+    },
+    {
+      "repoFullName": "tatdz/antidote",
+      "owner": "tatdz",
+      "issueUrl": "https://github.com/tatdz/antidote/issues/1",
+      "contactedAt": "2026-10-22T11:59:47.471Z",
+      "mode": "live"
+    },
+    {
+      "repoFullName": "jonahthan433/cortexcloud-mcp",
+      "owner": "jonahthan433",
+      "issueUrl": "https://github.com/jonahthan433/cortexcloud-mcp/issues/1",
+      "contactedAt": "2026-10-22T12:01:13.640Z",
       "mode": "live"
     }
   ]

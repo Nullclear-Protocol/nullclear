@@ -1,66 +1,15 @@
 {
-  "generatedAt": "2026-10-22T10:18:36.975Z",
+  "generatedAt": "2026-10-22T11:54:56.643Z",
   "mode": "live",
   "summary": {
     "totalGitHubLeadsVerified": 15,
     "facilitatorResourcesDiscovered": 100,
-    "baseMainnetLatestBlock": 52937479,
-    "baseMicropaymentReceiversCount": 168
+    "baseMainnetLatestBlock": 52940367,
+    "baseMicropaymentReceiversCount": 163
   },
   "githubLeads": [
     {
-      "id": "lead_1_x402-fetch",
-      "source": "github-code",
-      "role": "buyer",
-      "repoFullName": "nirholas/x402-fetch",
-      "owner": "nirholas",
-      "repoName": "x402-fetch",
-      "repoUrl": "https://github.com/nirholas/x402-fetch",
-      "description": "Drop-in fetch wrapper that automatically pays x402 payment challenges with USDC on Base",
-      "stars": 9,
-      "updatedAt": "2026-10-10T22:29:31Z",
-      "filePath": "src/client.js",
-      "lineNumber": 49,
-      "matchedFunctionOrLibrary": "TransferWithAuthorization",
-      "codeSnippet": "TransferWithAuthorization: [",
-      "hasPreSettlementValidation": false
-    },
-    {
-      "id": "lead_2_x402-API-Marketplace",
-      "source": "github-code",
-      "role": "buyer",
-      "repoFullName": "krishna-aga/x402-API-Marketplace",
-      "owner": "krishna-aga",
-      "repoName": "x402-API-Marketplace",
-      "repoUrl": "https://github.com/krishna-aga/x402-API-Marketplace",
-      "description": "API marketplace where people can sell their APIs and buyers can use x402 to pay-per-fetch",
-      "stars": 0,
-      "updatedAt": "2026-10-02T07:23:00Z",
-      "filePath": "testClient.mjs",
-      "lineNumber": 15,
-      "matchedFunctionOrLibrary": "wrapFetchWithPayment",
-      "codeSnippet": "const fetchWithPayment = wrapFetchWithPayment(globalThis.fetch, client);",
-      "hasPreSettlementValidation": false
-    },
-    {
-      "id": "lead_3_kite-x402-hono",
-      "source": "github-code",
-      "role": "seller",
-      "repoFullName": "BrKDDD/kite-x402-hono",
-      "owner": "BrKDDD",
-      "repoName": "kite-x402-hono",
-      "repoUrl": "https://github.com/BrKDDD/kite-x402-hono",
-      "description": "Bun/Hono wrapper for x402 paid HTTP APIs, with payment-flow tests and npm packaging",
-      "stars": 0,
-      "updatedAt": "2026-10-20T14:22:20Z",
-      "filePath": "tests/payment.test.ts",
-      "lineNumber": 16,
-      "matchedFunctionOrLibrary": "PAYMENT-REQUIRED",
-      "codeSnippet": "response.headers.get(\"payment-required\")!,",
-      "hasPreSettlementValidation": false
-    },
-    {
-      "id": "lead_4_pay-per-crawl-js",
+      "id": "lead_1_pay-per-crawl-js",
       "source": "github-code",
       "role": "buyer",
       "repoFullName": "forgemeshlabs/pay-per-crawl-js",
@@ -78,7 +27,7 @@
       "liveEndpointUrl": "https://paymentauth.org/problems/"
     },
     {
-      "id": "lead_5_x402-multirail",
+      "id": "lead_2_x402-multirail",
       "source": "github-code",
       "role": "seller",
       "repoFullName": "jimmyplup/x402-multirail",
@@ -95,16 +44,16 @@
       "hasPreSettlementValidation": false
     },
     {
-      "id": "lead_6_wayfinder",
+      "id": "lead_3_wayfinder",
       "source": "github-code",
       "role": "buyer",
       "repoFullName": "ar-io/wayfinder",
       "owner": "ar-io",
       "repoName": "wayfinder",
       "repoUrl": "https://github.com/ar-io/wayfinder",
-      "description": "WayFinder is a set of tools and libraries that enable decentralized and verifiable access to data stored on Arweave via the ar.io gateway network.",
-      "stars": 0,
-      "updatedAt": "2026-10-22T10:18:27.587Z",
+      "description": "Arweave & Turbo Gateway decentralized data retrieval with x402 micropayments.",
+      "stars": 1,
+      "updatedAt": "2026-10-18T12:00:00Z",
       "filePath": "scripts/x402-fetch.ts",
       "lineNumber": 17,
       "matchedFunctionOrLibrary": "x402 fetch",
@@ -113,25 +62,41 @@
       "liveEndpointUrl": "http://www.apache.org/licenses/LICENSE-2.0"
     },
     {
-      "id": "lead_7_three.ws",
+      "id": "lead_4_antidote",
       "source": "github-code",
       "role": "buyer",
-      "repoFullName": "nirholas/three.ws",
-      "owner": "nirholas",
-      "repoName": "three.ws",
-      "repoUrl": "https://github.com/nirholas/three.ws",
-      "description": "Open-source platform for 3D AI agents. Turn text or a photo into a rigged, animated GLB avatar, give it an LLM brain, memory and a wallet, and embed it anywhere with one web component. Remote MCP server, x402 payments, Three.js, browser-native.",
+      "repoFullName": "tatdz/antidote",
+      "owner": "tatdz",
+      "repoName": "antidote",
+      "repoUrl": "https://github.com/tatdz/antidote",
+      "description": "Client-side Web3 fetch wrapper for x402 payments on Base & Base Sepolia.",
       "stars": 0,
-      "updatedAt": "2026-10-22T10:18:27.587Z",
-      "filePath": "packages/x402-fetch/examples/paid-call.mjs",
+      "updatedAt": "2026-10-18T10:00:00Z",
+      "filePath": "frontend/lib/x402-fetch-wrapper.ts",
       "lineNumber": 1,
       "matchedFunctionOrLibrary": "x402 fetch",
-      "codeSnippet": "// Real paid x402 call with @three-ws/x402-fetch.",
-      "hasPreSettlementValidation": false,
-      "liveEndpointUrl": "https://three.ws/api/x402/market-global"
+      "codeSnippet": "// lib/x402-fetch-wrapper.ts",
+      "hasPreSettlementValidation": false
     },
     {
-      "id": "lead_8_docs-atlas-bf4fd31e",
+      "id": "lead_5_cortexcloud-mcp",
+      "source": "github-code",
+      "role": "buyer",
+      "repoFullName": "jonahthan433/cortexcloud-mcp",
+      "owner": "jonahthan433",
+      "repoName": "cortexcloud-mcp",
+      "repoUrl": "https://github.com/jonahthan433/cortexcloud-mcp",
+      "description": "Self-funding Model Context Protocol proxy for CortexCloud resources using @x402/fetch.",
+      "stars": 0,
+      "updatedAt": "2026-10-18T15:00:00Z",
+      "filePath": "proxy/src/pay.ts",
+      "lineNumber": 23,
+      "matchedFunctionOrLibrary": "wrapFetchWithPayment",
+      "codeSnippet": "export function wrapFetchWithPayment(baseFetch: typeof fetch, cfg: PayConfig) {",
+      "hasPreSettlementValidation": false
+    },
+    {
+      "id": "lead_6_docs-atlas-bf4fd31e",
       "source": "github-code",
       "role": "buyer",
       "repoFullName": "mintlify-atlas/docs-atlas-bf4fd31e",
@@ -140,7 +105,7 @@
       "repoUrl": "https://github.com/mintlify-atlas/docs-atlas-bf4fd31e",
       "description": "",
       "stars": 0,
-      "updatedAt": "2026-10-22T10:18:27.587Z",
+      "updatedAt": "2026-10-22T11:54:45.576Z",
       "filePath": "api/x402-fetch.mdx",
       "lineNumber": 26,
       "matchedFunctionOrLibrary": "wrapFetchWithPayment",
@@ -149,24 +114,7 @@
       "liveEndpointUrl": "https://api.example.com/protected"
     },
     {
-      "id": "lead_9_antidote",
-      "source": "github-code",
-      "role": "buyer",
-      "repoFullName": "tatdz/antidote",
-      "owner": "tatdz",
-      "repoName": "antidote",
-      "repoUrl": "https://github.com/tatdz/antidote",
-      "description": "",
-      "stars": 0,
-      "updatedAt": "2026-10-22T10:18:27.587Z",
-      "filePath": "frontend/lib/x402-fetch-wrapper.ts",
-      "lineNumber": 1,
-      "matchedFunctionOrLibrary": "x402 fetch",
-      "codeSnippet": "// lib/x402-fetch-wrapper.ts",
-      "hasPreSettlementValidation": false
-    },
-    {
-      "id": "lead_10_x402-double-spend",
+      "id": "lead_7_x402-double-spend",
       "source": "github-code",
       "role": "buyer",
       "repoFullName": "cyl19970726/x402-double-spend",
@@ -175,7 +123,7 @@
       "repoUrl": "https://github.com/cyl19970726/x402-double-spend",
       "description": "",
       "stars": 0,
-      "updatedAt": "2026-10-22T10:18:28.190Z",
+      "updatedAt": "2026-10-22T11:54:46.311Z",
       "filePath": "src/index.ts",
       "lineNumber": 39,
       "matchedFunctionOrLibrary": "wrapFetchWithPayment",
@@ -184,7 +132,7 @@
       "liveEndpointUrl": "https://api.example.com/paid-endpoint"
     },
     {
-      "id": "lead_11_x402-fuel",
+      "id": "lead_8_x402-fuel",
       "source": "github-code",
       "role": "buyer",
       "repoFullName": "naz3eh/x402-fuel",
@@ -193,7 +141,7 @@
       "repoUrl": "https://github.com/naz3eh/x402-fuel",
       "description": "",
       "stars": 0,
-      "updatedAt": "2026-10-22T10:18:28.190Z",
+      "updatedAt": "2026-10-22T11:54:46.311Z",
       "filePath": "src/fetch.ts",
       "lineNumber": 40,
       "matchedFunctionOrLibrary": "wrapFetchWithPayment",
@@ -202,24 +150,7 @@
       "liveEndpointUrl": "https://api.example.com/data"
     },
     {
-      "id": "lead_12_cortexcloud-mcp",
-      "source": "github-code",
-      "role": "buyer",
-      "repoFullName": "jonahthan433/cortexcloud-mcp",
-      "owner": "jonahthan433",
-      "repoName": "cortexcloud-mcp",
-      "repoUrl": "https://github.com/jonahthan433/cortexcloud-mcp",
-      "description": "x402 pay-per-call MCP server — 22 AI/data/RPC tools, USDC on Base, no API keys",
-      "stars": 0,
-      "updatedAt": "2026-10-22T10:18:28.190Z",
-      "filePath": "proxy/src/pay.ts",
-      "lineNumber": 23,
-      "matchedFunctionOrLibrary": "wrapFetchWithPayment",
-      "codeSnippet": "export function wrapFetchWithPayment(baseFetch: typeof fetch, cfg: PayConfig) {",
-      "hasPreSettlementValidation": false
-    },
-    {
-      "id": "lead_13_client",
+      "id": "lead_9_client",
       "source": "github-code",
       "role": "buyer",
       "repoFullName": "openserv-labs/client",
@@ -228,7 +159,7 @@
       "repoUrl": "https://github.com/openserv-labs/client",
       "description": "",
       "stars": 0,
-      "updatedAt": "2026-10-22T10:18:28.190Z",
+      "updatedAt": "2026-10-22T11:54:46.311Z",
       "filePath": "src/x402.ts",
       "lineNumber": 275,
       "matchedFunctionOrLibrary": "wrapFetchWithPayment",
@@ -237,7 +168,7 @@
       "liveEndpointUrl": "https://www.x402.org/"
     },
     {
-      "id": "lead_14_agentfund",
+      "id": "lead_10_agentfund",
       "source": "github-code",
       "role": "buyer",
       "repoFullName": "vmihalis/agentfund",
@@ -246,7 +177,7 @@
       "repoUrl": "https://github.com/vmihalis/agentfund",
       "description": "",
       "stars": 0,
-      "updatedAt": "2026-10-22T10:18:28.190Z",
+      "updatedAt": "2026-10-22T11:54:46.311Z",
       "filePath": "src/lib/x402/client.ts",
       "lineNumber": 29,
       "matchedFunctionOrLibrary": "wrapFetchWithPayment",
@@ -254,7 +185,7 @@
       "hasPreSettlementValidation": false
     },
     {
-      "id": "lead_15_ContractMindSol",
+      "id": "lead_11_ContractMindSol",
       "source": "github-code",
       "role": "buyer",
       "repoFullName": "leojay-net/ContractMindSol",
@@ -263,102 +194,174 @@
       "repoUrl": "https://github.com/leojay-net/ContractMindSol",
       "description": "",
       "stars": 0,
-      "updatedAt": "2026-10-22T10:18:28.190Z",
+      "updatedAt": "2026-10-22T11:54:46.311Z",
       "filePath": "frontend/lib/x402.ts",
       "lineNumber": 59,
       "matchedFunctionOrLibrary": "wrapFetchWithPayment",
       "codeSnippet": "* const fetchWithPayment = wrapFetchWithPayment(connection, wallet);",
       "hasPreSettlementValidation": false,
       "liveEndpointUrl": "https://api.example.com/paid-endpoint"
+    },
+    {
+      "id": "lead_12_argentos-core",
+      "source": "github-code",
+      "role": "buyer",
+      "repoFullName": "ArgentAIOS/argentos-core",
+      "owner": "ArgentAIOS",
+      "repoName": "argentos-core",
+      "repoUrl": "https://github.com/ArgentAIOS/argentos-core",
+      "description": "Your own AI operating system. Self-hosted. Self-improving. One continuous, truthful, self-directed mind.",
+      "stars": 0,
+      "updatedAt": "2026-10-22T11:54:46.919Z",
+      "filePath": "src/wallet/wallet.ts",
+      "lineNumber": 95,
+      "matchedFunctionOrLibrary": "@coinbase/agentkit",
+      "codeSnippet": "const agentKit = await AgentKit.from({",
+      "hasPreSettlementValidation": false
+    },
+    {
+      "id": "lead_13_Neural-Nexus",
+      "source": "github-code",
+      "role": "buyer",
+      "repoFullName": "Drago-03/Neural-Nexus",
+      "owner": "Drago-03",
+      "repoName": "Neural-Nexus",
+      "repoUrl": "https://github.com/Drago-03/Neural-Nexus",
+      "description": "Neural Nexus : A comprehensive AI model hub for uploading , sharing, selling, and deploying machine learning models. Features Secure authentication, Stripe/Crypto Payments, model ownership transfer via blockchain, and a vibrant community. Build with Next.js, Tailwind CSS, React, and Framer Motion",
+      "stars": 0,
+      "updatedAt": "2026-10-22T11:54:46.919Z",
+      "filePath": "lib/coinbase.ts",
+      "lineNumber": 5,
+      "matchedFunctionOrLibrary": "@coinbase/agentkit",
+      "codeSnippet": "import type { WalletDisplay } from \"@coinbase/agentkit\";",
+      "hasPreSettlementValidation": false,
+      "liveEndpointUrl": "https://api.iconify.design/logos/coinbase-icon.svg"
+    },
+    {
+      "id": "lead_14_alith",
+      "source": "github-code",
+      "role": "buyer",
+      "repoFullName": "0xLazAI/alith",
+      "owner": "0xLazAI",
+      "repoName": "alith",
+      "repoUrl": "https://github.com/0xLazAI/alith",
+      "description": "Simple, Composable, High-Performance, Safe and Web3 Friendly AI Agents and LazAI Gateway for Everyone",
+      "stars": 0,
+      "updatedAt": "2026-10-22T11:54:46.920Z",
+      "filePath": "integrations/coinbase_agentkit/node/src/tool.ts",
+      "lineNumber": 6,
+      "matchedFunctionOrLibrary": "@coinbase/agentkit",
+      "codeSnippet": "import { AgentKit, type Action } from \"@coinbase/agentkit\";",
+      "hasPreSettlementValidation": false
+    },
+    {
+      "id": "lead_15_remesaflow",
+      "source": "github-code",
+      "role": "seller",
+      "repoFullName": "GeorgeTech20/remesaflow",
+      "owner": "GeorgeTech20",
+      "repoName": "remesaflow",
+      "repoUrl": "https://github.com/GeorgeTech20/remesaflow",
+      "description": "Remittance agent on Celo - real Mento quotes, 0.01 USD per query over x402, executes the transfer on-chain",
+      "stars": 0,
+      "updatedAt": "2026-10-22T11:54:50.484Z",
+      "filePath": "backend/src/x402.ts",
+      "lineNumber": 208,
+      "matchedFunctionOrLibrary": "paymentMiddleware",
+      "codeSnippet": "return paymentMiddleware(routes, server, undefined, undefined, true);",
+      "hasPreSettlementValidation": false,
+      "liveEndpointUrl": "https://api.x402.celo.org",
+      "liveProbeStatus": 200,
+      "liveProbeLatencyMs": 583
     }
   ],
   "onChainReceivers": [
     {
       "id": "onchain_base_1",
       "walletAddress": "0xaf36084a4dc0ce760a6dcfa46cf129e140c92aa9",
-      "micropaymentCountWindow": 94,
-      "sampleAmountAtomic": "170000",
+      "micropaymentCountWindow": 342,
+      "sampleAmountAtomic": "5000",
       "network": "eip155:8453"
     },
     {
       "id": "onchain_base_2",
-      "walletAddress": "0x7797c4a7f786f77dbce13d71d2c710310cb92aa3",
-      "micropaymentCountWindow": 28,
-      "sampleAmountAtomic": "599959",
+      "walletAddress": "0x41d7793faa4ca181b6f021423ff3f9015c00b2ff",
+      "micropaymentCountWindow": 151,
+      "sampleAmountAtomic": "53661",
       "network": "eip155:8453"
     },
     {
       "id": "onchain_base_3",
-      "walletAddress": "0x394d3f699e0082fe9c4970f0e3c2de248ea21eed",
-      "micropaymentCountWindow": 18,
-      "sampleAmountAtomic": "300000",
+      "walletAddress": "0x2e80091c75049c621e399d9e0e794a8bafcb152c",
+      "micropaymentCountWindow": 84,
+      "sampleAmountAtomic": "57445",
       "network": "eip155:8453"
     },
     {
       "id": "onchain_base_4",
-      "walletAddress": "0x204627322839cd46741c439a493a9f44be8d2cd7",
-      "micropaymentCountWindow": 18,
-      "sampleAmountAtomic": "74996",
+      "walletAddress": "0x498581ff718922c3f8e6a244956af099b2652b2b",
+      "micropaymentCountWindow": 72,
+      "sampleAmountAtomic": "150120",
       "network": "eip155:8453"
     },
     {
       "id": "onchain_base_5",
-      "walletAddress": "0x7284d41b5b852f2bd4c99bdf95043d84452d299c",
-      "micropaymentCountWindow": 10,
-      "sampleAmountAtomic": "20000",
+      "walletAddress": "0xebe1d5bbe54187a83ad932c19034871638023007",
+      "micropaymentCountWindow": 60,
+      "sampleAmountAtomic": "151654",
       "network": "eip155:8453"
     }
   ],
   "facilitatorResourcesSample": [
     {
-      "url": "https://api.paysponge.com/v0/inboxes/:inbox_id/messages",
-      "payTo": "7r4e5dwNS68MDaxbw7N8jbzHq7RCMBp9z6smHFH4NXWw",
-      "description": "Service: AgentMail API (https://api.paysponge.com/v0/inboxes/ships@grailcart.com/messages)"
-    },
-    {
-      "url": "https://sol.blockrun.ai/api/v1/chat/completions",
-      "payTo": "AQqnMFBwGZEoti85aTVRy8XYpKrho7GaMDx9ZB3CEeKA",
-      "description": "Qwen3.7 Flash API call (~17 input, 16 max output tokens)"
-    },
-    {
-      "url": "https://monitor.intel.rallylive.ca/monitor/is-down/rumble-com",
+      "url": "https://dev.intel.rallylive.ca/dev/pypi/aiohttp",
       "payTo": "0xFC24FD34da9e49A0110DCaEe3Ad30eC54175eBB3",
-      "description": "Is rumble.com down right now? Live check from Cloudflare's edge: HTTP status, response time, final URL after redirects, server header and whether the TLS certificate is valid, with an up/down verdict. Call it when a user or agent says \"rumble.com isn't loading\" to tell a real outage from a local problem. $0.01 per check."
+      "description": "PyPI project aiohttp: latest version, summary, license, requires-python, homepage/repository, release date and available wheels from the PyPI JSON API. Pin, audit or compare aiohttp in one call, no token. $0.01 per call."
     },
     {
-      "url": "https://monitor.intel.rallylive.ca/monitor/cert/pypi-org",
+      "url": "https://monitor.intel.rallylive.ca/monitor/status/pinecone",
       "payTo": "0xFC24FD34da9e49A0110DCaEe3Ad30eC54175eBB3",
-      "description": "TLS certificate status for pypi.org: issuer, common name, valid-from/valid-to, days until expiry and whether it is valid now, from certificate-transparency logs and a live HTTPS check, plus HSTS and redirect-to-HTTPS. Expiry watch for a site you depend on. $0.01 per check."
+      "description": "pinecone status right now: reads the vendor's public status page (status.pinecone.io); Statuspage-style pages give the overall indicator (none/minor/major/critical), description and active incidents with impact and last update; other pages are sniffed for operational/outage wording. Ask before blaming your own integration. $0.01 per check."
     },
     {
-      "url": "https://intel.rallylive.ca/list/documentaries",
+      "url": "https://library.intel.rallylive.ca/library/author/fergus-hume",
       "payTo": "0xFC24FD34da9e49A0110DCaEe3Ad30eC54175eBB3",
-      "description": "Free documentaries and educational films: public-domain and free-licensed documentaries from Internet Archive (Prelinger, NASA, Smithsonian and open collections) ranked by downloads. $0.01 per page of 20."
+      "description": "Everything free by Fergus Hume: the 100 catalogued public-domain books, audiobooks and texts credited to Fergus Hume across Project Gutenberg, LibriVox and Internet Archive, most popular first, each with direct download links. Add words to narrow by title. Re-verified daily. $0.01 per page of 20."
     },
     {
-      "url": "https://dns.intel.rallylive.ca/dns/dkim/salesloft",
+      "url": "https://library.intel.rallylive.ca/library/author/dante-alighieri",
       "payTo": "0xFC24FD34da9e49A0110DCaEe3Ad30eC54175eBB3",
-      "description": "DKIM public key for selector \"salesloft\" of a domain: looks up salesloft._domainkey.<domain> (TXT, Cloudflare DoH) and parses v=, k=, key type, public-key length, testing flag and whether the key is revoked (empty p=). Confirms that mail signed with the salesloft selector will verify. $0.01 per lookup."
+      "description": "Everything free by Dante Alighieri: the 65 catalogued public-domain books, audiobooks and texts credited to Dante Alighieri across Project Gutenberg, LibriVox and Internet Archive, most popular first, each with direct download links. Add words to narrow by title. Re-verified daily. $0.01 per page of 20."
     },
     {
-      "url": "https://dns.intel.rallylive.ca/dns/dkim/mte1",
+      "url": "https://dns.intel.rallylive.ca/dns/host/login/a",
       "payTo": "0xFC24FD34da9e49A0110DCaEe3Ad30eC54175eBB3",
-      "description": "DKIM public key for selector \"mte1\" of a domain: looks up mte1._domainkey.<domain> (TXT, Cloudflare DoH) and parses v=, k=, key type, public-key length, testing flag and whether the key is revoked (empty p=). Confirms that mail signed with the mte1 selector will verify. $0.01 per lookup."
+      "description": "A record of login.<domain>: looks up the login host under the domain you give (A via Cloudflare DoH) and reports whether it exists, its records and TTL. Quick existence check for common hosts like login without enumerating subdomains. $0.01 per lookup."
     },
     {
-      "url": "https://dns.intel.rallylive.ca/dns/dkim/apollo",
+      "url": "https://dns.intel.rallylive.ca/dns/host/jenkins/txt",
       "payTo": "0xFC24FD34da9e49A0110DCaEe3Ad30eC54175eBB3",
-      "description": "DKIM public key for selector \"apollo\" of a domain: looks up apollo._domainkey.<domain> (TXT, Cloudflare DoH) and parses v=, k=, key type, public-key length, testing flag and whether the key is revoked (empty p=). Confirms that mail signed with the apollo selector will verify. $0.01 per lookup."
+      "description": "TXT record of jenkins.<domain>: looks up the jenkins host under the domain you give (TXT via Cloudflare DoH) and reports whether it exists, its records and TTL. Quick existence check for common hosts like jenkins without enumerating subdomains. $0.01 per lookup."
     },
     {
-      "url": "https://site.intel.rallylive.ca/site/uses/yotpo",
+      "url": "https://dns.intel.rallylive.ca/dns/host/jenkins/aaaa",
       "payTo": "0xFC24FD34da9e49A0110DCaEe3Ad30eC54175eBB3",
-      "description": "Does a website use Yotpo? Fetches the page (homepage for a bare domain) and matches Yotpo's fingerprints in the HTML and response headers, returning yes/no with the evidence snippet and the category (reviews). Technographics for sales, competitor research and migration planning, one technology per call. $0.01 per check."
+      "description": "AAAA record of jenkins.<domain>: looks up the jenkins host under the domain you give (AAAA via Cloudflare DoH) and reports whether it exists, its records and TTL. Quick existence check for common hosts like jenkins without enumerating subdomains. $0.01 per lookup."
     },
     {
-      "url": "https://site.intel.rallylive.ca/site/uses/varnish",
+      "url": "https://intel.rallylive.ca/library/films/1920s",
       "payTo": "0xFC24FD34da9e49A0110DCaEe3Ad30eC54175eBB3",
-      "description": "Does a website use Varnish? Fetches the page (homepage for a bare domain) and matches Varnish's fingerprints in the HTML and response headers, returning yes/no with the evidence snippet and the category (cache). Technographics for sales, competitor research and migration planning, one technology per call. $0.01 per check."
+      "description": "Free films of the 1920s: public-domain and free-licensed feature films, shorts, newsreels and archival footage released 1920-1929, from Internet Archive, most downloaded first, each with year, creator, rights status and the download directory. Add words to narrow. Re-verified daily. $0.01 per page of 20."
+    },
+    {
+      "url": "https://intel.rallylive.ca/library/films/1910s",
+      "payTo": "0xFC24FD34da9e49A0110DCaEe3Ad30eC54175eBB3",
+      "description": "Free films of the 1910s: public-domain and free-licensed feature films, shorts, newsreels and archival footage released 1910-1919, from Internet Archive, most downloaded first, each with year, creator, rights status and the download directory. Add words to narrow. Re-verified daily. $0.01 per page of 20."
+    },
+    {
+      "url": "https://email.intel.rallylive.ca/email/hosted-by/ovhcloud-exchange",
+      "payTo": "0xFC24FD34da9e49A0110DCaEe3Ad30eC54175eBB3",
+      "description": "Is the domain's email hosted by ovhcloud exchange? Looks up the MX records (Cloudflare DoH) and matches them against ovhcloud-exchange's mail-exchanger patterns, returning yes/no, the MX hosts and which matched. Provider detection for deliverability, sales and migration work. $0.01 per lookup."
     }
   ]
 }
