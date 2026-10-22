@@ -1,12 +1,15 @@
 {
-  "updatedAt": "2026-10-22T01:02:42.660Z",
+  "updatedAt": "2026-10-22T10:20:09.096Z",
   "contactedRepos": [
     "ToolSnap-app/toolsnap-mcp",
     "withgrokbot/x402-spotcheck",
     "JonasFuchss/x402-trust-mcp",
     "Andyxcg/agentshop",
     "profullstack/x402-gateway",
-    "gibrancorbin11-hub/wayleave"
+    "gibrancorbin11-hub/wayleave",
+    "nirholas/x402-fetch",
+    "krishna-aga/x402-API-Marketplace",
+    "BrKDDD/kite-x402-hono"
   ],
   "contactedOwners": [
     "ToolSnap-app",
@@ -14,7 +17,10 @@
     "JonasFuchss",
     "Andyxcg",
     "profullstack",
-    "gibrancorbin11-hub"
+    "gibrancorbin11-hub",
+    "nirholas",
+    "krishna-aga",
+    "BrKDDD"
   ],
   "history": [
     {
@@ -57,6 +63,27 @@
       "owner": "gibrancorbin11-hub",
       "issueUrl": "https://github.com/gibrancorbin11-hub/wayleave/issues/1",
       "contactedAt": "2026-10-22T01:02:42.660Z",
+      "mode": "live"
+    },
+    {
+      "repoFullName": "nirholas/x402-fetch",
+      "owner": "nirholas",
+      "issueUrl": "https://github.com/nirholas/x402-fetch/issues/1",
+      "contactedAt": "2026-10-22T10:18:37.494Z",
+      "mode": "live"
+    },
+    {
+      "repoFullName": "krishna-aga/x402-API-Marketplace",
+      "owner": "krishna-aga",
+      "issueUrl": "https://github.com/krishna-aga/x402-API-Marketplace/issues/1",
+      "contactedAt": "2026-10-22T10:19:23.290Z",
+      "mode": "live"
+    },
+    {
+      "repoFullName": "BrKDDD/kite-x402-hono",
+      "owner": "BrKDDD",
+      "issueUrl": "https://github.com/BrKDDD/kite-x402-hono/issues/23",
+      "contactedAt": "2026-10-22T10:20:09.096Z",
       "mode": "live"
     }
   ]
