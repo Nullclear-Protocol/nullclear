@@ -1,14 +1,20 @@
 {
-  "updatedAt": "2026-10-22T00:53:28.723Z",
+  "updatedAt": "2026-10-22T01:02:42.660Z",
   "contactedRepos": [
     "ToolSnap-app/toolsnap-mcp",
     "withgrokbot/x402-spotcheck",
-    "JonasFuchss/x402-trust-mcp"
+    "JonasFuchss/x402-trust-mcp",
+    "Andyxcg/agentshop",
+    "profullstack/x402-gateway",
+    "gibrancorbin11-hub/wayleave"
   ],
   "contactedOwners": [
     "ToolSnap-app",
     "withgrokbot",
-    "JonasFuchss"
+    "JonasFuchss",
+    "Andyxcg",
+    "profullstack",
+    "gibrancorbin11-hub"
   ],
   "history": [
     {
@@ -30,6 +36,27 @@
       "owner": "JonasFuchss",
       "issueUrl": "https://github.com/JonasFuchss/x402-trust-mcp/issues/2",
       "contactedAt": "2026-10-22T00:53:28.723Z",
+      "mode": "live"
+    },
+    {
+      "repoFullName": "Andyxcg/agentshop",
+      "owner": "Andyxcg",
+      "issueUrl": "https://github.com/Andyxcg/agentshop/issues/1",
+      "contactedAt": "2026-10-22T01:01:11.117Z",
+      "mode": "live"
+    },
+    {
+      "repoFullName": "profullstack/x402-gateway",
+      "owner": "profullstack",
+      "issueUrl": "https://github.com/profullstack/x402-gateway/issues/19",
+      "contactedAt": "2026-10-22T01:01:56.943Z",
+      "mode": "live"
+    },
+    {
+      "repoFullName": "gibrancorbin11-hub/wayleave",
+      "owner": "gibrancorbin11-hub",
+      "issueUrl": "https://github.com/gibrancorbin11-hub/wayleave/issues/1",
+      "contactedAt": "2026-10-22T01:02:42.660Z",
       "mode": "live"
     }
   ]

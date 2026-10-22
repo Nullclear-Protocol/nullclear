@@ -1,71 +1,15 @@
 {
-  "generatedAt": "2026-10-22T00:51:56.631Z",
+  "generatedAt": "2026-10-22T01:01:10.633Z",
   "mode": "live",
   "summary": {
     "totalGitHubLeadsVerified": 15,
     "facilitatorResourcesDiscovered": 100,
-    "baseMainnetLatestBlock": 52920479,
-    "baseMicropaymentReceiversCount": 112
+    "baseMainnetLatestBlock": 52920755,
+    "baseMicropaymentReceiversCount": 150
   },
   "githubLeads": [
     {
-      "id": "lead_1_toolsnap-mcp",
-      "source": "github-code",
-      "role": "buyer",
-      "repoFullName": "ToolSnap-app/toolsnap-mcp",
-      "owner": "ToolSnap-app",
-      "repoName": "toolsnap-mcp",
-      "repoUrl": "https://github.com/ToolSnap-app/toolsnap-mcp",
-      "description": "MCP tools for AI agents: web fetch & extraction, structured data, screenshots, PDF, SEO, image processing. x402 on Base — $0.02/call or $0.01 prepaid.",
-      "stars": 1,
-      "updatedAt": "2026-10-21T23:52:16Z",
-      "filePath": "scripts/send-test-payment.ts",
-      "lineNumber": 4,
-      "matchedFunctionOrLibrary": "TransferWithAuthorization",
-      "codeSnippet": "* Signs a real EIP-3009 TransferWithAuthorization for $0.04 USDC on Base and",
-      "hasPreSettlementValidation": false,
-      "liveEndpointUrl": "https://mcp.toolsnap.app/mcp"
-    },
-    {
-      "id": "lead_2_x402-spotcheck",
-      "source": "github-code",
-      "role": "buyer",
-      "repoFullName": "withgrokbot/x402-spotcheck",
-      "owner": "withgrokbot",
-      "repoName": "x402-spotcheck",
-      "repoUrl": "https://github.com/withgrokbot/x402-spotcheck",
-      "description": "Check before you pay: one-line guard for x402 clients (@x402/fetch, @x402/axios).",
-      "stars": 0,
-      "updatedAt": "2026-10-20T19:04:58Z",
-      "filePath": "index.js",
-      "lineNumber": 176,
-      "matchedFunctionOrLibrary": "wrapFetchWithPayment",
-      "codeSnippet": "if (typeof cfg.wrapFetch !== \"function\") throw new TypeError(\"autoPayCheck.wrapFetch is required, e.g. (f) => wrapFetchWithPayment(f, client)\");",
-      "hasPreSettlementValidation": false,
-      "liveEndpointUrl": "https://api.402xagent.com/v1/products/endpoint-spot-check"
-    },
-    {
-      "id": "lead_3_x402-trust-mcp",
-      "source": "github-code",
-      "role": "seller",
-      "repoFullName": "JonasFuchss/x402-trust-mcp",
-      "owner": "JonasFuchss",
-      "repoName": "x402-trust-mcp",
-      "repoUrl": "https://github.com/JonasFuchss/x402-trust-mcp",
-      "description": "A tool library for discovery and trust checks before your agent pays any x402 endpoint.",
-      "stars": 1,
-      "updatedAt": "2026-10-16T10:55:26Z",
-      "filePath": "src/server.ts",
-      "lineNumber": 263,
-      "matchedFunctionOrLibrary": "HTTP 402 challenge",
-      "codeSnippet": "status: 402,",
-      "hasPreSettlementValidation": false,
-      "liveEndpointUrl": "https://x402-trust.com",
-      "liveProbeStatus": 200,
-      "liveProbeLatencyMs": 477
-    },
-    {
-      "id": "lead_4_agentshop",
+      "id": "lead_1_agentshop",
       "source": "github-code",
       "role": "buyer",
       "repoFullName": "Andyxcg/agentshop",
@@ -83,7 +27,7 @@
       "liveEndpointUrl": "https://facilitator.payai.network"
     },
     {
-      "id": "lead_5_x402-gateway",
+      "id": "lead_2_x402-gateway",
       "source": "github-code",
       "role": "seller",
       "repoFullName": "profullstack/x402-gateway",
@@ -100,10 +44,10 @@
       "hasPreSettlementValidation": false,
       "liveEndpointUrl": "https://coinpayportal.com",
       "liveProbeStatus": 200,
-      "liveProbeLatencyMs": 627
+      "liveProbeLatencyMs": 625
     },
     {
-      "id": "lead_6_wayleave",
+      "id": "lead_3_wayleave",
       "source": "github-code",
       "role": "seller",
       "repoFullName": "gibrancorbin11-hub/wayleave",
@@ -120,10 +64,10 @@
       "hasPreSettlementValidation": false,
       "liveEndpointUrl": "https://meter.wayleave.dev",
       "liveProbeStatus": 200,
-      "liveProbeLatencyMs": 1597
+      "liveProbeLatencyMs": 3227
     },
     {
-      "id": "lead_7_x402-fetch",
+      "id": "lead_4_x402-fetch",
       "source": "github-code",
       "role": "buyer",
       "repoFullName": "nirholas/x402-fetch",
@@ -140,7 +84,7 @@
       "hasPreSettlementValidation": false
     },
     {
-      "id": "lead_8_x402-API-Marketplace",
+      "id": "lead_5_x402-API-Marketplace",
       "source": "github-code",
       "role": "buyer",
       "repoFullName": "krishna-aga/x402-API-Marketplace",
@@ -157,7 +101,7 @@
       "hasPreSettlementValidation": false
     },
     {
-      "id": "lead_9_kite-x402-hono",
+      "id": "lead_6_kite-x402-hono",
       "source": "github-code",
       "role": "seller",
       "repoFullName": "BrKDDD/kite-x402-hono",
@@ -174,7 +118,7 @@
       "hasPreSettlementValidation": false
     },
     {
-      "id": "lead_10_pay-per-crawl-js",
+      "id": "lead_7_pay-per-crawl-js",
       "source": "github-code",
       "role": "buyer",
       "repoFullName": "forgemeshlabs/pay-per-crawl-js",
@@ -192,7 +136,7 @@
       "liveEndpointUrl": "https://paymentauth.org/problems/"
     },
     {
-      "id": "lead_11_x402-multirail",
+      "id": "lead_8_x402-multirail",
       "source": "github-code",
       "role": "seller",
       "repoFullName": "jimmyplup/x402-multirail",
@@ -209,7 +153,7 @@
       "hasPreSettlementValidation": false
     },
     {
-      "id": "lead_12_wayfinder",
+      "id": "lead_9_wayfinder",
       "source": "github-code",
       "role": "buyer",
       "repoFullName": "ar-io/wayfinder",
@@ -218,7 +162,7 @@
       "repoUrl": "https://github.com/ar-io/wayfinder",
       "description": "WayFinder is a set of tools and libraries that enable decentralized and verifiable access to data stored on Arweave via the ar.io gateway network.",
       "stars": 0,
-      "updatedAt": "2026-10-22T00:51:47.897Z",
+      "updatedAt": "2026-10-22T01:00:59.093Z",
       "filePath": "scripts/x402-fetch.ts",
       "lineNumber": 17,
       "matchedFunctionOrLibrary": "x402 fetch",
@@ -227,7 +171,7 @@
       "liveEndpointUrl": "http://www.apache.org/licenses/LICENSE-2.0"
     },
     {
-      "id": "lead_13_three.ws",
+      "id": "lead_10_three.ws",
       "source": "github-code",
       "role": "buyer",
       "repoFullName": "nirholas/three.ws",
@@ -236,7 +180,7 @@
       "repoUrl": "https://github.com/nirholas/three.ws",
       "description": "Open-source platform for 3D AI agents. Turn text or a photo into a rigged, animated GLB avatar, give it an LLM brain, memory and a wallet, and embed it anywhere with one web component. Remote MCP server, x402 payments, Three.js, browser-native.",
       "stars": 0,
-      "updatedAt": "2026-10-22T00:51:47.897Z",
+      "updatedAt": "2026-10-22T01:00:59.093Z",
       "filePath": "packages/x402-fetch/examples/paid-call.mjs",
       "lineNumber": 1,
       "matchedFunctionOrLibrary": "x402 fetch",
@@ -245,7 +189,7 @@
       "liveEndpointUrl": "https://three.ws/api/x402/market-global"
     },
     {
-      "id": "lead_14_docs-atlas-bf4fd31e",
+      "id": "lead_11_docs-atlas-bf4fd31e",
       "source": "github-code",
       "role": "buyer",
       "repoFullName": "mintlify-atlas/docs-atlas-bf4fd31e",
@@ -254,7 +198,7 @@
       "repoUrl": "https://github.com/mintlify-atlas/docs-atlas-bf4fd31e",
       "description": "",
       "stars": 0,
-      "updatedAt": "2026-10-22T00:51:47.897Z",
+      "updatedAt": "2026-10-22T01:00:59.093Z",
       "filePath": "api/x402-fetch.mdx",
       "lineNumber": 26,
       "matchedFunctionOrLibrary": "wrapFetchWithPayment",
@@ -263,7 +207,7 @@
       "liveEndpointUrl": "https://api.example.com/protected"
     },
     {
-      "id": "lead_15_antidote",
+      "id": "lead_12_antidote",
       "source": "github-code",
       "role": "buyer",
       "repoFullName": "tatdz/antidote",
@@ -272,48 +216,101 @@
       "repoUrl": "https://github.com/tatdz/antidote",
       "description": "",
       "stars": 0,
-      "updatedAt": "2026-10-22T00:51:47.897Z",
+      "updatedAt": "2026-10-22T01:00:59.093Z",
       "filePath": "frontend/lib/x402-fetch-wrapper.ts",
       "lineNumber": 1,
       "matchedFunctionOrLibrary": "x402 fetch",
       "codeSnippet": "// lib/x402-fetch-wrapper.ts",
+      "hasPreSettlementValidation": false
+    },
+    {
+      "id": "lead_13_x402-double-spend",
+      "source": "github-code",
+      "role": "buyer",
+      "repoFullName": "cyl19970726/x402-double-spend",
+      "owner": "cyl19970726",
+      "repoName": "x402-double-spend",
+      "repoUrl": "https://github.com/cyl19970726/x402-double-spend",
+      "description": "",
+      "stars": 0,
+      "updatedAt": "2026-10-22T01:00:59.459Z",
+      "filePath": "src/index.ts",
+      "lineNumber": 39,
+      "matchedFunctionOrLibrary": "wrapFetchWithPayment",
+      "codeSnippet": "* const fetchWithPay = wrapFetchWithPayment(fetch, wallet);",
+      "hasPreSettlementValidation": false,
+      "liveEndpointUrl": "https://api.example.com/paid-endpoint"
+    },
+    {
+      "id": "lead_14_x402-fuel",
+      "source": "github-code",
+      "role": "buyer",
+      "repoFullName": "naz3eh/x402-fuel",
+      "owner": "naz3eh",
+      "repoName": "x402-fuel",
+      "repoUrl": "https://github.com/naz3eh/x402-fuel",
+      "description": "",
+      "stars": 0,
+      "updatedAt": "2026-10-22T01:00:59.459Z",
+      "filePath": "src/fetch.ts",
+      "lineNumber": 40,
+      "matchedFunctionOrLibrary": "wrapFetchWithPayment",
+      "codeSnippet": "* const paymentFetch = wrapFetchWithPayment(",
+      "hasPreSettlementValidation": false,
+      "liveEndpointUrl": "https://api.example.com/data"
+    },
+    {
+      "id": "lead_15_cortexcloud-mcp",
+      "source": "github-code",
+      "role": "buyer",
+      "repoFullName": "jonahthan433/cortexcloud-mcp",
+      "owner": "jonahthan433",
+      "repoName": "cortexcloud-mcp",
+      "repoUrl": "https://github.com/jonahthan433/cortexcloud-mcp",
+      "description": "x402 pay-per-call MCP server — 22 AI/data/RPC tools, USDC on Base, no API keys",
+      "stars": 0,
+      "updatedAt": "2026-10-22T01:00:59.459Z",
+      "filePath": "proxy/src/pay.ts",
+      "lineNumber": 23,
+      "matchedFunctionOrLibrary": "wrapFetchWithPayment",
+      "codeSnippet": "export function wrapFetchWithPayment(baseFetch: typeof fetch, cfg: PayConfig) {",
       "hasPreSettlementValidation": false
     }
   ],
   "onChainReceivers": [
     {
       "id": "onchain_base_1",
-      "walletAddress": "0x7284d41b5b852f2bd4c99bdf95043d84452d299c",
-      "micropaymentCountWindow": 25,
-      "sampleAmountAtomic": "20000",
-      "network": "eip155:8453"
-    },
-    {
-      "id": "onchain_base_2",
-      "walletAddress": "0x6eb6afc93704ec684a2235f032dc9dd56627321c",
-      "micropaymentCountWindow": 14,
-      "sampleAmountAtomic": "131721",
-      "network": "eip155:8453"
-    },
-    {
-      "id": "onchain_base_3",
       "walletAddress": "0xaf36084a4dc0ce760a6dcfa46cf129e140c92aa9",
-      "micropaymentCountWindow": 12,
+      "micropaymentCountWindow": 26,
       "sampleAmountAtomic": "5000",
       "network": "eip155:8453"
     },
     {
+      "id": "onchain_base_2",
+      "walletAddress": "0x7284d41b5b852f2bd4c99bdf95043d84452d299c",
+      "micropaymentCountWindow": 22,
+      "sampleAmountAtomic": "20000",
+      "network": "eip155:8453"
+    },
+    {
+      "id": "onchain_base_3",
+      "walletAddress": "0x1d7f97d26ae2c01f9b01fc252b73cf0db3397e95",
+      "micropaymentCountWindow": 15,
+      "sampleAmountAtomic": "210000",
+      "network": "eip155:8453"
+    },
+    {
       "id": "onchain_base_4",
-      "walletAddress": "0x6c561b446416e1a00e8e93e221854d6ea4171372",
-      "micropaymentCountWindow": 8,
-      "sampleAmountAtomic": "472911",
+      "walletAddress": "0x0d9b815017ab97c4f0e698c81aefdb717697f730",
+      "micropaymentCountWindow": 7,
+      "sampleAmountAtomic": "45000",
       "network": "eip155:8453"
     },
     {
       "id": "onchain_base_5",
-      "walletAddress": "0xea3fe6bed9a8284f8ca37c4c605d0e10702b5281",
-      "micropaymentCountWindow": 6,
-      "sampleAmountAtomic": "373465",
+      "walletAddress": "0xdd257723b86b4947483905cdacbbbc70facf2ec0",
+      "micropaymentCountWindow": 7,
+      "sampleAmountAtomic": "20000",
       "network": "eip155:8453"
     }
   ],
@@ -321,52 +318,52 @@
     {
       "url": "https://sol.blockrun.ai/api/v1/chat/completions",
       "payTo": "AQqnMFBwGZEoti85aTVRy8XYpKrho7GaMDx9ZB3CEeKA",
-      "description": "GPT-6 Luna API call (~23196 input, 1200 max output tokens)"
+      "description": "GPT-6 Luna API call (~23118 input, 1200 max output tokens)"
+    },
+    {
+      "url": "https://kubiaka-now.com/x402/v1/muni/:lg_code",
+      "payTo": "0x15C0C249b1248CA89E59B8B87A2FA2609303dAC1",
+      "description": "クビアカのいま 市町村のカルテ: 1つの市町村の区分・窓口・通報先・使える補助と奨励金（市町村と県）・近い被害地域5つと距離（中心どうしの目安）・県の最近の報道"
     },
     {
       "url": "https://api.paysponge.com/v0/inboxes/:inbox_id/messages",
       "payTo": "7r4e5dwNS68MDaxbw7N8jbzHq7RCMBp9z6smHFH4NXWw",
-      "description": "Service: AgentMail API (https://api.paysponge.com/v0/inboxes/whop3@grailcart.com/messages)"
+      "description": "Service: AgentMail API (https://api.paysponge.com/v0/inboxes/henry@grailcart.com/messages)"
     },
     {
-      "url": "https://intel.rallylive.ca/data/holidays/it",
+      "url": "https://ip.intel.rallylive.ca/ip/v6/prefix-64",
       "payTo": "0xFC24FD34da9e49A0110DCaEe3Ad30eC54175eBB3",
-      "description": "Public holidays in Italy for a given year: every national and regional public holiday with date, local and English names, whether it is nationwide or which regions observe it, and the weekday, from the Nager.Date public holiday dataset. Business-day and scheduling checks for Italy without an API key. $0.01 per year."
+      "description": "IPv6 prefix 64: pure calculation on the address, no network call. The /64 network. $0.01 per call."
     },
     {
-      "url": "https://intel.rallylive.ca/data/holidays/ie",
+      "url": "https://intel.rallylive.ca/data/holidays/se",
       "payTo": "0xFC24FD34da9e49A0110DCaEe3Ad30eC54175eBB3",
-      "description": "Public holidays in Ireland for a given year: every national and regional public holiday with date, local and English names, whether it is nationwide or which regions observe it, and the weekday, from the Nager.Date public holiday dataset. Business-day and scheduling checks for Ireland without an API key. $0.01 per year."
+      "description": "Public holidays in Sweden for a given year: every national and regional public holiday with date, local and English names, whether it is nationwide or which regions observe it, and the weekday, from the Nager.Date public holiday dataset. Business-day and scheduling checks for Sweden without an API key. $0.01 per year."
     },
     {
-      "url": "https://intel.rallylive.ca/data/holidays/gb",
+      "url": "https://intel.rallylive.ca/data/holidays/pl",
       "payTo": "0xFC24FD34da9e49A0110DCaEe3Ad30eC54175eBB3",
-      "description": "Public holidays in United Kingdom for a given year: every national and regional public holiday with date, local and English names, whether it is nationwide or which regions observe it, and the weekday, from the Nager.Date public holiday dataset. Business-day and scheduling checks for United Kingdom without an API key. $0.01 per year."
+      "description": "Public holidays in Poland for a given year: every national and regional public holiday with date, local and English names, whether it is nationwide or which regions observe it, and the weekday, from the Nager.Date public holiday dataset. Business-day and scheduling checks for Poland without an API key. $0.01 per year."
     },
     {
-      "url": "https://email.intel.rallylive.ca/email/hosted-by/forcepoint",
+      "url": "https://intel.rallylive.ca/data/holidays/nz",
       "payTo": "0xFC24FD34da9e49A0110DCaEe3Ad30eC54175eBB3",
-      "description": "Is the domain's email hosted by forcepoint? Looks up the MX records (Cloudflare DoH) and matches them against forcepoint's mail-exchanger patterns, returning yes/no, the MX hosts and which matched. Provider detection for deliverability, sales and migration work. $0.01 per lookup."
+      "description": "Public holidays in New Zealand for a given year: every national and regional public holiday with date, local and English names, whether it is nationwide or which regions observe it, and the weekday, from the Nager.Date public holiday dataset. Business-day and scheduling checks for New Zealand without an API key. $0.01 per year."
     },
     {
-      "url": "https://email.intel.rallylive.ca/email/hosted-by/fastmail",
+      "url": "https://email.intel.rallylive.ca/email/hosted-by/google-workspace",
       "payTo": "0xFC24FD34da9e49A0110DCaEe3Ad30eC54175eBB3",
-      "description": "Is the domain's email hosted by fastmail? Looks up the MX records (Cloudflare DoH) and matches them against fastmail's mail-exchanger patterns, returning yes/no, the MX hosts and which matched. Provider detection for deliverability, sales and migration work. $0.01 per lookup."
+      "description": "Is the domain's email hosted by google workspace? Looks up the MX records (Cloudflare DoH) and matches them against google-workspace's mail-exchanger patterns, returning yes/no, the MX hosts and which matched. Provider detection for deliverability, sales and migration work. $0.01 per lookup."
     },
     {
-      "url": "https://dns.intel.rallylive.ca/dns/dkim/braze",
+      "url": "https://email.intel.rallylive.ca/email/hosted-by/freshdesk-mail",
       "payTo": "0xFC24FD34da9e49A0110DCaEe3Ad30eC54175eBB3",
-      "description": "DKIM public key for selector \"braze\" of a domain: looks up braze._domainkey.<domain> (TXT, Cloudflare DoH) and parses v=, k=, key type, public-key length, testing flag and whether the key is revoked (empty p=). Confirms that mail signed with the braze selector will verify. $0.01 per lookup."
+      "description": "Is the domain's email hosted by freshdesk mail? Looks up the MX records (Cloudflare DoH) and matches them against freshdesk-mail's mail-exchanger patterns, returning yes/no, the MX hosts and which matched. Provider detection for deliverability, sales and migration work. $0.01 per lookup."
     },
     {
-      "url": "https://email.intel.rallylive.ca/email/spf-authorizes/quickbooks",
+      "url": "https://email.intel.rallylive.ca/email/hosted-by/forwardemail",
       "payTo": "0xFC24FD34da9e49A0110DCaEe3Ad30eC54175eBB3",
-      "description": "Does the domain's SPF record authorise quickbooks to send its mail? Reads the SPF TXT record (Cloudflare DoH) and checks for quickbooks's include/ip mechanisms, returning yes/no, the matching mechanism and the full record. Confirms a vendor integration is wired for deliverability, or spots an unexpected sender. $0.01 per lookup."
-    },
-    {
-      "url": "https://dns.intel.rallylive.ca/dns/hosted-by/netlify",
-      "payTo": "0xFC24FD34da9e49A0110DCaEe3Ad30eC54175eBB3",
-      "description": "Is the domain's DNS hosted by netlify? Looks up the NS records (Cloudflare DoH) and matches them against netlify's nameserver patterns, returning yes/no, the nameservers and which ones matched. Vendor detection for sales, migration and security work. $0.01 per lookup."
+      "description": "Is the domain's email hosted by forwardemail? Looks up the MX records (Cloudflare DoH) and matches them against forwardemail's mail-exchanger patterns, returning yes/no, the MX hosts and which matched. Provider detection for deliverability, sales and migration work. $0.01 per lookup."
     }
   ]
 }
