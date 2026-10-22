@@ -1,11 +1,11 @@
 {
-  "generatedAt": "2026-10-22T00:46:02.191Z",
-  "mode": "dry-run",
+  "generatedAt": "2026-10-22T00:51:56.631Z",
+  "mode": "live",
   "summary": {
-    "totalGitHubLeadsVerified": 12,
+    "totalGitHubLeadsVerified": 15,
     "facilitatorResourcesDiscovered": 100,
-    "baseMainnetLatestBlock": 52920300,
-    "baseMicropaymentReceiversCount": 148
+    "baseMainnetLatestBlock": 52920479,
+    "baseMicropaymentReceiversCount": 112
   },
   "githubLeads": [
     {
@@ -62,7 +62,7 @@
       "hasPreSettlementValidation": false,
       "liveEndpointUrl": "https://x402-trust.com",
       "liveProbeStatus": 200,
-      "liveProbeLatencyMs": 512
+      "liveProbeLatencyMs": 477
     },
     {
       "id": "lead_4_agentshop",
@@ -100,7 +100,7 @@
       "hasPreSettlementValidation": false,
       "liveEndpointUrl": "https://coinpayportal.com",
       "liveProbeStatus": 200,
-      "liveProbeLatencyMs": 633
+      "liveProbeLatencyMs": 627
     },
     {
       "id": "lead_6_wayleave",
@@ -120,7 +120,7 @@
       "hasPreSettlementValidation": false,
       "liveEndpointUrl": "https://meter.wayleave.dev",
       "liveProbeStatus": 200,
-      "liveProbeLatencyMs": 2841
+      "liveProbeLatencyMs": 1597
     },
     {
       "id": "lead_7_x402-fetch",
@@ -209,57 +209,111 @@
       "hasPreSettlementValidation": false
     },
     {
-      "id": "lead_12_x402-nextjs-example",
+      "id": "lead_12_wayfinder",
       "source": "github-code",
-      "role": "seller",
-      "repoFullName": "Rasukarusan/x402-nextjs-example",
-      "owner": "Rasukarusan",
-      "repoName": "x402-nextjs-example",
-      "repoUrl": "https://github.com/Rasukarusan/x402-nextjs-example",
-      "description": "HTTP 402 Next.js middleware implementation with paymentMiddleware",
+      "role": "buyer",
+      "repoFullName": "ar-io/wayfinder",
+      "owner": "ar-io",
+      "repoName": "wayfinder",
+      "repoUrl": "https://github.com/ar-io/wayfinder",
+      "description": "WayFinder is a set of tools and libraries that enable decentralized and verifiable access to data stored on Arweave via the ar.io gateway network.",
       "stars": 0,
-      "updatedAt": "2026-10-16T08:36:21Z",
-      "filePath": "proxy.ts",
-      "lineNumber": 10,
-      "matchedFunctionOrLibrary": "paymentMiddleware",
-      "codeSnippet": "const handler = paymentMiddleware(",
+      "updatedAt": "2026-10-22T00:51:47.897Z",
+      "filePath": "scripts/x402-fetch.ts",
+      "lineNumber": 17,
+      "matchedFunctionOrLibrary": "x402 fetch",
+      "codeSnippet": "import { createX402Fetch } from '@ar.io/wayfinder-x402-fetch';",
+      "hasPreSettlementValidation": false,
+      "liveEndpointUrl": "http://www.apache.org/licenses/LICENSE-2.0"
+    },
+    {
+      "id": "lead_13_three.ws",
+      "source": "github-code",
+      "role": "buyer",
+      "repoFullName": "nirholas/three.ws",
+      "owner": "nirholas",
+      "repoName": "three.ws",
+      "repoUrl": "https://github.com/nirholas/three.ws",
+      "description": "Open-source platform for 3D AI agents. Turn text or a photo into a rigged, animated GLB avatar, give it an LLM brain, memory and a wallet, and embed it anywhere with one web component. Remote MCP server, x402 payments, Three.js, browser-native.",
+      "stars": 0,
+      "updatedAt": "2026-10-22T00:51:47.897Z",
+      "filePath": "packages/x402-fetch/examples/paid-call.mjs",
+      "lineNumber": 1,
+      "matchedFunctionOrLibrary": "x402 fetch",
+      "codeSnippet": "// Real paid x402 call with @three-ws/x402-fetch.",
+      "hasPreSettlementValidation": false,
+      "liveEndpointUrl": "https://three.ws/api/x402/market-global"
+    },
+    {
+      "id": "lead_14_docs-atlas-bf4fd31e",
+      "source": "github-code",
+      "role": "buyer",
+      "repoFullName": "mintlify-atlas/docs-atlas-bf4fd31e",
+      "owner": "mintlify-atlas",
+      "repoName": "docs-atlas-bf4fd31e",
+      "repoUrl": "https://github.com/mintlify-atlas/docs-atlas-bf4fd31e",
+      "description": "",
+      "stars": 0,
+      "updatedAt": "2026-10-22T00:51:47.897Z",
+      "filePath": "api/x402-fetch.mdx",
+      "lineNumber": 26,
+      "matchedFunctionOrLibrary": "wrapFetchWithPayment",
+      "codeSnippet": "const fetchWithPay = wrapFetchWithPayment(fetch, signer);",
+      "hasPreSettlementValidation": false,
+      "liveEndpointUrl": "https://api.example.com/protected"
+    },
+    {
+      "id": "lead_15_antidote",
+      "source": "github-code",
+      "role": "buyer",
+      "repoFullName": "tatdz/antidote",
+      "owner": "tatdz",
+      "repoName": "antidote",
+      "repoUrl": "https://github.com/tatdz/antidote",
+      "description": "",
+      "stars": 0,
+      "updatedAt": "2026-10-22T00:51:47.897Z",
+      "filePath": "frontend/lib/x402-fetch-wrapper.ts",
+      "lineNumber": 1,
+      "matchedFunctionOrLibrary": "x402 fetch",
+      "codeSnippet": "// lib/x402-fetch-wrapper.ts",
       "hasPreSettlementValidation": false
     }
   ],
   "onChainReceivers": [
     {
       "id": "onchain_base_1",
-      "walletAddress": "0xaf36084a4dc0ce760a6dcfa46cf129e140c92aa9",
-      "micropaymentCountWindow": 32,
-      "sampleAmountAtomic": "124000",
-      "network": "eip155:8453"
-    },
-    {
-      "id": "onchain_base_2",
       "walletAddress": "0x7284d41b5b852f2bd4c99bdf95043d84452d299c",
-      "micropaymentCountWindow": 21,
+      "micropaymentCountWindow": 25,
       "sampleAmountAtomic": "20000",
       "network": "eip155:8453"
     },
     {
+      "id": "onchain_base_2",
+      "walletAddress": "0x6eb6afc93704ec684a2235f032dc9dd56627321c",
+      "micropaymentCountWindow": 14,
+      "sampleAmountAtomic": "131721",
+      "network": "eip155:8453"
+    },
+    {
       "id": "onchain_base_3",
-      "walletAddress": "0x85fe21c34770c7dea4045b41dd6193f7452be5fb",
-      "micropaymentCountWindow": 7,
-      "sampleAmountAtomic": "45000",
+      "walletAddress": "0xaf36084a4dc0ce760a6dcfa46cf129e140c92aa9",
+      "micropaymentCountWindow": 12,
+      "sampleAmountAtomic": "5000",
       "network": "eip155:8453"
     },
     {
       "id": "onchain_base_4",
-      "walletAddress": "0x964e65df9270e0ae9b034298604a047eabf6ffcc",
-      "micropaymentCountWindow": 7,
-      "sampleAmountAtomic": "45000",
+      "walletAddress": "0x6c561b446416e1a00e8e93e221854d6ea4171372",
+      "micropaymentCountWindow": 8,
+      "sampleAmountAtomic": "472911",
       "network": "eip155:8453"
     },
     {
       "id": "onchain_base_5",
-      "walletAddress": "0x09ebdc203bedff0a3a2429ec7b114a9d3ec0ec94",
-      "micropaymentCountWindow": 7,
-      "sampleAmountAtomic": "45000",
+      "walletAddress": "0xea3fe6bed9a8284f8ca37c4c605d0e10702b5281",
+      "micropaymentCountWindow": 6,
+      "sampleAmountAtomic": "373465",
       "network": "eip155:8453"
     }
   ],
@@ -267,52 +321,52 @@
     {
       "url": "https://sol.blockrun.ai/api/v1/chat/completions",
       "payTo": "AQqnMFBwGZEoti85aTVRy8XYpKrho7GaMDx9ZB3CEeKA",
-      "description": "Qwen3.7 Flash API call (~17 input, 16 max output tokens)"
+      "description": "GPT-6 Luna API call (~23196 input, 1200 max output tokens)"
     },
     {
       "url": "https://api.paysponge.com/v0/inboxes/:inbox_id/messages",
       "payTo": "7r4e5dwNS68MDaxbw7N8jbzHq7RCMBp9z6smHFH4NXWw",
-      "description": "Service: AgentMail API (https://api.paysponge.com/v0/inboxes/henry@grailcart.com/messages)"
+      "description": "Service: AgentMail API (https://api.paysponge.com/v0/inboxes/whop3@grailcart.com/messages)"
     },
     {
-      "url": "https://mpp.hyreagent.fun/trenches/new-tokens",
-      "payTo": "7G73PLhKvAPBGTzG5ESAE4coE7QrVeTTKfhTxQZbyGgC",
-      "description": "Real-time PumpFun token launches with AI snipe verdict (holder concentration, dev history, freeze/mint authority). Sources: PumpPortal."
-    },
-    {
-      "url": "https://intel.rallylive.ca/library/subject/mystery-and-detective-stories",
+      "url": "https://intel.rallylive.ca/data/holidays/it",
       "payTo": "0xFC24FD34da9e49A0110DCaEe3Ad30eC54175eBB3",
-      "description": "Free public-domain books on \"Mystery and detective stories\": browse the catalogue's works tagged with that Library of Congress subject (273 in Project Gutenberg alone, plus Internet Archive scans), ranked by relevance and popularity, with direct epub/txt/html download links. Add words to narrow by title or author. Re-verified daily. $0.01 per page of 20."
+      "description": "Public holidays in Italy for a given year: every national and regional public holiday with date, local and English names, whether it is nationwide or which regions observe it, and the weekday, from the Nager.Date public holiday dataset. Business-day and scheduling checks for Italy without an API key. $0.01 per year."
     },
     {
-      "url": "https://intel.rallylive.ca/library/subject/murder",
+      "url": "https://intel.rallylive.ca/data/holidays/ie",
       "payTo": "0xFC24FD34da9e49A0110DCaEe3Ad30eC54175eBB3",
-      "description": "Free public-domain books on \"Murder\": browse the catalogue's works tagged with that Library of Congress subject (305 in Project Gutenberg alone, plus Internet Archive scans), ranked by relevance and popularity, with direct epub/txt/html download links. Add words to narrow by title or author. Re-verified daily. $0.01 per page of 20."
+      "description": "Public holidays in Ireland for a given year: every national and regional public holiday with date, local and English names, whether it is nationwide or which regions observe it, and the weekday, from the Nager.Date public holiday dataset. Business-day and scheduling checks for Ireland without an API key. $0.01 per year."
     },
     {
-      "url": "https://intel.rallylive.ca/library/subject/mars-planet",
+      "url": "https://intel.rallylive.ca/data/holidays/gb",
       "payTo": "0xFC24FD34da9e49A0110DCaEe3Ad30eC54175eBB3",
-      "description": "Free public-domain books on \"Mars (Planet)\": browse the catalogue's works tagged with that Library of Congress subject (185 in Project Gutenberg alone, plus Internet Archive scans), ranked by relevance and popularity, with direct epub/txt/html download links. Add words to narrow by title or author. Re-verified daily. $0.01 per page of 20."
+      "description": "Public holidays in United Kingdom for a given year: every national and regional public holiday with date, local and English names, whether it is nationwide or which regions observe it, and the weekday, from the Nager.Date public holiday dataset. Business-day and scheduling checks for United Kingdom without an API key. $0.01 per year."
     },
     {
-      "url": "https://email.intel.rallylive.ca/email/spf-authorizes/github",
+      "url": "https://email.intel.rallylive.ca/email/hosted-by/forcepoint",
       "payTo": "0xFC24FD34da9e49A0110DCaEe3Ad30eC54175eBB3",
-      "description": "Does the domain's SPF record authorise github to send its mail? Reads the SPF TXT record (Cloudflare DoH) and checks for github's include/ip mechanisms, returning yes/no, the matching mechanism and the full record. Confirms a vendor integration is wired for deliverability, or spots an unexpected sender. $0.01 per lookup."
+      "description": "Is the domain's email hosted by forcepoint? Looks up the MX records (Cloudflare DoH) and matches them against forcepoint's mail-exchanger patterns, returning yes/no, the MX hosts and which matched. Provider detection for deliverability, sales and migration work. $0.01 per lookup."
     },
     {
-      "url": "https://email.intel.rallylive.ca/email/spf-authorizes/freshdesk",
+      "url": "https://email.intel.rallylive.ca/email/hosted-by/fastmail",
       "payTo": "0xFC24FD34da9e49A0110DCaEe3Ad30eC54175eBB3",
-      "description": "Does the domain's SPF record authorise freshdesk to send its mail? Reads the SPF TXT record (Cloudflare DoH) and checks for freshdesk's include/ip mechanisms, returning yes/no, the matching mechanism and the full record. Confirms a vendor integration is wired for deliverability, or spots an unexpected sender. $0.01 per lookup."
+      "description": "Is the domain's email hosted by fastmail? Looks up the MX records (Cloudflare DoH) and matches them against fastmail's mail-exchanger patterns, returning yes/no, the MX hosts and which matched. Provider detection for deliverability, sales and migration work. $0.01 per lookup."
     },
     {
-      "url": "https://email.intel.rallylive.ca/email/spf-authorizes/eventbrite",
+      "url": "https://dns.intel.rallylive.ca/dns/dkim/braze",
       "payTo": "0xFC24FD34da9e49A0110DCaEe3Ad30eC54175eBB3",
-      "description": "Does the domain's SPF record authorise eventbrite to send its mail? Reads the SPF TXT record (Cloudflare DoH) and checks for eventbrite's include/ip mechanisms, returning yes/no, the matching mechanism and the full record. Confirms a vendor integration is wired for deliverability, or spots an unexpected sender. $0.01 per lookup."
+      "description": "DKIM public key for selector \"braze\" of a domain: looks up braze._domainkey.<domain> (TXT, Cloudflare DoH) and parses v=, k=, key type, public-key length, testing flag and whether the key is revoked (empty p=). Confirms that mail signed with the braze selector will verify. $0.01 per lookup."
     },
     {
-      "url": "https://dns.intel.rallylive.ca/dns/dkim/bluehost",
+      "url": "https://email.intel.rallylive.ca/email/spf-authorizes/quickbooks",
       "payTo": "0xFC24FD34da9e49A0110DCaEe3Ad30eC54175eBB3",
-      "description": "DKIM public key for selector \"bluehost\" of a domain: looks up bluehost._domainkey.<domain> (TXT, Cloudflare DoH) and parses v=, k=, key type, public-key length, testing flag and whether the key is revoked (empty p=). Confirms that mail signed with the bluehost selector will verify. $0.01 per lookup."
+      "description": "Does the domain's SPF record authorise quickbooks to send its mail? Reads the SPF TXT record (Cloudflare DoH) and checks for quickbooks's include/ip mechanisms, returning yes/no, the matching mechanism and the full record. Confirms a vendor integration is wired for deliverability, or spots an unexpected sender. $0.01 per lookup."
+    },
+    {
+      "url": "https://dns.intel.rallylive.ca/dns/hosted-by/netlify",
+      "payTo": "0xFC24FD34da9e49A0110DCaEe3Ad30eC54175eBB3",
+      "description": "Is the domain's DNS hosted by netlify? Looks up the NS records (Cloudflare DoH) and matches them against netlify's nameserver patterns, returning yes/no, the nameservers and which ones matched. Vendor detection for sales, migration and security work. $0.01 per lookup."
     }
   ]
 }

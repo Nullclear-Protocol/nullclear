@@ -1,6 +1,36 @@
 {
-  "updatedAt": "2026-10-22T00:10:43.360Z",
-  "contactedRepos": [],
-  "contactedOwners": [],
-  "history": []
+  "updatedAt": "2026-10-22T00:53:28.723Z",
+  "contactedRepos": [
+    "ToolSnap-app/toolsnap-mcp",
+    "withgrokbot/x402-spotcheck",
+    "JonasFuchss/x402-trust-mcp"
+  ],
+  "contactedOwners": [
+    "ToolSnap-app",
+    "withgrokbot",
+    "JonasFuchss"
+  ],
+  "history": [
+    {
+      "repoFullName": "ToolSnap-app/toolsnap-mcp",
+      "owner": "ToolSnap-app",
+      "issueUrl": "https://github.com/ToolSnap-app/toolsnap-mcp/issues/108",
+      "contactedAt": "2026-10-22T00:51:57.275Z",
+      "mode": "live"
+    },
+    {
+      "repoFullName": "withgrokbot/x402-spotcheck",
+      "owner": "withgrokbot",
+      "issueUrl": "https://github.com/withgrokbot/x402-spotcheck/issues/8",
+      "contactedAt": "2026-10-22T00:52:43.033Z",
+      "mode": "live"
+    },
+    {
+      "repoFullName": "JonasFuchss/x402-trust-mcp",
+      "owner": "JonasFuchss",
+      "issueUrl": "https://github.com/JonasFuchss/x402-trust-mcp/issues/2",
+      "contactedAt": "2026-10-22T00:53:28.723Z",
+      "mode": "live"
+    }
+  ]
 }
