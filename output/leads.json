@@ -1,0 +1,318 @@
+{
+  "generatedAt": "2026-10-22T00:46:02.191Z",
+  "mode": "dry-run",
+  "summary": {
+    "totalGitHubLeadsVerified": 12,
+    "facilitatorResourcesDiscovered": 100,
+    "baseMainnetLatestBlock": 52920300,
+    "baseMicropaymentReceiversCount": 148
+  },
+  "githubLeads": [
+    {
+      "id": "lead_1_toolsnap-mcp",
+      "source": "github-code",
+      "role": "buyer",
+      "repoFullName": "ToolSnap-app/toolsnap-mcp",
+      "owner": "ToolSnap-app",
+      "repoName": "toolsnap-mcp",
+      "repoUrl": "https://github.com/ToolSnap-app/toolsnap-mcp",
+      "description": "MCP tools for AI agents: web fetch & extraction, structured data, screenshots, PDF, SEO, image processing. x402 on Base — $0.02/call or $0.01 prepaid.",
+      "stars": 1,
+      "updatedAt": "2026-10-21T23:52:16Z",
+      "filePath": "scripts/send-test-payment.ts",
+      "lineNumber": 4,
+      "matchedFunctionOrLibrary": "TransferWithAuthorization",
+      "codeSnippet": "* Signs a real EIP-3009 TransferWithAuthorization for $0.04 USDC on Base and",
+      "hasPreSettlementValidation": false,
+      "liveEndpointUrl": "https://mcp.toolsnap.app/mcp"
+    },
+    {
+      "id": "lead_2_x402-spotcheck",
+      "source": "github-code",
+      "role": "buyer",
+      "repoFullName": "withgrokbot/x402-spotcheck",
+      "owner": "withgrokbot",
+      "repoName": "x402-spotcheck",
+      "repoUrl": "https://github.com/withgrokbot/x402-spotcheck",
+      "description": "Check before you pay: one-line guard for x402 clients (@x402/fetch, @x402/axios).",
+      "stars": 0,
+      "updatedAt": "2026-10-20T19:04:58Z",
+      "filePath": "index.js",
+      "lineNumber": 176,
+      "matchedFunctionOrLibrary": "wrapFetchWithPayment",
+      "codeSnippet": "if (typeof cfg.wrapFetch !== \"function\") throw new TypeError(\"autoPayCheck.wrapFetch is required, e.g. (f) => wrapFetchWithPayment(f, client)\");",
+      "hasPreSettlementValidation": false,
+      "liveEndpointUrl": "https://api.402xagent.com/v1/products/endpoint-spot-check"
+    },
+    {
+      "id": "lead_3_x402-trust-mcp",
+      "source": "github-code",
+      "role": "seller",
+      "repoFullName": "JonasFuchss/x402-trust-mcp",
+      "owner": "JonasFuchss",
+      "repoName": "x402-trust-mcp",
+      "repoUrl": "https://github.com/JonasFuchss/x402-trust-mcp",
+      "description": "A tool library for discovery and trust checks before your agent pays any x402 endpoint.",
+      "stars": 1,
+      "updatedAt": "2026-10-16T10:55:26Z",
+      "filePath": "src/server.ts",
+      "lineNumber": 263,
+      "matchedFunctionOrLibrary": "HTTP 402 challenge",
+      "codeSnippet": "status: 402,",
+      "hasPreSettlementValidation": false,
+      "liveEndpointUrl": "https://x402-trust.com",
+      "liveProbeStatus": 200,
+      "liveProbeLatencyMs": 512
+    },
+    {
+      "id": "lead_4_agentshop",
+      "source": "github-code",
+      "role": "buyer",
+      "repoFullName": "Andyxcg/agentshop",
+      "owner": "Andyxcg",
+      "repoName": "agentshop",
+      "repoUrl": "https://github.com/Andyxcg/agentshop",
+      "description": "x402 pay-per-fetch macroeconomic report store — 98 machine-generated reports, USDC on Base.",
+      "stars": 0,
+      "updatedAt": "2026-10-15T04:16:22Z",
+      "filePath": "agent-outreach.js",
+      "lineNumber": 203,
+      "matchedFunctionOrLibrary": "wrapFetchWithPayment",
+      "codeSnippet": "const fetchWithPay = wrapFetchWithPayment(fetch, client);",
+      "hasPreSettlementValidation": false,
+      "liveEndpointUrl": "https://facilitator.payai.network"
+    },
+    {
+      "id": "lead_5_x402-gateway",
+      "source": "github-code",
+      "role": "seller",
+      "repoFullName": "profullstack/x402-gateway",
+      "owner": "profullstack",
+      "repoName": "x402-gateway",
+      "repoUrl": "https://github.com/profullstack/x402-gateway",
+      "description": "Sell crawl access to AI training crawlers by the day over x402, settled by CoinPay. Hono + Next.js middleware.",
+      "stars": 0,
+      "updatedAt": "2026-10-21T23:39:44Z",
+      "filePath": "src/index.js",
+      "lineNumber": 256,
+      "matchedFunctionOrLibrary": "PAYMENT-REQUIRED",
+      "codeSnippet": "'payment-required': paymentRequiredHeader(offer(days), {",
+      "hasPreSettlementValidation": false,
+      "liveEndpointUrl": "https://coinpayportal.com",
+      "liveProbeStatus": 200,
+      "liveProbeLatencyMs": 633
+    },
+    {
+      "id": "lead_6_wayleave",
+      "source": "github-code",
+      "role": "seller",
+      "repoFullName": "gibrancorbin11-hub/wayleave",
+      "owner": "gibrancorbin11-hub",
+      "repoName": "wayleave",
+      "repoUrl": "https://github.com/gibrancorbin11-hub/wayleave",
+      "description": "Identify AI agents by Ed25519 signature, meter every crossing, price agent traffic with HTTP 402, and serve a /.well-known/x402 manifest.",
+      "stars": 1,
+      "updatedAt": "2026-10-21T02:47:49Z",
+      "filePath": "index.js",
+      "lineNumber": 816,
+      "matchedFunctionOrLibrary": "HTTP 402 challenge",
+      "codeSnippet": "return { status: 402, why, challenge };",
+      "hasPreSettlementValidation": false,
+      "liveEndpointUrl": "https://meter.wayleave.dev",
+      "liveProbeStatus": 200,
+      "liveProbeLatencyMs": 2841
+    },
+    {
+      "id": "lead_7_x402-fetch",
+      "source": "github-code",
+      "role": "buyer",
+      "repoFullName": "nirholas/x402-fetch",
+      "owner": "nirholas",
+      "repoName": "x402-fetch",
+      "repoUrl": "https://github.com/nirholas/x402-fetch",
+      "description": "Drop-in fetch wrapper that automatically pays x402 payment challenges with USDC on Base",
+      "stars": 9,
+      "updatedAt": "2026-10-10T22:29:31Z",
+      "filePath": "src/client.js",
+      "lineNumber": 49,
+      "matchedFunctionOrLibrary": "TransferWithAuthorization",
+      "codeSnippet": "TransferWithAuthorization: [",
+      "hasPreSettlementValidation": false
+    },
+    {
+      "id": "lead_8_x402-API-Marketplace",
+      "source": "github-code",
+      "role": "buyer",
+      "repoFullName": "krishna-aga/x402-API-Marketplace",
+      "owner": "krishna-aga",
+      "repoName": "x402-API-Marketplace",
+      "repoUrl": "https://github.com/krishna-aga/x402-API-Marketplace",
+      "description": "API marketplace where people can sell their APIs and buyers can use x402 to pay-per-fetch",
+      "stars": 0,
+      "updatedAt": "2026-10-02T07:23:00Z",
+      "filePath": "testClient.mjs",
+      "lineNumber": 15,
+      "matchedFunctionOrLibrary": "wrapFetchWithPayment",
+      "codeSnippet": "const fetchWithPayment = wrapFetchWithPayment(globalThis.fetch, client);",
+      "hasPreSettlementValidation": false
+    },
+    {
+      "id": "lead_9_kite-x402-hono",
+      "source": "github-code",
+      "role": "seller",
+      "repoFullName": "BrKDDD/kite-x402-hono",
+      "owner": "BrKDDD",
+      "repoName": "kite-x402-hono",
+      "repoUrl": "https://github.com/BrKDDD/kite-x402-hono",
+      "description": "Bun/Hono wrapper for x402 paid HTTP APIs, with payment-flow tests and npm packaging",
+      "stars": 0,
+      "updatedAt": "2026-10-20T14:22:20Z",
+      "filePath": "tests/payment.test.ts",
+      "lineNumber": 16,
+      "matchedFunctionOrLibrary": "PAYMENT-REQUIRED",
+      "codeSnippet": "response.headers.get(\"payment-required\")!,",
+      "hasPreSettlementValidation": false
+    },
+    {
+      "id": "lead_10_pay-per-crawl-js",
+      "source": "github-code",
+      "role": "buyer",
+      "repoFullName": "forgemeshlabs/pay-per-crawl-js",
+      "owner": "forgemeshlabs",
+      "repoName": "pay-per-crawl-js",
+      "repoUrl": "https://github.com/forgemeshlabs/pay-per-crawl-js",
+      "description": "ForgeMesh Pay-per-Crawl for JavaScript: Cloudflare Worker, Next.js, Express/Fastify/Hono/Koa, nginx. x402 + MPP.",
+      "stars": 0,
+      "updatedAt": "2026-10-19T11:26:33Z",
+      "filePath": "packages/core/src/x402.js",
+      "lineNumber": 83,
+      "matchedFunctionOrLibrary": "x402 fetch",
+      "codeSnippet": "/** v1 body for stock x402-fetch 1.x clients. */",
+      "hasPreSettlementValidation": false,
+      "liveEndpointUrl": "https://paymentauth.org/problems/"
+    },
+    {
+      "id": "lead_11_x402-multirail",
+      "source": "github-code",
+      "role": "seller",
+      "repoFullName": "jimmyplup/x402-multirail",
+      "owner": "jimmyplup",
+      "repoName": "x402-multirail",
+      "repoUrl": "https://github.com/jimmyplup/x402-multirail",
+      "description": "Multi-chain x402 seller rails for Express — Base, Celo, Arc.",
+      "stars": 0,
+      "updatedAt": "2026-10-17T14:53:08Z",
+      "filePath": "server.example.js",
+      "lineNumber": 50,
+      "matchedFunctionOrLibrary": "PAYMENT-REQUIRED",
+      "codeSnippet": "res.set('PAYMENT-REQUIRED', encodeJsonHeader(body));",
+      "hasPreSettlementValidation": false
+    },
+    {
+      "id": "lead_12_x402-nextjs-example",
+      "source": "github-code",
+      "role": "seller",
+      "repoFullName": "Rasukarusan/x402-nextjs-example",
+      "owner": "Rasukarusan",
+      "repoName": "x402-nextjs-example",
+      "repoUrl": "https://github.com/Rasukarusan/x402-nextjs-example",
+      "description": "HTTP 402 Next.js middleware implementation with paymentMiddleware",
+      "stars": 0,
+      "updatedAt": "2026-10-16T08:36:21Z",
+      "filePath": "proxy.ts",
+      "lineNumber": 10,
+      "matchedFunctionOrLibrary": "paymentMiddleware",
+      "codeSnippet": "const handler = paymentMiddleware(",
+      "hasPreSettlementValidation": false
+    }
+  ],
+  "onChainReceivers": [
+    {
+      "id": "onchain_base_1",
+      "walletAddress": "0xaf36084a4dc0ce760a6dcfa46cf129e140c92aa9",
+      "micropaymentCountWindow": 32,
+      "sampleAmountAtomic": "124000",
+      "network": "eip155:8453"
+    },
+    {
+      "id": "onchain_base_2",
+      "walletAddress": "0x7284d41b5b852f2bd4c99bdf95043d84452d299c",
+      "micropaymentCountWindow": 21,
+      "sampleAmountAtomic": "20000",
+      "network": "eip155:8453"
+    },
+    {
+      "id": "onchain_base_3",
+      "walletAddress": "0x85fe21c34770c7dea4045b41dd6193f7452be5fb",
+      "micropaymentCountWindow": 7,
+      "sampleAmountAtomic": "45000",
+      "network": "eip155:8453"
+    },
+    {
+      "id": "onchain_base_4",
+      "walletAddress": "0x964e65df9270e0ae9b034298604a047eabf6ffcc",
+      "micropaymentCountWindow": 7,
+      "sampleAmountAtomic": "45000",
+      "network": "eip155:8453"
+    },
+    {
+      "id": "onchain_base_5",
+      "walletAddress": "0x09ebdc203bedff0a3a2429ec7b114a9d3ec0ec94",
+      "micropaymentCountWindow": 7,
+      "sampleAmountAtomic": "45000",
+      "network": "eip155:8453"
+    }
+  ],
+  "facilitatorResourcesSample": [
+    {
+      "url": "https://sol.blockrun.ai/api/v1/chat/completions",
+      "payTo": "AQqnMFBwGZEoti85aTVRy8XYpKrho7GaMDx9ZB3CEeKA",
+      "description": "Qwen3.7 Flash API call (~17 input, 16 max output tokens)"
+    },
+    {
+      "url": "https://api.paysponge.com/v0/inboxes/:inbox_id/messages",
+      "payTo": "7r4e5dwNS68MDaxbw7N8jbzHq7RCMBp9z6smHFH4NXWw",
+      "description": "Service: AgentMail API (https://api.paysponge.com/v0/inboxes/henry@grailcart.com/messages)"
+    },
+    {
+      "url": "https://mpp.hyreagent.fun/trenches/new-tokens",
+      "payTo": "7G73PLhKvAPBGTzG5ESAE4coE7QrVeTTKfhTxQZbyGgC",
+      "description": "Real-time PumpFun token launches with AI snipe verdict (holder concentration, dev history, freeze/mint authority). Sources: PumpPortal."
+    },
+    {
+      "url": "https://intel.rallylive.ca/library/subject/mystery-and-detective-stories",
+      "payTo": "0xFC24FD34da9e49A0110DCaEe3Ad30eC54175eBB3",
+      "description": "Free public-domain books on \"Mystery and detective stories\": browse the catalogue's works tagged with that Library of Congress subject (273 in Project Gutenberg alone, plus Internet Archive scans), ranked by relevance and popularity, with direct epub/txt/html download links. Add words to narrow by title or author. Re-verified daily. $0.01 per page of 20."
+    },
+    {
+      "url": "https://intel.rallylive.ca/library/subject/murder",
+      "payTo": "0xFC24FD34da9e49A0110DCaEe3Ad30eC54175eBB3",
+      "description": "Free public-domain books on \"Murder\": browse the catalogue's works tagged with that Library of Congress subject (305 in Project Gutenberg alone, plus Internet Archive scans), ranked by relevance and popularity, with direct epub/txt/html download links. Add words to narrow by title or author. Re-verified daily. $0.01 per page of 20."
+    },
+    {
+      "url": "https://intel.rallylive.ca/library/subject/mars-planet",
+      "payTo": "0xFC24FD34da9e49A0110DCaEe3Ad30eC54175eBB3",
+      "description": "Free public-domain books on \"Mars (Planet)\": browse the catalogue's works tagged with that Library of Congress subject (185 in Project Gutenberg alone, plus Internet Archive scans), ranked by relevance and popularity, with direct epub/txt/html download links. Add words to narrow by title or author. Re-verified daily. $0.01 per page of 20."
+    },
+    {
+      "url": "https://email.intel.rallylive.ca/email/spf-authorizes/github",
+      "payTo": "0xFC24FD34da9e49A0110DCaEe3Ad30eC54175eBB3",
+      "description": "Does the domain's SPF record authorise github to send its mail? Reads the SPF TXT record (Cloudflare DoH) and checks for github's include/ip mechanisms, returning yes/no, the matching mechanism and the full record. Confirms a vendor integration is wired for deliverability, or spots an unexpected sender. $0.01 per lookup."
+    },
+    {
+      "url": "https://email.intel.rallylive.ca/email/spf-authorizes/freshdesk",
+      "payTo": "0xFC24FD34da9e49A0110DCaEe3Ad30eC54175eBB3",
+      "description": "Does the domain's SPF record authorise freshdesk to send its mail? Reads the SPF TXT record (Cloudflare DoH) and checks for freshdesk's include/ip mechanisms, returning yes/no, the matching mechanism and the full record. Confirms a vendor integration is wired for deliverability, or spots an unexpected sender. $0.01 per lookup."
+    },
+    {
+      "url": "https://email.intel.rallylive.ca/email/spf-authorizes/eventbrite",
+      "payTo": "0xFC24FD34da9e49A0110DCaEe3Ad30eC54175eBB3",
+      "description": "Does the domain's SPF record authorise eventbrite to send its mail? Reads the SPF TXT record (Cloudflare DoH) and checks for eventbrite's include/ip mechanisms, returning yes/no, the matching mechanism and the full record. Confirms a vendor integration is wired for deliverability, or spots an unexpected sender. $0.01 per lookup."
+    },
+    {
+      "url": "https://dns.intel.rallylive.ca/dns/dkim/bluehost",
+      "payTo": "0xFC24FD34da9e49A0110DCaEe3Ad30eC54175eBB3",
+      "description": "DKIM public key for selector \"bluehost\" of a domain: looks up bluehost._domainkey.<domain> (TXT, Cloudflare DoH) and parses v=, k=, key type, public-key length, testing flag and whether the key is revoked (empty p=). Confirms that mail signed with the bluehost selector will verify. $0.01 per lookup."
+    }
+  ]
+}

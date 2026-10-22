@@ -17,6 +17,12 @@ import {
   buildNullClearMetadata,
   consumeSponsoredFreeCall
 } from "../middleware/free-tier.js";
+import {
+  attachDualX402Headers,
+  extractPaymentAuthorization
+} from "../utils/x402-headers.js";
+import { inspectSoftPaywallAndContent } from "../services/soft-paywall-guard.js";
+import { getVerifiedKyaHeaderForBuyer } from "../services/kya-verifier.js";
 
 export const proxyRouter = new Hono<Env>();
 
@@ -190,12 +196,13 @@ export async function handleUrlProxyRequest(c: Context<Env>, explicitTargetUrl?:
   }
 
   const paymentHeader =
+    c.req.header("PAYMENT-SIGNATURE") ||
+    c.req.header("payment-signature") ||
     c.req.header("x-payment") ||
     c.req.header("X-Payment") ||
-    c.req.header("payment-signature") ||
-    c.req.header("PAYMENT-SIGNATURE") ||
     c.req.header("x-nullclear-authorization") ||
-    c.req.header("X-NullClear-Authorization");
+    c.req.header("X-NullClear-Authorization") ||
+    (c.req.header("Authorization")?.match(/^x402\s+(.+)$/i)?.[1]);
 
   const forwardHeaders: Record<string, string> = {
     Accept: c.req.header("accept") || "application/json, text/plain, */*",
@@ -212,10 +219,11 @@ export async function handleUrlProxyRequest(c: Context<Env>, explicitTargetUrl?:
 
     let paymentSigPayload: X402PaymentSignaturePayload;
     try {
-      paymentSigPayload = decodeBase64Json<X402PaymentSignaturePayload>(paymentHeader);
-      if (!paymentSigPayload.payload || !paymentSigPayload.accepted) {
+      const normalized = extractPaymentAuthorization(c.req) || extractPaymentAuthorization(paymentHeader);
+      if (!normalized) {
         throw new Error("Missing payload or accepted payment option in signature header");
       }
+      paymentSigPayload = normalized.paymentSigPayload;
     } catch (err: any) {
       return c.json(
         {
@@ -279,6 +287,17 @@ export async function handleUrlProxyRequest(c: Context<Env>, explicitTargetUrl?:
       "X-NullClear-Clearing-Id": clearingId
     };
 
+    // Pre-Flight Corporate KYA Header Forwarding
+    const buyerAddrForKya =
+      authorization.from ||
+      c.req.header("X-Buyer-Address") ||
+      c.req.header("x-buyer-address");
+    const kyaHeaders = await getVerifiedKyaHeaderForBuyer(c.env, buyerAddrForKya);
+    if (kyaHeaders) {
+      candidateHeaders["X-NullClear-Verified-KYA"] = kyaHeaders["X-NullClear-Verified-KYA"];
+      candidateHeaders["X-NullClear-KYA-Signature"] = kyaHeaders["X-NullClear-KYA-Signature"];
+    }
+
     let probe = await executeUpstreamFetch(targetUrl, method, candidateHeaders, reqBody);
     if (probe.status === 402) {
       candidateHeaders["PAYMENT-SIGNATURE"] = paymentHeader;
@@ -287,6 +306,35 @@ export async function handleUrlProxyRequest(c: Context<Env>, explicitTargetUrl?:
     }
 
     const upstreamRawText = probe.error && probe.status >= 500 ? JSON.stringify({ error: probe.error }) : probe.text;
+
+    // Soft-Paywall, CAPTCHA & Truncated Teaser Guard
+    if (!(probe.error && probe.status >= 500)) {
+      const softPaywallCheck = inspectSoftPaywallAndContent(
+        upstreamRawText,
+        probe.contentType || "",
+        probe.status
+      );
+      if (softPaywallCheck.triggered && softPaywallCheck.errorPayload) {
+        await store.recordFailedValidation("proxy-upstream", authorization.from, {
+          id: clearingId,
+          network: accepted.network,
+          buyerAddress: authorization.from,
+          sellerAgentId: "proxy-upstream",
+          amount: accepted.amount,
+          fee: "0",
+          targetUrl,
+          status: "FAILED_VALIDATION",
+          errorReason: `${softPaywallCheck.errorPayload.reason}: ${softPaywallCheck.ruleTriggered}`,
+          eip3009Nonce: authorization.nonce,
+          createdAt: Date.now()
+        });
+
+        c.header("X-NullClear-Verified", "false");
+        c.header("X-NullClear-Payment-Shredded", "true");
+        return c.json(softPaywallCheck.errorPayload, 502);
+      }
+    }
+
     const guardResult = await runAutoGuard(probe.status, upstreamRawText);
 
     if (!guardResult.valid) {
@@ -392,33 +440,45 @@ export async function handleUrlProxyRequest(c: Context<Env>, explicitTargetUrl?:
       createdAt: Date.now()
     });
 
+    const outHeaders = new Headers({
+      "Content-Type": guardResult.isJson ? "application/json; charset=utf-8" : "text/plain; charset=utf-8",
+      "X-NullClear-Verified": "true",
+      "X-NullClear-Receipt-Id": clearingId,
+      "X-NullClear-Attestation": encodeBase64Json(signedReceipt)
+    });
+
+    if (settlement.transaction) {
+      const paymentRespPayload: X402PaymentResponse = {
+        success: true,
+        transaction: settlement.transaction,
+        network: accepted.network,
+        payer: authorization.from
+      };
+      attachDualX402Headers(outHeaders, { paymentResponse: paymentRespPayload, verified: true });
+      attachDualX402Headers(c, { paymentResponse: paymentRespPayload, verified: true });
+    }
+
     c.header("X-NullClear-Verified", "true");
     c.header("X-NullClear-Receipt-Id", clearingId);
     c.header("X-NullClear-Attestation", encodeBase64Json(signedReceipt));
-    if (settlement.transaction) {
-      c.header(
-        "PAYMENT-RESPONSE",
-        encodeBase64Json({
-          success: true,
-          transaction: settlement.transaction,
-          network: accepted.network,
-          payer: authorization.from
-        })
-      );
-    }
 
     return new Response(upstreamRawText, {
       status: 200,
-      headers: {
-        "Content-Type": guardResult.isJson ? "application/json; charset=utf-8" : "text/plain; charset=utf-8",
-        "X-NullClear-Verified": "true",
-        "X-NullClear-Receipt-Id": clearingId,
-        "X-NullClear-Attestation": encodeBase64Json(signedReceipt)
-      }
+      headers: outHeaders
     });
   }
 
   // Case B: No payment header provided -> Fetch upstream with Auto-Guard (and Sponsored Free Tier for Bazaar/Sandbox)
+  const explicitBuyerAddr =
+    c.req.header("X-Buyer-Address") || c.req.header("x-buyer-address");
+  if (explicitBuyerAddr) {
+    const kyaHeaders = await getVerifiedKyaHeaderForBuyer(c.env, explicitBuyerAddr);
+    if (kyaHeaders) {
+      forwardHeaders["X-NullClear-Verified-KYA"] = kyaHeaders["X-NullClear-Verified-KYA"];
+      forwardHeaders["X-NullClear-KYA-Signature"] = kyaHeaders["X-NullClear-KYA-Signature"];
+    }
+  }
+
   let probe = await executeUpstreamFetch(targetUrl, method, forwardHeaders, reqBody);
   let freeTierRemaining: number | undefined;
 
@@ -449,6 +509,21 @@ export async function handleUrlProxyRequest(c: Context<Env>, explicitTargetUrl?:
   }
 
   const upstreamRawText = probe.error && probe.status >= 500 ? JSON.stringify({ error: probe.error }) : probe.text;
+
+  // Soft-Paywall, CAPTCHA & Truncated Teaser Guard
+  if (!(probe.error && probe.status >= 500)) {
+    const softPaywallCheck = inspectSoftPaywallAndContent(
+      upstreamRawText,
+      probe.contentType || "",
+      probe.status
+    );
+    if (softPaywallCheck.triggered && softPaywallCheck.errorPayload) {
+      c.header("X-NullClear-Verified", "false");
+      c.header("X-NullClear-Payment-Shredded", "true");
+      return c.json(softPaywallCheck.errorPayload, 502);
+    }
+  }
+
   const guardResult = await runAutoGuard(probe.status, upstreamRawText);
 
   if (!guardResult.valid) {

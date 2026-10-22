@@ -143,29 +143,90 @@ export function createNullClearFetch(config: NullClearFetchConfig = {}) {
       return initialRes;
     }
 
-    // 2. Intercept HTTP 402
+    // 2. Intercept HTTP 402 (bidirectional x402 V2 PAYMENT-REQUIRED, V1 X-Payment-Required, crawler-price, or JSON body)
     const paymentRequiredHeader =
-      initialRes.headers.get("PAYMENT-REQUIRED") || initialRes.headers.get("payment-required");
+      initialRes.headers.get("PAYMENT-REQUIRED") ||
+      initialRes.headers.get("payment-required") ||
+      initialRes.headers.get("X-Payment-Required") ||
+      initialRes.headers.get("x-payment-required");
 
     let paymentSignatureHeader: string | undefined;
 
-    if (config.accountOrPrivateKey && paymentRequiredHeader) {
-      let paymentRequired: X402PaymentRequired;
-      try {
-        paymentRequired = decodeBase64Json<X402PaymentRequired>(paymentRequiredHeader);
-      } catch {
+    if (config.accountOrPrivateKey) {
+      let accepts: X402PaymentOption[] = [];
+
+      if (paymentRequiredHeader) {
+        try {
+          const parsed = paymentRequiredHeader.trim().startsWith("{")
+            ? JSON.parse(paymentRequiredHeader)
+            : decodeBase64Json<X402PaymentRequired>(paymentRequiredHeader);
+          if (Array.isArray(parsed.accepts)) {
+            accepts = parsed.accepts;
+          } else if (parsed.payTo || parsed.sellerAddress) {
+            accepts = [
+              {
+                scheme: parsed.scheme || "exact",
+                network: parsed.network || `eip155:${chainId}`,
+                amount: String(parsed.amount || parsed.maxAmountRequired || "10000"),
+                asset: parsed.asset || "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+                payTo: parsed.payTo || parsed.sellerAddress,
+                maxTimeoutSeconds: parsed.maxTimeoutSeconds || 300,
+                extra: parsed.extra || { name: "USD Coin", version: "2" }
+              }
+            ];
+          }
+        } catch {
+          // Fall back to reading JSON body below
+        }
+      }
+
+      if (accepts.length === 0) {
+        try {
+          const cloned = initialRes.clone();
+          const bodyJson = (await cloned.json()) as any;
+          if (Array.isArray(bodyJson?.accepts)) {
+            accepts = bodyJson.accepts.map((opt: any) => ({
+              scheme: opt.scheme || "exact",
+              network: opt.network === "base" ? "eip155:8453" : opt.network || `eip155:${chainId}`,
+              amount: String(opt.amount || opt.maxAmountRequired || "10000"),
+              asset: opt.asset || "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+              payTo: opt.payTo || opt.sellerAddress,
+              maxTimeoutSeconds: opt.maxTimeoutSeconds || 300,
+              extra: opt.extra || { name: "USD Coin", version: "2" }
+            }));
+          } else if (bodyJson?.payTo) {
+            accepts = [
+              {
+                scheme: bodyJson.scheme || "exact",
+                network: bodyJson.network || `eip155:${chainId}`,
+                amount: String(bodyJson.amount || bodyJson.maxAmountRequired || "10000"),
+                asset: bodyJson.asset || "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+                payTo: bodyJson.payTo,
+                maxTimeoutSeconds: bodyJson.maxTimeoutSeconds || 300,
+                extra: { name: "USD Coin", version: "2" }
+              }
+            ];
+          }
+        } catch {
+          return initialRes;
+        }
+      }
+
+      if (accepts.length === 0) {
         return initialRes;
       }
 
       // 3. Find matching payment option for target network
-      const targetNetwork = `eip155:${chainId}`;
-      const selectedOption: X402PaymentOption | undefined = paymentRequired.accepts.find(
-        (opt) => opt.network === targetNetwork && opt.scheme === "exact"
+      const targetNetwork = (chainId === 84532 ? "eip155:84532" : "eip155:8453") as "eip155:8453" | "eip155:84532";
+      const selectedOption: X402PaymentOption | undefined = accepts.find(
+        (opt) =>
+          (opt.network === targetNetwork || (chainId === 8453 && (opt.network as string) === "base")) &&
+          (opt.scheme === "exact" || !opt.scheme)
       );
 
       if (!selectedOption) {
         throw new Error(
-          `Seller does not accept payments on network ${targetNetwork}. Accepted: ${paymentRequired.accepts
+          `Seller does not accept payments on network ${targetNetwork}. Accepted: ${accepts
             .map((a) => a.network)
             .join(", ")}`
         );
@@ -174,7 +235,7 @@ export function createNullClearFetch(config: NullClearFetchConfig = {}) {
       // 4. Sign EIP-3009 TransferWithAuthorization
       paymentSignatureHeader = await signX402Payment(
         config.accountOrPrivateKey,
-        selectedOption,
+        { ...selectedOption, network: targetNetwork, scheme: "exact" },
         targetUrl
       );
     } else if (!config.accountOrPrivateKey) {
@@ -237,8 +298,13 @@ export function createNullClearFetch(config: NullClearFetchConfig = {}) {
       const resHeaders = new Headers();
       resHeaders.set("Content-Type", "application/json");
 
-      const paymentResponseHdr = arbiterRes.headers.get("PAYMENT-RESPONSE");
-      if (paymentResponseHdr) resHeaders.set("PAYMENT-RESPONSE", paymentResponseHdr);
+      const paymentResponseHdr =
+        arbiterRes.headers.get("PAYMENT-RESPONSE") || arbiterRes.headers.get("X-Payment-Response");
+      if (paymentResponseHdr) {
+        resHeaders.set("PAYMENT-RESPONSE", paymentResponseHdr);
+        resHeaders.set("X-Payment-Response", paymentResponseHdr);
+      }
+      resHeaders.set("X-NullClear-Verified", "true");
 
       const attestationHdr = arbiterRes.headers.get("X-NullClear-Attestation");
       if (attestationHdr) resHeaders.set("X-NullClear-Attestation", attestationHdr);

@@ -81,6 +81,7 @@ export interface StoredKyaRecord extends KYAMandate {
   chainId: number;
   signature: string;
   signerAddress: string;
+  maxPerCallAtomic?: string;
   createdAt: number;
 }
 
@@ -396,6 +397,7 @@ export interface IArbiterStore {
   recordFailedValidation(agentId: string, buyerAddress: string, clearing: ClearingRecord): Promise<void>;
   getCounterpartyEdges(sellerAgentId: string): Promise<CounterpartyEdge[]>;
   getKyaMandate(agentId: string, chainId: number): Promise<StoredKyaRecord | null>;
+  getKyaMandateByWallet(buyerAddress: string): Promise<StoredKyaRecord | null>;
   saveKyaMandate(mandate: StoredKyaRecord): Promise<void>;
   getAgent(agentId: string, chainId: number): Promise<StoredAgentRecord | null>;
   saveAgent(agent: StoredAgentRecord): Promise<void>;
@@ -554,6 +556,25 @@ export class MemoryArbiterStore implements IArbiterStore {
   async getKyaMandate(agentId: string, chainId: number): Promise<StoredKyaRecord | null> {
     const key = `${agentId}:${chainId}`;
     return this.kyaMandates.get(key) || null;
+  }
+
+  async getKyaMandateByWallet(buyerAddress: string): Promise<StoredKyaRecord | null> {
+    const norm = (buyerAddress || "").trim().toLowerCase();
+    if (!norm) return null;
+    const nowSec = Math.floor(Date.now() / 1000);
+    let best: StoredKyaRecord | null = null;
+    for (const rec of this.kyaMandates.values()) {
+      const walletMatch =
+        rec.agentWallet?.toLowerCase() === norm ||
+        rec.signerAddress?.toLowerCase() === norm ||
+        rec.agentId?.toLowerCase() === norm;
+      if (walletMatch && rec.validUntil > nowSec) {
+        if (!best || rec.createdAt >= best.createdAt) {
+          best = rec;
+        }
+      }
+    }
+    return best ? { ...best } : null;
   }
 
   async saveKyaMandate(mandate: StoredKyaRecord): Promise<void> {
@@ -1081,6 +1102,49 @@ export class D1ArbiterStore implements IArbiterStore {
         "SELECT id, agent_id, chain_id, corporate_entity, entity_reg_num, agent_wallet, max_tx_limit_usd, liability_coverage_usd, valid_until, jurisdiction, signature, signer_address, created_at FROM kya_mandates WHERE agent_id = ? AND chain_id = ?"
       )
       .bind(agentId, chainId)
+      .first<{
+        id: string;
+        agent_id: string;
+        chain_id: number;
+        corporate_entity: string;
+        entity_reg_num: string;
+        agent_wallet: `0x${string}`;
+        max_tx_limit_usd: number;
+        liability_coverage_usd: number;
+        valid_until: number;
+        jurisdiction: string;
+        signature: string;
+        signer_address: string;
+        created_at: number;
+      }>();
+
+    if (!res) return null;
+    return {
+      id: res.id,
+      agentId: res.agent_id,
+      chainId: res.chain_id,
+      corporateEntity: res.corporate_entity,
+      entityRegistrationNumber: res.entity_reg_num,
+      agentWallet: res.agent_wallet,
+      maxTxLimitUsd: res.max_tx_limit_usd,
+      liabilityCoverageUsd: res.liability_coverage_usd,
+      validUntil: res.valid_until,
+      jurisdiction: res.jurisdiction,
+      signature: res.signature,
+      signerAddress: res.signer_address,
+      createdAt: res.created_at
+    };
+  }
+
+  async getKyaMandateByWallet(buyerAddress: string): Promise<StoredKyaRecord | null> {
+    const norm = (buyerAddress || "").trim().toLowerCase();
+    if (!norm) return null;
+    const nowSec = Math.floor(Date.now() / 1000);
+    const res = await this.db
+      .prepare(
+        "SELECT id, agent_id, chain_id, corporate_entity, entity_reg_num, agent_wallet, max_tx_limit_usd, liability_coverage_usd, valid_until, jurisdiction, signature, signer_address, created_at FROM kya_mandates WHERE (lower(agent_wallet) = ? OR lower(signer_address) = ? OR lower(agent_id) = ?) AND valid_until > ? ORDER BY created_at DESC LIMIT 1"
+      )
+      .bind(norm, norm, norm, nowSec)
       .first<{
         id: string;
         agent_id: string;

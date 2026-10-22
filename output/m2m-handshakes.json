@@ -1,0 +1,2057 @@
+{
+  "generatedAt": "2026-10-22T00:34:26.981Z",
+  "userAgent": "NullClear-Arbiter/1.2 (+https://nullclear.dev/leaderboard; ERC8004-Agent-124595)",
+  "kyaHeaderAttached": true,
+  "summary": {
+    "totalDomainsProbed": 51,
+    "domainsReachable": 50,
+    "wellKnownManifestsFound": 15,
+    "mcpJsonRpcHandshakesCompleted": 29,
+    "a2aJsonRpcHandshakesCompleted": 0
+  },
+  "successfulHandshakes": [
+    {
+      "domain": "mcp.toolsnap.app",
+      "probedAt": "2026-10-22T00:34:07.819Z",
+      "wellKnownFound": [
+        "/.well-known/mcp.json"
+      ],
+      "mcpHandshake": {
+        "probedUrl": "https://mcp.toolsnap.app/mcp",
+        "responded": true,
+        "httpStatus": 200,
+        "serverInfo": {
+          "name": "toolsnap-mcp",
+          "version": "0.1.0"
+        },
+        "toolsCount": 17,
+        "toolNames": [
+          "tool_catalog",
+          "use_tool",
+          "task_recipes",
+          "memory_snippet",
+          "pricing",
+          "fetch_extract",
+          "fetch_html",
+          "html_to_markdown",
+          "fetch_metadata",
+          "pdf_text_extract"
+        ]
+      },
+      "a2aHandshake": {
+        "probedUrl": "https://mcp.toolsnap.app/a2a",
+        "responded": false,
+        "httpStatus": 405
+      }
+    },
+    {
+      "domain": "api.402xagent.com",
+      "probedAt": "2026-10-22T00:34:07.580Z",
+      "wellKnownFound": [],
+      "mcpHandshake": {
+        "probedUrl": "https://api.402xagent.com/mcp",
+        "responded": true,
+        "httpStatus": 200,
+        "serverInfo": {
+          "name": "402xagent",
+          "title": "402xAgent + verified x402 catalog",
+          "version": "0.49.0"
+        },
+        "toolsCount": 9,
+        "toolNames": [
+          "search_catalog",
+          "get_service",
+          "lookup",
+          "get_overnight_cos_pack",
+          "get_receipt",
+          "endpoint_spot_check",
+          "payment_status",
+          "discover",
+          "endpoint_report"
+        ]
+      },
+      "a2aHandshake": {
+        "probedUrl": "https://api.402xagent.com/a2a",
+        "responded": false,
+        "httpStatus": 404
+      }
+    },
+    {
+      "domain": "x402-trust.com",
+      "probedAt": "2026-10-22T00:34:07.929Z",
+      "wellKnownFound": [],
+      "mcpHandshake": {
+        "probedUrl": "https://x402-trust.com/mcp",
+        "responded": true,
+        "httpStatus": 200,
+        "serverInfo": {
+          "name": "x402-trust",
+          "version": "1.17.0"
+        },
+        "toolsCount": 15,
+        "toolNames": [
+          "x402_ecosystem_stats",
+          "x402_trust_leaderboard",
+          "x402_verified_providers",
+          "x402_search",
+          "x402_trust_preview",
+          "x402_trust_score",
+          "x402_endpoint_history",
+          "x402_find_alternatives",
+          "x402_semantic_search",
+          "x402_trust_bulk"
+        ]
+      },
+      "a2aHandshake": {
+        "probedUrl": "https://x402-trust.com/a2a",
+        "responded": false,
+        "httpStatus": 404
+      }
+    },
+    {
+      "domain": "meter.wayleave.dev",
+      "probedAt": "2026-10-22T00:34:08.611Z",
+      "wellKnownFound": [],
+      "mcpHandshake": {
+        "probedUrl": "https://meter.wayleave.dev/mcp",
+        "responded": true,
+        "httpStatus": 404,
+        "serverInfo": "not found"
+      },
+      "a2aHandshake": {
+        "probedUrl": "https://meter.wayleave.dev/a2a",
+        "responded": false,
+        "httpStatus": 404
+      }
+    },
+    {
+      "domain": "api.youraitools.co",
+      "probedAt": "2026-10-22T00:34:07.736Z",
+      "wellKnownFound": [],
+      "mcpHandshake": {
+        "probedUrl": "https://api.youraitools.co/mcp",
+        "responded": true,
+        "httpStatus": 404,
+        "serverInfo": "not_found"
+      },
+      "a2aHandshake": {
+        "probedUrl": "https://api.youraitools.co/a2a",
+        "responded": false,
+        "httpStatus": 404
+      }
+    },
+    {
+      "domain": "agentgate-coder.agentgate.workers.dev",
+      "probedAt": "2026-10-22T00:34:07.736Z",
+      "wellKnownFound": [],
+      "mcpHandshake": {
+        "probedUrl": "https://agentgate-coder.agentgate.workers.dev/mcp",
+        "responded": true,
+        "httpStatus": 405,
+        "serverInfo": "method not allowed"
+      },
+      "a2aHandshake": {
+        "probedUrl": "https://agentgate-coder.agentgate.workers.dev/a2a",
+        "responded": false,
+        "httpStatus": 405
+      }
+    },
+    {
+      "domain": "payguard.agentgate.workers.dev",
+      "probedAt": "2026-10-22T00:34:07.751Z",
+      "wellKnownFound": [],
+      "mcpHandshake": {
+        "probedUrl": "https://payguard.agentgate.workers.dev/mcp",
+        "responded": true,
+        "httpStatus": 200,
+        "serverInfo": {
+          "name": "payguard",
+          "title": "PayGuard",
+          "version": "0.1.0"
+        },
+        "toolsCount": 1,
+        "toolNames": [
+          "screen_address"
+        ]
+      },
+      "a2aHandshake": {
+        "probedUrl": "https://payguard.agentgate.workers.dev/a2a",
+        "responded": false,
+        "httpStatus": 404
+      }
+    },
+    {
+      "domain": "mpp.hyreagent.fun",
+      "probedAt": "2026-10-22T00:34:08.918Z",
+      "wellKnownFound": [
+        "/.well-known/agent-card.json"
+      ],
+      "mcpHandshake": {
+        "probedUrl": "https://mpp.hyreagent.fun/mcp",
+        "responded": true,
+        "httpStatus": 404,
+        "serverInfo": "Not found"
+      },
+      "a2aHandshake": {
+        "probedUrl": "https://mpp.hyreagent.fun/a2a",
+        "responded": false,
+        "httpStatus": 404
+      }
+    },
+    {
+      "domain": "api.paysponge.com",
+      "probedAt": "2026-10-22T00:34:09.951Z",
+      "wellKnownFound": [],
+      "mcpHandshake": {
+        "probedUrl": "https://api.paysponge.com/mcp",
+        "responded": true,
+        "httpStatus": 401,
+        "serverInfo": "Unauthorized"
+      },
+      "a2aHandshake": {
+        "probedUrl": "https://api.paysponge.com/a2a",
+        "responded": false,
+        "httpStatus": 404
+      }
+    },
+    {
+      "domain": "sol.blockrun.ai",
+      "probedAt": "2026-10-22T00:34:09.690Z",
+      "wellKnownFound": [
+        "/.well-known/agent-card.json",
+        "/.well-known/x402.json",
+        "/.well-known/agent.json"
+      ],
+      "mcpHandshake": {
+        "probedUrl": "https://sol.blockrun.ai/mcp",
+        "responded": false,
+        "httpStatus": 404
+      },
+      "a2aHandshake": {
+        "probedUrl": "https://sol.blockrun.ai/a2a",
+        "responded": false,
+        "httpStatus": 404
+      }
+    },
+    {
+      "domain": "intel.rallylive.ca",
+      "probedAt": "2026-10-22T00:34:09.292Z",
+      "wellKnownFound": [],
+      "mcpHandshake": {
+        "probedUrl": "https://intel.rallylive.ca/mcp",
+        "responded": true,
+        "httpStatus": 200,
+        "serverInfo": {
+          "name": "scout-x402",
+          "version": "1.1.0"
+        },
+        "toolsCount": 1044,
+        "toolNames": [
+          "domain_intel",
+          "url_to_markdown",
+          "email_domain_verify",
+          "site_uptime_and_ssl",
+          "web_search",
+          "search_and_read",
+          "academic_paper_search",
+          "arxiv_latest_preprints",
+          "most_cited_papers",
+          "doi_lookup"
+        ]
+      },
+      "a2aHandshake": {
+        "probedUrl": "https://intel.rallylive.ca/a2a",
+        "responded": false,
+        "httpStatus": 404
+      }
+    },
+    {
+      "domain": "email.intel.rallylive.ca",
+      "probedAt": "2026-10-22T00:34:09.270Z",
+      "wellKnownFound": [],
+      "mcpHandshake": {
+        "probedUrl": "https://email.intel.rallylive.ca/mcp",
+        "responded": true,
+        "httpStatus": 200,
+        "serverInfo": {
+          "name": "scout-x402",
+          "version": "1.1.0"
+        },
+        "toolsCount": 968,
+        "toolNames": [
+          "is_email_hosted_by_google_workspace",
+          "is_email_hosted_by_microsoft_365",
+          "is_email_hosted_by_zoho_mail",
+          "is_email_hosted_by_proton_mail",
+          "is_email_hosted_by_fastmail",
+          "is_email_hosted_by_icloud",
+          "is_email_hosted_by_yahoo_mail",
+          "is_email_hosted_by_aol",
+          "is_email_hosted_by_gmx",
+          "is_email_hosted_by_web_de"
+        ]
+      },
+      "a2aHandshake": {
+        "probedUrl": "https://email.intel.rallylive.ca/a2a",
+        "responded": false,
+        "httpStatus": 404
+      }
+    },
+    {
+      "domain": "dns.intel.rallylive.ca",
+      "probedAt": "2026-10-22T00:34:09.115Z",
+      "wellKnownFound": [],
+      "mcpHandshake": {
+        "probedUrl": "https://dns.intel.rallylive.ca/mcp",
+        "responded": true,
+        "httpStatus": 200,
+        "serverInfo": {
+          "name": "scout-x402",
+          "version": "1.1.0"
+        },
+        "toolsCount": 1064,
+        "toolNames": [
+          "dns_a_via_cloudflare",
+          "dns_aaaa_via_cloudflare",
+          "dns_cname_via_cloudflare",
+          "dns_mx_via_cloudflare",
+          "dns_txt_via_cloudflare",
+          "dns_ns_via_cloudflare",
+          "dns_a_via_google",
+          "dns_aaaa_via_google",
+          "dns_cname_via_google",
+          "dns_mx_via_google"
+        ]
+      },
+      "a2aHandshake": {
+        "probedUrl": "https://dns.intel.rallylive.ca/a2a",
+        "responded": false,
+        "httpStatus": 404
+      }
+    },
+    {
+      "domain": "dev.intel.rallylive.ca",
+      "probedAt": "2026-10-22T00:34:09.409Z",
+      "wellKnownFound": [],
+      "mcpHandshake": {
+        "probedUrl": "https://dev.intel.rallylive.ca/mcp",
+        "responded": true,
+        "httpStatus": 200,
+        "serverInfo": {
+          "name": "scout-x402",
+          "version": "1.1.0"
+        },
+        "toolsCount": 1587,
+        "toolNames": [
+          "http_100_continue",
+          "http_101_switching_protocols",
+          "http_102_processing",
+          "http_103_early_hints",
+          "http_200_ok",
+          "http_201_created",
+          "http_202_accepted",
+          "http_203_non_authoritative_information",
+          "http_204_no_content",
+          "http_205_reset_content"
+        ]
+      },
+      "a2aHandshake": {
+        "probedUrl": "https://dev.intel.rallylive.ca/a2a",
+        "responded": false,
+        "httpStatus": 404
+      }
+    },
+    {
+      "domain": "apiv2.laevitas.ch",
+      "probedAt": "2026-10-22T00:34:10.360Z",
+      "wellKnownFound": [],
+      "mcpHandshake": {
+        "probedUrl": "https://apiv2.laevitas.ch/mcp",
+        "responded": true,
+        "httpStatus": 404,
+        "serverInfo": "Not Found"
+      },
+      "a2aHandshake": {
+        "probedUrl": "https://apiv2.laevitas.ch/a2a",
+        "responded": false,
+        "httpStatus": 404
+      }
+    },
+    {
+      "domain": "data.intel.rallylive.ca",
+      "probedAt": "2026-10-22T00:34:10.308Z",
+      "wellKnownFound": [],
+      "mcpHandshake": {
+        "probedUrl": "https://data.intel.rallylive.ca/mcp",
+        "responded": true,
+        "httpStatus": 200,
+        "serverInfo": {
+          "name": "scout-x402",
+          "version": "1.1.0"
+        },
+        "toolsCount": 1143,
+        "toolNames": [
+          "weather_now_toronto",
+          "weather_forecast_toronto",
+          "air_quality_toronto",
+          "sunrise_sunset_toronto",
+          "timezone_info_toronto",
+          "weather_now_vancouver",
+          "weather_forecast_vancouver",
+          "air_quality_vancouver",
+          "sunrise_sunset_vancouver",
+          "timezone_info_vancouver"
+        ]
+      },
+      "a2aHandshake": {
+        "probedUrl": "https://data.intel.rallylive.ca/a2a",
+        "responded": false,
+        "httpStatus": 404
+      }
+    },
+    {
+      "domain": "www.api-xpay.com",
+      "probedAt": "2026-10-22T00:34:11.424Z",
+      "wellKnownFound": [],
+      "mcpHandshake": {
+        "probedUrl": "https://www.api-xpay.com/mcp",
+        "responded": true,
+        "httpStatus": 404,
+        "serverInfo": {
+          "code": "not_found",
+          "message": "Route not found."
+        }
+      },
+      "a2aHandshake": {
+        "probedUrl": "https://www.api-xpay.com/a2a",
+        "responded": false,
+        "httpStatus": 404
+      }
+    },
+    {
+      "domain": "blockrun.ai",
+      "probedAt": "2026-10-22T00:34:11.391Z",
+      "wellKnownFound": [
+        "/.well-known/agent-card.json",
+        "/.well-known/x402.json"
+      ],
+      "mcpHandshake": {
+        "probedUrl": "https://blockrun.ai/mcp",
+        "responded": false,
+        "httpStatus": 404
+      },
+      "a2aHandshake": {
+        "probedUrl": "https://blockrun.ai/a2a",
+        "responded": false,
+        "httpStatus": 404
+      }
+    },
+    {
+      "domain": "api.exa.ai",
+      "probedAt": "2026-10-22T00:34:11.809Z",
+      "wellKnownFound": [],
+      "mcpHandshake": {
+        "probedUrl": "https://api.exa.ai/mcp",
+        "responded": true,
+        "httpStatus": 404,
+        "serverInfo": "Not found"
+      },
+      "a2aHandshake": {
+        "probedUrl": "https://api.exa.ai/a2a",
+        "responded": false,
+        "httpStatus": 404
+      }
+    },
+    {
+      "domain": "twitter.use.x402atlas.com",
+      "probedAt": "2026-10-22T00:34:12.906Z",
+      "wellKnownFound": [
+        "/.well-known/x402.json"
+      ],
+      "mcpHandshake": {
+        "probedUrl": "https://twitter.use.x402atlas.com/mcp",
+        "responded": false,
+        "httpStatus": 404
+      },
+      "a2aHandshake": {
+        "probedUrl": "https://twitter.use.x402atlas.com/a2a",
+        "responded": false,
+        "httpStatus": 404
+      }
+    },
+    {
+      "domain": "glim.sh",
+      "probedAt": "2026-10-22T00:34:12.907Z",
+      "wellKnownFound": [],
+      "mcpHandshake": {
+        "probedUrl": "https://glim.sh/mcp",
+        "responded": true,
+        "httpStatus": 200,
+        "serverInfo": {
+          "name": "glim",
+          "version": "1.0.0",
+          "title": "glim.sh",
+          "description": "One remote endpoint gives your agent live data from Twitter, Reddit, the open web, GitHub and more. No API keys, no scraping stack - just connect the URL and go.",
+          "websiteUrl": "https://glim.sh",
+          "icons": [
+            {
+              "src": "https://glim.sh/glim-mark.svg",
+              "mimeType": "image/svg+xml",
+              "sizes": [
+                "any"
+              ]
+            },
+            {
+              "src": "https://glim.sh/icon-512.png",
+              "mimeType": "image/png",
+              "sizes": [
+                "512x512"
+              ]
+            }
+          ]
+        },
+        "toolsCount": 14,
+        "toolNames": [
+          "glim_twitter_search",
+          "glim_twitter_get",
+          "glim_reddit_search",
+          "glim_reddit_get",
+          "glim_web_search",
+          "glim_web_fetch",
+          "glim_github_search",
+          "glim_github_get",
+          "glim_amazon_search",
+          "glim_amazon_get"
+        ]
+      },
+      "a2aHandshake": {
+        "probedUrl": "https://glim.sh/a2a",
+        "responded": false,
+        "httpStatus": 404
+      }
+    },
+    {
+      "domain": "api.onesource.io",
+      "probedAt": "2026-10-22T00:34:14.185Z",
+      "wellKnownFound": [],
+      "mcpHandshake": {
+        "probedUrl": "https://api.onesource.io/mcp",
+        "responded": true,
+        "httpStatus": 200,
+        "serverInfo": {
+          "name": "onesource",
+          "version": "5.23.1"
+        },
+        "toolsCount": 95,
+        "toolNames": [
+          "1s_allowance_live",
+          "1s_contract_info_live",
+          "1s_erc1155_balance_live",
+          "1s_erc20_balance_live",
+          "1s_erc20_transfers_live",
+          "1s_erc721_tokens_live",
+          "1s_events_live",
+          "1s_multi_balance_live",
+          "1s_nft_metadata_live",
+          "1s_nft_owner_live"
+        ]
+      },
+      "a2aHandshake": {
+        "probedUrl": "https://api.onesource.io/a2a",
+        "responded": false,
+        "httpStatus": 401
+      }
+    },
+    {
+      "domain": "x402.ottoai.services",
+      "probedAt": "2026-10-22T00:34:13.290Z",
+      "wellKnownFound": [
+        "/.well-known/agent.json",
+        "/.well-known/mcp.json"
+      ],
+      "mcpHandshake": {
+        "probedUrl": "https://x402.ottoai.services/mcp",
+        "responded": true,
+        "httpStatus": 200,
+        "serverInfo": {
+          "name": "otto-x402-open-router",
+          "version": "1.0.0"
+        },
+        "toolsCount": 2,
+        "toolNames": [
+          "otto_meta_intelligence",
+          "otto_feedback"
+        ]
+      },
+      "a2aHandshake": {
+        "probedUrl": "https://x402.ottoai.services/a2a",
+        "responded": false,
+        "httpStatus": 404
+      }
+    },
+    {
+      "domain": "laso.finance",
+      "probedAt": "2026-10-22T00:34:14.106Z",
+      "wellKnownFound": [],
+      "mcpHandshake": {
+        "probedUrl": "https://laso.finance/mcp",
+        "responded": true,
+        "httpStatus": 401,
+        "serverInfo": {
+          "code": -32001,
+          "message": "Sign in to connect your Laso account. Your MCP client handles this through OAuth; clients without OAuth can send Authorization: Bearer <lasoak_ API key> instead."
+        }
+      },
+      "a2aHandshake": {
+        "probedUrl": "https://laso.finance/a2a",
+        "responded": false,
+        "httpStatus": 404
+      }
+    },
+    {
+      "domain": "cheaptokens.ai",
+      "probedAt": "2026-10-22T00:34:15.096Z",
+      "wellKnownFound": [
+        "/.well-known/x402.json"
+      ],
+      "mcpHandshake": {
+        "probedUrl": "https://cheaptokens.ai/mcp",
+        "responded": false,
+        "httpStatus": 404
+      },
+      "a2aHandshake": {
+        "probedUrl": "https://cheaptokens.ai/a2a",
+        "responded": false,
+        "httpStatus": 404
+      }
+    },
+    {
+      "domain": "websearch.use.x402atlas.com",
+      "probedAt": "2026-10-22T00:34:15.183Z",
+      "wellKnownFound": [
+        "/.well-known/x402.json"
+      ],
+      "mcpHandshake": {
+        "probedUrl": "https://websearch.use.x402atlas.com/mcp",
+        "responded": false,
+        "httpStatus": 404
+      },
+      "a2aHandshake": {
+        "probedUrl": "https://websearch.use.x402atlas.com/a2a",
+        "responded": false,
+        "httpStatus": 404
+      }
+    },
+    {
+      "domain": "api.402rates.com",
+      "probedAt": "2026-10-22T00:34:15.222Z",
+      "wellKnownFound": [],
+      "mcpHandshake": {
+        "probedUrl": "https://api.402rates.com/mcp",
+        "responded": true,
+        "httpStatus": 200,
+        "serverInfo": {
+          "name": "402rates",
+          "version": "0.1.0"
+        },
+        "toolsCount": 22,
+        "toolNames": [
+          "list_agent_test_cases",
+          "describe_agent_test",
+          "start_agent_test",
+          "execute_test_action",
+          "inspect_test_state",
+          "read_agent_test_report",
+          "compare_payment_terms",
+          "estimate_payment_costs",
+          "list_rwa_updates",
+          "compare_rwa_benchmark"
+        ]
+      },
+      "a2aHandshake": {
+        "probedUrl": "https://api.402rates.com/a2a",
+        "responded": false,
+        "httpStatus": 404
+      }
+    },
+    {
+      "domain": "hypernatt.com",
+      "probedAt": "2026-10-22T00:34:15.994Z",
+      "wellKnownFound": [
+        "/.well-known/agent-card.json",
+        "/.well-known/x402.json",
+        "/.well-known/agent.json"
+      ],
+      "mcpHandshake": {
+        "probedUrl": "https://hypernatt.com/mcp",
+        "responded": false,
+        "httpStatus": 404
+      },
+      "a2aHandshake": {
+        "probedUrl": "https://hypernatt.com/a2a",
+        "responded": false,
+        "httpStatus": 404
+      }
+    },
+    {
+      "domain": "rubric-protocol.com",
+      "probedAt": "2026-10-22T00:34:16.105Z",
+      "wellKnownFound": [
+        "/.well-known/x402.json"
+      ],
+      "mcpHandshake": {
+        "probedUrl": "https://rubric-protocol.com/mcp",
+        "responded": false,
+        "httpStatus": 404
+      },
+      "a2aHandshake": {
+        "probedUrl": "https://rubric-protocol.com/a2a",
+        "responded": false,
+        "httpStatus": 404
+      }
+    },
+    {
+      "domain": "api.aidress.ai",
+      "probedAt": "2026-10-22T00:34:18.939Z",
+      "wellKnownFound": [
+        "/.well-known/agent.json"
+      ],
+      "mcpHandshake": {
+        "probedUrl": "https://api.aidress.ai/mcp",
+        "responded": false,
+        "httpStatus": 404
+      },
+      "a2aHandshake": {
+        "probedUrl": "https://api.aidress.ai/a2a",
+        "responded": false,
+        "httpStatus": 404
+      }
+    },
+    {
+      "domain": "pro-api.coingecko.com",
+      "probedAt": "2026-10-22T00:34:25.785Z",
+      "wellKnownFound": [],
+      "mcpHandshake": {
+        "probedUrl": "https://pro-api.coingecko.com/mcp",
+        "responded": true,
+        "httpStatus": 404,
+        "serverInfo": "Not Found"
+      },
+      "a2aHandshake": {
+        "probedUrl": "https://pro-api.coingecko.com/a2a",
+        "responded": false,
+        "httpStatus": 404
+      }
+    },
+    {
+      "domain": "api.hyperextend.xyz",
+      "probedAt": "2026-10-22T00:34:18.316Z",
+      "wellKnownFound": [],
+      "mcpHandshake": {
+        "probedUrl": "https://api.hyperextend.xyz/mcp",
+        "responded": true,
+        "httpStatus": 401,
+        "serverInfo": {
+          "code": -32700,
+          "message": "Unauthorized"
+        }
+      },
+      "a2aHandshake": {
+        "probedUrl": "https://api.hyperextend.xyz/a2a",
+        "responded": false,
+        "httpStatus": 404
+      }
+    },
+    {
+      "domain": "hyperliquid-predict.use.x402atlas.com",
+      "probedAt": "2026-10-22T00:34:18.716Z",
+      "wellKnownFound": [
+        "/.well-known/x402.json"
+      ],
+      "mcpHandshake": {
+        "probedUrl": "https://hyperliquid-predict.use.x402atlas.com/mcp",
+        "responded": false,
+        "httpStatus": 404
+      },
+      "a2aHandshake": {
+        "probedUrl": "https://hyperliquid-predict.use.x402atlas.com/a2a",
+        "responded": false,
+        "httpStatus": 404
+      }
+    },
+    {
+      "domain": "vibesprings.net",
+      "probedAt": "2026-10-22T00:34:19.211Z",
+      "wellKnownFound": [
+        "/.well-known/x402.json",
+        "/.well-known/mcp.json"
+      ],
+      "mcpHandshake": {
+        "probedUrl": "https://vibesprings.net/mcp",
+        "responded": true,
+        "httpStatus": 200,
+        "serverInfo": {
+          "name": "vibesprings",
+          "title": "Vibe Springs",
+          "version": "1.0.0"
+        },
+        "toolsCount": 25,
+        "toolNames": [
+          "health",
+          "search_services",
+          "get_forecast",
+          "get_weather_history",
+          "get_delay_risk",
+          "get_delay_risk_demo",
+          "get_exchange_rates",
+          "convert_currency",
+          "get_crypto_prices",
+          "get_crypto_news"
+        ]
+      },
+      "a2aHandshake": {
+        "probedUrl": "https://vibesprings.net/a2a",
+        "responded": false,
+        "httpStatus": 404
+      }
+    },
+    {
+      "domain": "api.urbangametheory.xyz",
+      "probedAt": "2026-10-22T00:34:19.021Z",
+      "wellKnownFound": [],
+      "mcpHandshake": {
+        "probedUrl": "https://api.urbangametheory.xyz/mcp",
+        "responded": true,
+        "httpStatus": 403,
+        "serverInfo": "Forbidden"
+      },
+      "a2aHandshake": {
+        "probedUrl": "https://api.urbangametheory.xyz/a2a",
+        "responded": false,
+        "httpStatus": 403
+      }
+    },
+    {
+      "domain": "api.oblique.markets",
+      "probedAt": "2026-10-22T00:34:26.545Z",
+      "wellKnownFound": [
+        "/.well-known/agent.json",
+        "/.well-known/x402.json",
+        "/.well-known/agent-card.json",
+        "/.well-known/mcp.json"
+      ],
+      "mcpHandshake": {
+        "probedUrl": "https://api.oblique.markets/mcp",
+        "responded": true,
+        "httpStatus": 200,
+        "serverInfo": {
+          "name": "oblique-markets",
+          "version": "1.1.0",
+          "description": "M2M commerce API: x402 Bazaar market data, on-chain analytics, wallet surveillance, web/company research and LLM inference. Every tool is a paid endpoint settled in USDC over the x402 protocol (Base mainnet or Solana mainnet).",
+          "vendor": "Oblique Markets",
+          "url": "https://api.oblique.markets"
+        },
+        "toolsCount": 79,
+        "toolNames": [
+          "server_time",
+          "echo",
+          "web_extract",
+          "sentiment",
+          "company_research",
+          "answer_with_sources",
+          "crypto_price",
+          "bazaar_pulse",
+          "listing_triage",
+          "wallet_spy"
+        ]
+      },
+      "a2aHandshake": {
+        "probedUrl": "https://api.oblique.markets/a2a",
+        "responded": false,
+        "httpStatus": 404
+      }
+    },
+    {
+      "domain": "quartermaster.surewhynot.app",
+      "probedAt": "2026-10-22T00:34:26.334Z",
+      "wellKnownFound": [],
+      "mcpHandshake": {
+        "probedUrl": "https://quartermaster.surewhynot.app/mcp",
+        "responded": true,
+        "httpStatus": 200,
+        "serverInfo": {
+          "name": "quartermaster",
+          "title": "Quartermaster — paid utility tools (x402)",
+          "version": "1.6.0"
+        },
+        "toolsCount": 49,
+        "toolNames": [
+          "x402_router",
+          "web_extract",
+          "page_meta",
+          "qr_generate",
+          "dns_lookup",
+          "http_error_explain",
+          "tx_status",
+          "wallet_balance",
+          "gas_prices",
+          "summarize_url"
+        ]
+      },
+      "a2aHandshake": {
+        "probedUrl": "https://quartermaster.surewhynot.app/a2a",
+        "responded": false,
+        "httpStatus": 404
+      }
+    },
+    {
+      "domain": "facilitator.payai.network",
+      "probedAt": "2026-10-22T00:34:26.980Z",
+      "wellKnownFound": [
+        "/.well-known/mcp.json"
+      ],
+      "mcpHandshake": {
+        "probedUrl": "https://facilitator.payai.network/mcp",
+        "responded": true,
+        "httpStatus": 200,
+        "serverInfo": {
+          "name": "PayAI x402 Facilitator",
+          "title": "PayAI x402 Facilitator",
+          "version": "2.0.1"
+        },
+        "toolsCount": 5,
+        "toolNames": [
+          "get_supported",
+          "verify_payment",
+          "settle_payment",
+          "list_discovery_resources",
+          "get_discovery_stats"
+        ]
+      },
+      "a2aHandshake": {
+        "probedUrl": "https://facilitator.payai.network/a2a",
+        "responded": false,
+        "httpStatus": 404
+      }
+    }
+  ],
+  "allDomainProbes": [
+    {
+      "domain": "mcp.toolsnap.app",
+      "probedAt": "2026-10-22T00:34:07.819Z",
+      "wellKnownFound": [
+        "/.well-known/mcp.json"
+      ],
+      "mcpHandshake": {
+        "probedUrl": "https://mcp.toolsnap.app/mcp",
+        "responded": true,
+        "httpStatus": 200,
+        "serverInfo": {
+          "name": "toolsnap-mcp",
+          "version": "0.1.0"
+        },
+        "toolsCount": 17,
+        "toolNames": [
+          "tool_catalog",
+          "use_tool",
+          "task_recipes",
+          "memory_snippet",
+          "pricing",
+          "fetch_extract",
+          "fetch_html",
+          "html_to_markdown",
+          "fetch_metadata",
+          "pdf_text_extract"
+        ]
+      },
+      "a2aHandshake": {
+        "probedUrl": "https://mcp.toolsnap.app/a2a",
+        "responded": false,
+        "httpStatus": 405
+      }
+    },
+    {
+      "domain": "api.402xagent.com",
+      "probedAt": "2026-10-22T00:34:07.580Z",
+      "wellKnownFound": [],
+      "mcpHandshake": {
+        "probedUrl": "https://api.402xagent.com/mcp",
+        "responded": true,
+        "httpStatus": 200,
+        "serverInfo": {
+          "name": "402xagent",
+          "title": "402xAgent + verified x402 catalog",
+          "version": "0.49.0"
+        },
+        "toolsCount": 9,
+        "toolNames": [
+          "search_catalog",
+          "get_service",
+          "lookup",
+          "get_overnight_cos_pack",
+          "get_receipt",
+          "endpoint_spot_check",
+          "payment_status",
+          "discover",
+          "endpoint_report"
+        ]
+      },
+      "a2aHandshake": {
+        "probedUrl": "https://api.402xagent.com/a2a",
+        "responded": false,
+        "httpStatus": 404
+      }
+    },
+    {
+      "domain": "x402-trust.com",
+      "probedAt": "2026-10-22T00:34:07.929Z",
+      "wellKnownFound": [],
+      "mcpHandshake": {
+        "probedUrl": "https://x402-trust.com/mcp",
+        "responded": true,
+        "httpStatus": 200,
+        "serverInfo": {
+          "name": "x402-trust",
+          "version": "1.17.0"
+        },
+        "toolsCount": 15,
+        "toolNames": [
+          "x402_ecosystem_stats",
+          "x402_trust_leaderboard",
+          "x402_verified_providers",
+          "x402_search",
+          "x402_trust_preview",
+          "x402_trust_score",
+          "x402_endpoint_history",
+          "x402_find_alternatives",
+          "x402_semantic_search",
+          "x402_trust_bulk"
+        ]
+      },
+      "a2aHandshake": {
+        "probedUrl": "https://x402-trust.com/a2a",
+        "responded": false,
+        "httpStatus": 404
+      }
+    },
+    {
+      "domain": "coinpayportal.com",
+      "probedAt": "2026-10-22T00:34:08.208Z",
+      "wellKnownFound": [],
+      "mcpHandshake": {
+        "probedUrl": "https://coinpayportal.com/mcp",
+        "responded": false,
+        "httpStatus": 404
+      },
+      "a2aHandshake": {
+        "probedUrl": "https://coinpayportal.com/a2a",
+        "responded": false,
+        "httpStatus": 404
+      }
+    },
+    {
+      "domain": "meter.wayleave.dev",
+      "probedAt": "2026-10-22T00:34:08.611Z",
+      "wellKnownFound": [],
+      "mcpHandshake": {
+        "probedUrl": "https://meter.wayleave.dev/mcp",
+        "responded": true,
+        "httpStatus": 404,
+        "serverInfo": "not found"
+      },
+      "a2aHandshake": {
+        "probedUrl": "https://meter.wayleave.dev/a2a",
+        "responded": false,
+        "httpStatus": 404
+      }
+    },
+    {
+      "domain": "api.youraitools.co",
+      "probedAt": "2026-10-22T00:34:07.736Z",
+      "wellKnownFound": [],
+      "mcpHandshake": {
+        "probedUrl": "https://api.youraitools.co/mcp",
+        "responded": true,
+        "httpStatus": 404,
+        "serverInfo": "not_found"
+      },
+      "a2aHandshake": {
+        "probedUrl": "https://api.youraitools.co/a2a",
+        "responded": false,
+        "httpStatus": 404
+      }
+    },
+    {
+      "domain": "agentgate-coder.agentgate.workers.dev",
+      "probedAt": "2026-10-22T00:34:07.736Z",
+      "wellKnownFound": [],
+      "mcpHandshake": {
+        "probedUrl": "https://agentgate-coder.agentgate.workers.dev/mcp",
+        "responded": true,
+        "httpStatus": 405,
+        "serverInfo": "method not allowed"
+      },
+      "a2aHandshake": {
+        "probedUrl": "https://agentgate-coder.agentgate.workers.dev/a2a",
+        "responded": false,
+        "httpStatus": 405
+      }
+    },
+    {
+      "domain": "payguard.agentgate.workers.dev",
+      "probedAt": "2026-10-22T00:34:07.751Z",
+      "wellKnownFound": [],
+      "mcpHandshake": {
+        "probedUrl": "https://payguard.agentgate.workers.dev/mcp",
+        "responded": true,
+        "httpStatus": 200,
+        "serverInfo": {
+          "name": "payguard",
+          "title": "PayGuard",
+          "version": "0.1.0"
+        },
+        "toolsCount": 1,
+        "toolNames": [
+          "screen_address"
+        ]
+      },
+      "a2aHandshake": {
+        "probedUrl": "https://payguard.agentgate.workers.dev/a2a",
+        "responded": false,
+        "httpStatus": 404
+      }
+    },
+    {
+      "domain": "mpp.hyreagent.fun",
+      "probedAt": "2026-10-22T00:34:08.918Z",
+      "wellKnownFound": [
+        "/.well-known/agent-card.json"
+      ],
+      "mcpHandshake": {
+        "probedUrl": "https://mpp.hyreagent.fun/mcp",
+        "responded": true,
+        "httpStatus": 404,
+        "serverInfo": "Not found"
+      },
+      "a2aHandshake": {
+        "probedUrl": "https://mpp.hyreagent.fun/a2a",
+        "responded": false,
+        "httpStatus": 404
+      }
+    },
+    {
+      "domain": "api.paysponge.com",
+      "probedAt": "2026-10-22T00:34:09.951Z",
+      "wellKnownFound": [],
+      "mcpHandshake": {
+        "probedUrl": "https://api.paysponge.com/mcp",
+        "responded": true,
+        "httpStatus": 401,
+        "serverInfo": "Unauthorized"
+      },
+      "a2aHandshake": {
+        "probedUrl": "https://api.paysponge.com/a2a",
+        "responded": false,
+        "httpStatus": 404
+      }
+    },
+    {
+      "domain": "sol.blockrun.ai",
+      "probedAt": "2026-10-22T00:34:09.690Z",
+      "wellKnownFound": [
+        "/.well-known/agent-card.json",
+        "/.well-known/x402.json",
+        "/.well-known/agent.json"
+      ],
+      "mcpHandshake": {
+        "probedUrl": "https://sol.blockrun.ai/mcp",
+        "responded": false,
+        "httpStatus": 404
+      },
+      "a2aHandshake": {
+        "probedUrl": "https://sol.blockrun.ai/a2a",
+        "responded": false,
+        "httpStatus": 404
+      }
+    },
+    {
+      "domain": "intel.rallylive.ca",
+      "probedAt": "2026-10-22T00:34:09.292Z",
+      "wellKnownFound": [],
+      "mcpHandshake": {
+        "probedUrl": "https://intel.rallylive.ca/mcp",
+        "responded": true,
+        "httpStatus": 200,
+        "serverInfo": {
+          "name": "scout-x402",
+          "version": "1.1.0"
+        },
+        "toolsCount": 1044,
+        "toolNames": [
+          "domain_intel",
+          "url_to_markdown",
+          "email_domain_verify",
+          "site_uptime_and_ssl",
+          "web_search",
+          "search_and_read",
+          "academic_paper_search",
+          "arxiv_latest_preprints",
+          "most_cited_papers",
+          "doi_lookup"
+        ]
+      },
+      "a2aHandshake": {
+        "probedUrl": "https://intel.rallylive.ca/a2a",
+        "responded": false,
+        "httpStatus": 404
+      }
+    },
+    {
+      "domain": "email.intel.rallylive.ca",
+      "probedAt": "2026-10-22T00:34:09.270Z",
+      "wellKnownFound": [],
+      "mcpHandshake": {
+        "probedUrl": "https://email.intel.rallylive.ca/mcp",
+        "responded": true,
+        "httpStatus": 200,
+        "serverInfo": {
+          "name": "scout-x402",
+          "version": "1.1.0"
+        },
+        "toolsCount": 968,
+        "toolNames": [
+          "is_email_hosted_by_google_workspace",
+          "is_email_hosted_by_microsoft_365",
+          "is_email_hosted_by_zoho_mail",
+          "is_email_hosted_by_proton_mail",
+          "is_email_hosted_by_fastmail",
+          "is_email_hosted_by_icloud",
+          "is_email_hosted_by_yahoo_mail",
+          "is_email_hosted_by_aol",
+          "is_email_hosted_by_gmx",
+          "is_email_hosted_by_web_de"
+        ]
+      },
+      "a2aHandshake": {
+        "probedUrl": "https://email.intel.rallylive.ca/a2a",
+        "responded": false,
+        "httpStatus": 404
+      }
+    },
+    {
+      "domain": "dns.intel.rallylive.ca",
+      "probedAt": "2026-10-22T00:34:09.115Z",
+      "wellKnownFound": [],
+      "mcpHandshake": {
+        "probedUrl": "https://dns.intel.rallylive.ca/mcp",
+        "responded": true,
+        "httpStatus": 200,
+        "serverInfo": {
+          "name": "scout-x402",
+          "version": "1.1.0"
+        },
+        "toolsCount": 1064,
+        "toolNames": [
+          "dns_a_via_cloudflare",
+          "dns_aaaa_via_cloudflare",
+          "dns_cname_via_cloudflare",
+          "dns_mx_via_cloudflare",
+          "dns_txt_via_cloudflare",
+          "dns_ns_via_cloudflare",
+          "dns_a_via_google",
+          "dns_aaaa_via_google",
+          "dns_cname_via_google",
+          "dns_mx_via_google"
+        ]
+      },
+      "a2aHandshake": {
+        "probedUrl": "https://dns.intel.rallylive.ca/a2a",
+        "responded": false,
+        "httpStatus": 404
+      }
+    },
+    {
+      "domain": "agent-kiosk.vercel.app",
+      "probedAt": "2026-10-22T00:34:09.163Z",
+      "wellKnownFound": [],
+      "mcpHandshake": {
+        "probedUrl": "https://agent-kiosk.vercel.app/mcp",
+        "responded": false
+      },
+      "a2aHandshake": {
+        "probedUrl": "https://agent-kiosk.vercel.app/a2a",
+        "responded": false
+      }
+    },
+    {
+      "domain": "dev.intel.rallylive.ca",
+      "probedAt": "2026-10-22T00:34:09.409Z",
+      "wellKnownFound": [],
+      "mcpHandshake": {
+        "probedUrl": "https://dev.intel.rallylive.ca/mcp",
+        "responded": true,
+        "httpStatus": 200,
+        "serverInfo": {
+          "name": "scout-x402",
+          "version": "1.1.0"
+        },
+        "toolsCount": 1587,
+        "toolNames": [
+          "http_100_continue",
+          "http_101_switching_protocols",
+          "http_102_processing",
+          "http_103_early_hints",
+          "http_200_ok",
+          "http_201_created",
+          "http_202_accepted",
+          "http_203_non_authoritative_information",
+          "http_204_no_content",
+          "http_205_reset_content"
+        ]
+      },
+      "a2aHandshake": {
+        "probedUrl": "https://dev.intel.rallylive.ca/a2a",
+        "responded": false,
+        "httpStatus": 404
+      }
+    },
+    {
+      "domain": "apiv2.laevitas.ch",
+      "probedAt": "2026-10-22T00:34:10.360Z",
+      "wellKnownFound": [],
+      "mcpHandshake": {
+        "probedUrl": "https://apiv2.laevitas.ch/mcp",
+        "responded": true,
+        "httpStatus": 404,
+        "serverInfo": "Not Found"
+      },
+      "a2aHandshake": {
+        "probedUrl": "https://apiv2.laevitas.ch/a2a",
+        "responded": false,
+        "httpStatus": 404
+      }
+    },
+    {
+      "domain": "data.intel.rallylive.ca",
+      "probedAt": "2026-10-22T00:34:10.308Z",
+      "wellKnownFound": [],
+      "mcpHandshake": {
+        "probedUrl": "https://data.intel.rallylive.ca/mcp",
+        "responded": true,
+        "httpStatus": 200,
+        "serverInfo": {
+          "name": "scout-x402",
+          "version": "1.1.0"
+        },
+        "toolsCount": 1143,
+        "toolNames": [
+          "weather_now_toronto",
+          "weather_forecast_toronto",
+          "air_quality_toronto",
+          "sunrise_sunset_toronto",
+          "timezone_info_toronto",
+          "weather_now_vancouver",
+          "weather_forecast_vancouver",
+          "air_quality_vancouver",
+          "sunrise_sunset_vancouver",
+          "timezone_info_vancouver"
+        ]
+      },
+      "a2aHandshake": {
+        "probedUrl": "https://data.intel.rallylive.ca/a2a",
+        "responded": false,
+        "httpStatus": 404
+      }
+    },
+    {
+      "domain": "www.ax1.vc",
+      "probedAt": "2026-10-22T00:34:10.675Z",
+      "wellKnownFound": [],
+      "mcpHandshake": {
+        "probedUrl": "https://www.ax1.vc/mcp",
+        "responded": false,
+        "httpStatus": 404
+      },
+      "a2aHandshake": {
+        "probedUrl": "https://www.ax1.vc/a2a",
+        "responded": false,
+        "httpStatus": 404
+      }
+    },
+    {
+      "domain": "www.api-xpay.com",
+      "probedAt": "2026-10-22T00:34:11.424Z",
+      "wellKnownFound": [],
+      "mcpHandshake": {
+        "probedUrl": "https://www.api-xpay.com/mcp",
+        "responded": true,
+        "httpStatus": 404,
+        "serverInfo": {
+          "code": "not_found",
+          "message": "Route not found."
+        }
+      },
+      "a2aHandshake": {
+        "probedUrl": "https://www.api-xpay.com/a2a",
+        "responded": false,
+        "httpStatus": 404
+      }
+    },
+    {
+      "domain": "blockrun.ai",
+      "probedAt": "2026-10-22T00:34:11.391Z",
+      "wellKnownFound": [
+        "/.well-known/agent-card.json",
+        "/.well-known/x402.json"
+      ],
+      "mcpHandshake": {
+        "probedUrl": "https://blockrun.ai/mcp",
+        "responded": false,
+        "httpStatus": 404
+      },
+      "a2aHandshake": {
+        "probedUrl": "https://blockrun.ai/a2a",
+        "responded": false,
+        "httpStatus": 404
+      }
+    },
+    {
+      "domain": "crypto.apitoll.cloud",
+      "probedAt": "2026-10-22T00:34:10.912Z",
+      "wellKnownFound": [],
+      "mcpHandshake": {
+        "probedUrl": "https://crypto.apitoll.cloud/mcp",
+        "responded": false,
+        "httpStatus": 404
+      },
+      "a2aHandshake": {
+        "probedUrl": "https://crypto.apitoll.cloud/a2a",
+        "responded": false,
+        "httpStatus": 404
+      }
+    },
+    {
+      "domain": "api.exa.ai",
+      "probedAt": "2026-10-22T00:34:11.809Z",
+      "wellKnownFound": [],
+      "mcpHandshake": {
+        "probedUrl": "https://api.exa.ai/mcp",
+        "responded": true,
+        "httpStatus": 404,
+        "serverInfo": "Not found"
+      },
+      "a2aHandshake": {
+        "probedUrl": "https://api.exa.ai/a2a",
+        "responded": false,
+        "httpStatus": 404
+      }
+    },
+    {
+      "domain": "stableenrich.dev",
+      "probedAt": "2026-10-22T00:34:11.134Z",
+      "wellKnownFound": [],
+      "mcpHandshake": {
+        "probedUrl": "https://stableenrich.dev/mcp",
+        "responded": false,
+        "httpStatus": 404
+      },
+      "a2aHandshake": {
+        "probedUrl": "https://stableenrich.dev/a2a",
+        "responded": false,
+        "httpStatus": 404
+      }
+    },
+    {
+      "domain": "stableupload.dev",
+      "probedAt": "2026-10-22T00:34:13.173Z",
+      "wellKnownFound": [],
+      "mcpHandshake": {
+        "probedUrl": "https://stableupload.dev/mcp",
+        "responded": false,
+        "httpStatus": 404
+      },
+      "a2aHandshake": {
+        "probedUrl": "https://stableupload.dev/a2a",
+        "responded": false,
+        "httpStatus": 404
+      }
+    },
+    {
+      "domain": "twitter.use.x402atlas.com",
+      "probedAt": "2026-10-22T00:34:12.906Z",
+      "wellKnownFound": [
+        "/.well-known/x402.json"
+      ],
+      "mcpHandshake": {
+        "probedUrl": "https://twitter.use.x402atlas.com/mcp",
+        "responded": false,
+        "httpStatus": 404
+      },
+      "a2aHandshake": {
+        "probedUrl": "https://twitter.use.x402atlas.com/a2a",
+        "responded": false,
+        "httpStatus": 404
+      }
+    },
+    {
+      "domain": "glim.sh",
+      "probedAt": "2026-10-22T00:34:12.907Z",
+      "wellKnownFound": [],
+      "mcpHandshake": {
+        "probedUrl": "https://glim.sh/mcp",
+        "responded": true,
+        "httpStatus": 200,
+        "serverInfo": {
+          "name": "glim",
+          "version": "1.0.0",
+          "title": "glim.sh",
+          "description": "One remote endpoint gives your agent live data from Twitter, Reddit, the open web, GitHub and more. No API keys, no scraping stack - just connect the URL and go.",
+          "websiteUrl": "https://glim.sh",
+          "icons": [
+            {
+              "src": "https://glim.sh/glim-mark.svg",
+              "mimeType": "image/svg+xml",
+              "sizes": [
+                "any"
+              ]
+            },
+            {
+              "src": "https://glim.sh/icon-512.png",
+              "mimeType": "image/png",
+              "sizes": [
+                "512x512"
+              ]
+            }
+          ]
+        },
+        "toolsCount": 14,
+        "toolNames": [
+          "glim_twitter_search",
+          "glim_twitter_get",
+          "glim_reddit_search",
+          "glim_reddit_get",
+          "glim_web_search",
+          "glim_web_fetch",
+          "glim_github_search",
+          "glim_github_get",
+          "glim_amazon_search",
+          "glim_amazon_get"
+        ]
+      },
+      "a2aHandshake": {
+        "probedUrl": "https://glim.sh/a2a",
+        "responded": false,
+        "httpStatus": 404
+      }
+    },
+    {
+      "domain": "api.bitrefill.com",
+      "probedAt": "2026-10-22T00:34:12.927Z",
+      "wellKnownFound": [],
+      "mcpHandshake": {
+        "probedUrl": "https://api.bitrefill.com/mcp",
+        "responded": false,
+        "httpStatus": 401
+      },
+      "a2aHandshake": {
+        "probedUrl": "https://api.bitrefill.com/a2a",
+        "responded": false,
+        "httpStatus": 404
+      }
+    },
+    {
+      "domain": "agi.apify.com",
+      "probedAt": "2026-10-22T00:34:13.159Z",
+      "wellKnownFound": [],
+      "mcpHandshake": {
+        "probedUrl": "https://agi.apify.com/mcp",
+        "responded": false,
+        "httpStatus": 404
+      },
+      "a2aHandshake": {
+        "probedUrl": "https://agi.apify.com/a2a",
+        "responded": false,
+        "httpStatus": 404
+      }
+    },
+    {
+      "domain": "api.onesource.io",
+      "probedAt": "2026-10-22T00:34:14.185Z",
+      "wellKnownFound": [],
+      "mcpHandshake": {
+        "probedUrl": "https://api.onesource.io/mcp",
+        "responded": true,
+        "httpStatus": 200,
+        "serverInfo": {
+          "name": "onesource",
+          "version": "5.23.1"
+        },
+        "toolsCount": 95,
+        "toolNames": [
+          "1s_allowance_live",
+          "1s_contract_info_live",
+          "1s_erc1155_balance_live",
+          "1s_erc20_balance_live",
+          "1s_erc20_transfers_live",
+          "1s_erc721_tokens_live",
+          "1s_events_live",
+          "1s_multi_balance_live",
+          "1s_nft_metadata_live",
+          "1s_nft_owner_live"
+        ]
+      },
+      "a2aHandshake": {
+        "probedUrl": "https://api.onesource.io/a2a",
+        "responded": false,
+        "httpStatus": 401
+      }
+    },
+    {
+      "domain": "x402.ottoai.services",
+      "probedAt": "2026-10-22T00:34:13.290Z",
+      "wellKnownFound": [
+        "/.well-known/agent.json",
+        "/.well-known/mcp.json"
+      ],
+      "mcpHandshake": {
+        "probedUrl": "https://x402.ottoai.services/mcp",
+        "responded": true,
+        "httpStatus": 200,
+        "serverInfo": {
+          "name": "otto-x402-open-router",
+          "version": "1.0.0"
+        },
+        "toolsCount": 2,
+        "toolNames": [
+          "otto_meta_intelligence",
+          "otto_feedback"
+        ]
+      },
+      "a2aHandshake": {
+        "probedUrl": "https://x402.ottoai.services/a2a",
+        "responded": false,
+        "httpStatus": 404
+      }
+    },
+    {
+      "domain": "laso.finance",
+      "probedAt": "2026-10-22T00:34:14.106Z",
+      "wellKnownFound": [],
+      "mcpHandshake": {
+        "probedUrl": "https://laso.finance/mcp",
+        "responded": true,
+        "httpStatus": 401,
+        "serverInfo": {
+          "code": -32001,
+          "message": "Sign in to connect your Laso account. Your MCP client handles this through OAuth; clients without OAuth can send Authorization: Bearer <lasoak_ API key> instead."
+        }
+      },
+      "a2aHandshake": {
+        "probedUrl": "https://laso.finance/a2a",
+        "responded": false,
+        "httpStatus": 404
+      }
+    },
+    {
+      "domain": "cheaptokens.ai",
+      "probedAt": "2026-10-22T00:34:15.096Z",
+      "wellKnownFound": [
+        "/.well-known/x402.json"
+      ],
+      "mcpHandshake": {
+        "probedUrl": "https://cheaptokens.ai/mcp",
+        "responded": false,
+        "httpStatus": 404
+      },
+      "a2aHandshake": {
+        "probedUrl": "https://cheaptokens.ai/a2a",
+        "responded": false,
+        "httpStatus": 404
+      }
+    },
+    {
+      "domain": "edgar.apitoll.cloud",
+      "probedAt": "2026-10-22T00:34:14.735Z",
+      "wellKnownFound": [],
+      "mcpHandshake": {
+        "probedUrl": "https://edgar.apitoll.cloud/mcp",
+        "responded": false,
+        "httpStatus": 404
+      },
+      "a2aHandshake": {
+        "probedUrl": "https://edgar.apitoll.cloud/a2a",
+        "responded": false,
+        "httpStatus": 404
+      }
+    },
+    {
+      "domain": "websearch.use.x402atlas.com",
+      "probedAt": "2026-10-22T00:34:15.183Z",
+      "wellKnownFound": [
+        "/.well-known/x402.json"
+      ],
+      "mcpHandshake": {
+        "probedUrl": "https://websearch.use.x402atlas.com/mcp",
+        "responded": false,
+        "httpStatus": 404
+      },
+      "a2aHandshake": {
+        "probedUrl": "https://websearch.use.x402atlas.com/a2a",
+        "responded": false,
+        "httpStatus": 404
+      }
+    },
+    {
+      "domain": "keyring-agent.blockchhub.link",
+      "probedAt": "2026-10-22T00:34:15.967Z",
+      "wellKnownFound": [],
+      "mcpHandshake": {
+        "probedUrl": "https://keyring-agent.blockchhub.link/mcp",
+        "responded": false,
+        "httpStatus": 404
+      },
+      "a2aHandshake": {
+        "probedUrl": "https://keyring-agent.blockchhub.link/a2a",
+        "responded": false,
+        "httpStatus": 404
+      }
+    },
+    {
+      "domain": "api.402rates.com",
+      "probedAt": "2026-10-22T00:34:15.222Z",
+      "wellKnownFound": [],
+      "mcpHandshake": {
+        "probedUrl": "https://api.402rates.com/mcp",
+        "responded": true,
+        "httpStatus": 200,
+        "serverInfo": {
+          "name": "402rates",
+          "version": "0.1.0"
+        },
+        "toolsCount": 22,
+        "toolNames": [
+          "list_agent_test_cases",
+          "describe_agent_test",
+          "start_agent_test",
+          "execute_test_action",
+          "inspect_test_state",
+          "read_agent_test_report",
+          "compare_payment_terms",
+          "estimate_payment_costs",
+          "list_rwa_updates",
+          "compare_rwa_benchmark"
+        ]
+      },
+      "a2aHandshake": {
+        "probedUrl": "https://api.402rates.com/a2a",
+        "responded": false,
+        "httpStatus": 404
+      }
+    },
+    {
+      "domain": "x402.botsmith.dev",
+      "probedAt": "2026-10-22T00:34:17.239Z",
+      "wellKnownFound": [],
+      "mcpHandshake": {
+        "probedUrl": "https://x402.botsmith.dev/mcp",
+        "responded": false,
+        "httpStatus": 404
+      },
+      "a2aHandshake": {
+        "probedUrl": "https://x402.botsmith.dev/a2a",
+        "responded": false,
+        "httpStatus": 404
+      }
+    },
+    {
+      "domain": "hypernatt.com",
+      "probedAt": "2026-10-22T00:34:15.994Z",
+      "wellKnownFound": [
+        "/.well-known/agent-card.json",
+        "/.well-known/x402.json",
+        "/.well-known/agent.json"
+      ],
+      "mcpHandshake": {
+        "probedUrl": "https://hypernatt.com/mcp",
+        "responded": false,
+        "httpStatus": 404
+      },
+      "a2aHandshake": {
+        "probedUrl": "https://hypernatt.com/a2a",
+        "responded": false,
+        "httpStatus": 404
+      }
+    },
+    {
+      "domain": "rubric-protocol.com",
+      "probedAt": "2026-10-22T00:34:16.105Z",
+      "wellKnownFound": [
+        "/.well-known/x402.json"
+      ],
+      "mcpHandshake": {
+        "probedUrl": "https://rubric-protocol.com/mcp",
+        "responded": false,
+        "httpStatus": 404
+      },
+      "a2aHandshake": {
+        "probedUrl": "https://rubric-protocol.com/a2a",
+        "responded": false,
+        "httpStatus": 404
+      }
+    },
+    {
+      "domain": "x402tap.com",
+      "probedAt": "2026-10-22T00:34:17.990Z",
+      "wellKnownFound": [],
+      "mcpHandshake": {
+        "probedUrl": "https://x402tap.com/mcp",
+        "responded": false,
+        "httpStatus": 404
+      },
+      "a2aHandshake": {
+        "probedUrl": "https://x402tap.com/a2a",
+        "responded": false,
+        "httpStatus": 404
+      }
+    },
+    {
+      "domain": "api.aidress.ai",
+      "probedAt": "2026-10-22T00:34:18.939Z",
+      "wellKnownFound": [
+        "/.well-known/agent.json"
+      ],
+      "mcpHandshake": {
+        "probedUrl": "https://api.aidress.ai/mcp",
+        "responded": false,
+        "httpStatus": 404
+      },
+      "a2aHandshake": {
+        "probedUrl": "https://api.aidress.ai/a2a",
+        "responded": false,
+        "httpStatus": 404
+      }
+    },
+    {
+      "domain": "pro-api.coingecko.com",
+      "probedAt": "2026-10-22T00:34:25.785Z",
+      "wellKnownFound": [],
+      "mcpHandshake": {
+        "probedUrl": "https://pro-api.coingecko.com/mcp",
+        "responded": true,
+        "httpStatus": 404,
+        "serverInfo": "Not Found"
+      },
+      "a2aHandshake": {
+        "probedUrl": "https://pro-api.coingecko.com/a2a",
+        "responded": false,
+        "httpStatus": 404
+      }
+    },
+    {
+      "domain": "api.hyperextend.xyz",
+      "probedAt": "2026-10-22T00:34:18.316Z",
+      "wellKnownFound": [],
+      "mcpHandshake": {
+        "probedUrl": "https://api.hyperextend.xyz/mcp",
+        "responded": true,
+        "httpStatus": 401,
+        "serverInfo": {
+          "code": -32700,
+          "message": "Unauthorized"
+        }
+      },
+      "a2aHandshake": {
+        "probedUrl": "https://api.hyperextend.xyz/a2a",
+        "responded": false,
+        "httpStatus": 404
+      }
+    },
+    {
+      "domain": "hyperliquid-predict.use.x402atlas.com",
+      "probedAt": "2026-10-22T00:34:18.716Z",
+      "wellKnownFound": [
+        "/.well-known/x402.json"
+      ],
+      "mcpHandshake": {
+        "probedUrl": "https://hyperliquid-predict.use.x402atlas.com/mcp",
+        "responded": false,
+        "httpStatus": 404
+      },
+      "a2aHandshake": {
+        "probedUrl": "https://hyperliquid-predict.use.x402atlas.com/a2a",
+        "responded": false,
+        "httpStatus": 404
+      }
+    },
+    {
+      "domain": "vibesprings.net",
+      "probedAt": "2026-10-22T00:34:19.211Z",
+      "wellKnownFound": [
+        "/.well-known/x402.json",
+        "/.well-known/mcp.json"
+      ],
+      "mcpHandshake": {
+        "probedUrl": "https://vibesprings.net/mcp",
+        "responded": true,
+        "httpStatus": 200,
+        "serverInfo": {
+          "name": "vibesprings",
+          "title": "Vibe Springs",
+          "version": "1.0.0"
+        },
+        "toolsCount": 25,
+        "toolNames": [
+          "health",
+          "search_services",
+          "get_forecast",
+          "get_weather_history",
+          "get_delay_risk",
+          "get_delay_risk_demo",
+          "get_exchange_rates",
+          "convert_currency",
+          "get_crypto_prices",
+          "get_crypto_news"
+        ]
+      },
+      "a2aHandshake": {
+        "probedUrl": "https://vibesprings.net/a2a",
+        "responded": false,
+        "httpStatus": 404
+      }
+    },
+    {
+      "domain": "wallets-demo-seller-server.calebgcarithers.workers.dev",
+      "probedAt": "2026-10-22T00:34:18.409Z",
+      "wellKnownFound": [],
+      "mcpHandshake": {
+        "probedUrl": "https://wallets-demo-seller-server.calebgcarithers.workers.dev/mcp",
+        "responded": false,
+        "httpStatus": 404
+      },
+      "a2aHandshake": {
+        "probedUrl": "https://wallets-demo-seller-server.calebgcarithers.workers.dev/a2a",
+        "responded": false,
+        "httpStatus": 404
+      }
+    },
+    {
+      "domain": "api.urbangametheory.xyz",
+      "probedAt": "2026-10-22T00:34:19.021Z",
+      "wellKnownFound": [],
+      "mcpHandshake": {
+        "probedUrl": "https://api.urbangametheory.xyz/mcp",
+        "responded": true,
+        "httpStatus": 403,
+        "serverInfo": "Forbidden"
+      },
+      "a2aHandshake": {
+        "probedUrl": "https://api.urbangametheory.xyz/a2a",
+        "responded": false,
+        "httpStatus": 403
+      }
+    },
+    {
+      "domain": "api.oblique.markets",
+      "probedAt": "2026-10-22T00:34:26.545Z",
+      "wellKnownFound": [
+        "/.well-known/agent.json",
+        "/.well-known/x402.json",
+        "/.well-known/agent-card.json",
+        "/.well-known/mcp.json"
+      ],
+      "mcpHandshake": {
+        "probedUrl": "https://api.oblique.markets/mcp",
+        "responded": true,
+        "httpStatus": 200,
+        "serverInfo": {
+          "name": "oblique-markets",
+          "version": "1.1.0",
+          "description": "M2M commerce API: x402 Bazaar market data, on-chain analytics, wallet surveillance, web/company research and LLM inference. Every tool is a paid endpoint settled in USDC over the x402 protocol (Base mainnet or Solana mainnet).",
+          "vendor": "Oblique Markets",
+          "url": "https://api.oblique.markets"
+        },
+        "toolsCount": 79,
+        "toolNames": [
+          "server_time",
+          "echo",
+          "web_extract",
+          "sentiment",
+          "company_research",
+          "answer_with_sources",
+          "crypto_price",
+          "bazaar_pulse",
+          "listing_triage",
+          "wallet_spy"
+        ]
+      },
+      "a2aHandshake": {
+        "probedUrl": "https://api.oblique.markets/a2a",
+        "responded": false,
+        "httpStatus": 404
+      }
+    },
+    {
+      "domain": "quartermaster.surewhynot.app",
+      "probedAt": "2026-10-22T00:34:26.334Z",
+      "wellKnownFound": [],
+      "mcpHandshake": {
+        "probedUrl": "https://quartermaster.surewhynot.app/mcp",
+        "responded": true,
+        "httpStatus": 200,
+        "serverInfo": {
+          "name": "quartermaster",
+          "title": "Quartermaster — paid utility tools (x402)",
+          "version": "1.6.0"
+        },
+        "toolsCount": 49,
+        "toolNames": [
+          "x402_router",
+          "web_extract",
+          "page_meta",
+          "qr_generate",
+          "dns_lookup",
+          "http_error_explain",
+          "tx_status",
+          "wallet_balance",
+          "gas_prices",
+          "summarize_url"
+        ]
+      },
+      "a2aHandshake": {
+        "probedUrl": "https://quartermaster.surewhynot.app/a2a",
+        "responded": false,
+        "httpStatus": 404
+      }
+    },
+    {
+      "domain": "facilitator.payai.network",
+      "probedAt": "2026-10-22T00:34:26.980Z",
+      "wellKnownFound": [
+        "/.well-known/mcp.json"
+      ],
+      "mcpHandshake": {
+        "probedUrl": "https://facilitator.payai.network/mcp",
+        "responded": true,
+        "httpStatus": 200,
+        "serverInfo": {
+          "name": "PayAI x402 Facilitator",
+          "title": "PayAI x402 Facilitator",
+          "version": "2.0.1"
+        },
+        "toolsCount": 5,
+        "toolNames": [
+          "get_supported",
+          "verify_payment",
+          "settle_payment",
+          "list_discovery_resources",
+          "get_discovery_stats"
+        ]
+      },
+      "a2aHandshake": {
+        "probedUrl": "https://facilitator.payai.network/a2a",
+        "responded": false,
+        "httpStatus": 404
+      }
+    }
+  ]
+}

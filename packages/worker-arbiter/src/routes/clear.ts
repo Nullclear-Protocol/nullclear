@@ -26,6 +26,14 @@ import {
   consumeSponsoredFreeCall,
   isExplicitFreeTrialRequest
 } from "../middleware/free-tier.js";
+import {
+  attachDualX402Headers,
+  decodePaymentAuthorizationHeader,
+  extractPaymentAuthorization
+} from "../utils/x402-headers.js";
+import { inspectSoftPaywallAndContent } from "../services/soft-paywall-guard.js";
+import { getVerifiedKyaHeaderForBuyer } from "../services/kya-verifier.js";
+import { SOFT_PAYWALL_SANDBOX_HTML } from "./sandbox.js";
 
 export const clearRouter = new Hono<Env>();
 
@@ -60,17 +68,50 @@ function isSandboxUrl(urlStr: string): boolean {
   }
 }
 
-function handleLocalSandbox(targetUrl: string, reqHeaders: Record<string, string>): { status: number; text: string } {
+function handleLocalSandbox(
+  targetUrl: string,
+  reqHeaders: Record<string, string>
+): { status: number; text: string; contentType?: string } {
   const hasPayment = Boolean(
     reqHeaders["PAYMENT-SIGNATURE"] ||
     reqHeaders["payment-signature"] ||
     reqHeaders["X-PAYMENT"] ||
     reqHeaders["x-payment"] ||
+    reqHeaders["X-Payment"] ||
+    reqHeaders["X-NullClear-Authorization"] ||
+    reqHeaders["x-nullclear-authorization"] ||
     reqHeaders["X-NullClear-Escrow-Hold"] === "true" ||
     reqHeaders["x-nullclear-escrow-hold"] === "true" ||
     reqHeaders["X-NullClear-Verified-Escrow"] ||
     reqHeaders["x-nullclear-verified-escrow"]
   );
+
+  if (targetUrl.includes("/v1/sandbox/soft-paywall-seller")) {
+    let mode = "";
+    try {
+      const u = new URL(targetUrl, "https://api.nullclear.dev");
+      mode = (u.searchParams.get("mode") || "").toLowerCase();
+    } catch {}
+    if (mode === "paywall") {
+      return {
+        status: 200,
+        contentType: "text/html; charset=utf-8",
+        text: `<!DOCTYPE html><html><head><title>Premium Article</title></head><body><h1>Subscribe to continue reading...</h1><p>You have reached your free article limit. Sign in to read the full article or create a free account to continue.</p></body></html>`
+      };
+    }
+    if (mode === "teaser") {
+      return {
+        status: 200,
+        contentType: "text/html; charset=utf-8",
+        text: `<html><body></body></html>`
+      };
+    }
+    return {
+      status: 200,
+      contentType: "text/html; charset=utf-8",
+      text: SOFT_PAYWALL_SANDBOX_HTML
+    };
+  }
 
   if (targetUrl.includes("/v1/sandbox/hallucinating-seller")) {
     if (!hasPayment) {
@@ -231,7 +272,7 @@ export async function executeUpstreamFetch(
   method: string,
   reqHeaders: Record<string, string>,
   body?: unknown
-): Promise<{ status: number; text: string; error?: string }> {
+): Promise<{ status: number; text: string; contentType?: string; error?: string }> {
   // If targeting sandbox endpoints, handle directly to prevent Cloudflare Worker same-zone loopback 522 timeouts
   if (isSandboxUrl(targetUrl)) {
     return handleLocalSandbox(targetUrl, reqHeaders);
@@ -267,7 +308,11 @@ export async function executeUpstreamFetch(
       return { status: 413, text: "", error: "Payload Too Large: response body exceeds 1 MB limit" };
     }
 
-    return { status: res.status, text: raw };
+    return {
+      status: res.status,
+      text: raw,
+      contentType: res.headers.get("content-type") || ""
+    };
   } catch (err: any) {
     clearTimeout(timeoutId);
     if (isSandboxUrl(targetUrl)) {
@@ -305,7 +350,7 @@ clearRouter.post("/", async (c) => {
     method = "GET",
     headers = {},
     body,
-    paymentSignatureHeader,
+    paymentSignatureHeader: rawBodyPaymentSig,
     sellerAgentId,
     minTrustScore = 50,
     twoPhaseRelease = false,
@@ -313,6 +358,23 @@ clearRouter.post("/", async (c) => {
     fallbacks = [],
     spendPolicy
   } = reqBody;
+
+  const incomingHeaderPaymentSig =
+    c.req.header("PAYMENT-SIGNATURE") ||
+    c.req.header("payment-signature") ||
+    c.req.header("X-Payment") ||
+    c.req.header("x-payment") ||
+    c.req.header("X-PAYMENT") ||
+    c.req.header("X-NullClear-Authorization") ||
+    c.req.header("x-nullclear-authorization") ||
+    (c.req.header("Authorization")?.match(/^x402\s+(.+)$/i)?.[1]) ||
+    headers["PAYMENT-SIGNATURE"] ||
+    headers["payment-signature"] ||
+    headers["X-Payment"] ||
+    headers["x-payment"] ||
+    headers["X-NullClear-Authorization"];
+
+  const paymentSignatureHeader = rawBodyPaymentSig || incomingHeaderPaymentSig;
 
   if (!targetUrl) {
     return c.json(
@@ -360,10 +422,36 @@ clearRouter.post("/", async (c) => {
       "X-NullClear-Clearing-Id": clearingId
     };
 
+    const explicitBuyerAddr =
+      c.req.header("X-Buyer-Address") ||
+      c.req.header("x-buyer-address") ||
+      headers["X-Buyer-Address"] ||
+      headers["x-buyer-address"];
+    if (explicitBuyerAddr) {
+      const kyaHeaders = await getVerifiedKyaHeaderForBuyer(c.env, explicitBuyerAddr);
+      if (kyaHeaders) {
+        candidateHeaders["X-NullClear-Verified-KYA"] = kyaHeaders["X-NullClear-Verified-KYA"];
+        candidateHeaders["X-NullClear-KYA-Signature"] = kyaHeaders["X-NullClear-KYA-Signature"];
+      }
+    }
+
     const probe = await executeUpstreamFetch(targetUrl, method, candidateHeaders, body);
     const upstreamConnectionFailed = probe.error !== undefined && probe.status >= 500;
     const upstreamStatus = probe.status;
     const upstreamRawText = upstreamConnectionFailed ? JSON.stringify({ error: probe.error }) : probe.text;
+
+    if (!upstreamConnectionFailed) {
+      const softPaywallCheck = inspectSoftPaywallAndContent(
+        upstreamRawText,
+        probe.contentType || "",
+        upstreamStatus
+      );
+      if (softPaywallCheck.triggered && softPaywallCheck.errorPayload) {
+        c.header("X-NullClear-Verified", "false");
+        c.header("X-NullClear-Payment-Shredded", "true");
+        return c.json(softPaywallCheck.errorPayload, 502);
+      }
+    }
 
     let upstreamJson: unknown = null;
     try {
@@ -494,13 +582,14 @@ clearRouter.post("/", async (c) => {
       continue;
     }
 
-    // 2. Decode PAYMENT-SIGNATURE payload
+    // 2. Decode PAYMENT-SIGNATURE or X-Payment (V1/V2) payload
     let paymentSigPayload: X402PaymentSignaturePayload;
     try {
-      paymentSigPayload = decodeBase64Json<X402PaymentSignaturePayload>(candidate.paymentSignatureHeader);
-      if (!paymentSigPayload.payload || !paymentSigPayload.accepted) {
-        throw new Error("Missing payload or accepted payment option in signature header");
+      const normalizedAuth = decodePaymentAuthorizationHeader(candidate.paymentSignatureHeader);
+      if (!normalizedAuth) {
+        throw new Error("Missing or empty payment authorization header");
       }
+      paymentSigPayload = normalizedAuth.paymentSigPayload;
     } catch (err: any) {
       if (i === 0 && allCandidates.length === 1) {
         return c.json(
@@ -655,11 +744,28 @@ clearRouter.post("/", async (c) => {
       "X-NullClear-Clearing-Id": candidateClearingId
     };
 
+    // Pre-Flight Corporate KYA Header Forwarding
+    const buyerAddrForKya =
+      authorization.from ||
+      c.req.header("X-Buyer-Address") ||
+      c.req.header("x-buyer-address") ||
+      candidateHeaders["X-Buyer-Address"] ||
+      candidateHeaders["x-buyer-address"];
+    const kyaHeaders = await getVerifiedKyaHeaderForBuyer(c.env, buyerAddrForKya);
+    if (kyaHeaders) {
+      candidateHeaders["X-NullClear-Verified-KYA"] = kyaHeaders["X-NullClear-Verified-KYA"];
+      candidateHeaders["X-NullClear-KYA-Signature"] = kyaHeaders["X-NullClear-KYA-Signature"];
+    }
+
     if (!twoPhaseRelease) {
       delete candidateHeaders["PAYMENT-SIGNATURE"];
       delete candidateHeaders["payment-signature"];
+      delete candidateHeaders["X-Payment"];
+      delete candidateHeaders["x-payment"];
+      delete candidateHeaders["X-PAYMENT"];
     } else {
       candidateHeaders["PAYMENT-SIGNATURE"] = candidate.paymentSignatureHeader;
+      candidateHeaders["X-Payment"] = candidate.paymentSignatureHeader;
     }
 
     let probe = await executeUpstreamFetch(
@@ -672,6 +778,7 @@ clearRouter.post("/", async (c) => {
     // If upstream returns 402 Payment Required and we held signature, retry with signature attached
     if (probe.status === 402 && !twoPhaseRelease) {
       candidateHeaders["PAYMENT-SIGNATURE"] = candidate.paymentSignatureHeader;
+      candidateHeaders["X-Payment"] = candidate.paymentSignatureHeader;
       probe = await executeUpstreamFetch(
         candidate.targetUrl,
         candidate.method || method,
@@ -705,6 +812,45 @@ clearRouter.post("/", async (c) => {
     const upstreamConnectionFailed = probe.error !== undefined && probe.status >= 500;
     const upstreamStatus = probe.status;
     const upstreamRawText = upstreamConnectionFailed ? JSON.stringify({ error: probe.error }) : probe.text;
+
+    // Soft-Paywall, CAPTCHA & Truncated Teaser Guard
+    if (!upstreamConnectionFailed) {
+      const softPaywallCheck = inspectSoftPaywallAndContent(
+        upstreamRawText,
+        probe.contentType || "",
+        upstreamStatus
+      );
+      if (softPaywallCheck.triggered && softPaywallCheck.errorPayload) {
+        const sellerId = candidate.sellerAgentId || "anonymous";
+        await store.recordFailedValidation(sellerId, authorization.from, {
+          id: candidateClearingId,
+          network: accepted.network,
+          buyerAddress: authorization.from,
+          sellerAgentId: sellerId,
+          amount: accepted.amount,
+          fee: "0",
+          targetUrl: candidate.targetUrl,
+          status: "FAILED_VALIDATION",
+          errorReason: `${softPaywallCheck.errorPayload.reason}: ${softPaywallCheck.ruleTriggered}`,
+          eip3009Nonce: authorization.nonce,
+          createdAt: Date.now()
+        });
+
+        if (i === 0 && allCandidates.length === 1) {
+          c.header("X-NullClear-Verified", "false");
+          c.header("X-NullClear-Payment-Shredded", "true");
+          return c.json(softPaywallCheck.errorPayload, 502);
+        }
+
+        failedCandidates.push({
+          targetUrl: candidate.targetUrl,
+          sellerAgentId: candidate.sellerAgentId,
+          stage: "SOFT_PAYWALL_OR_CAPTCHA_DETECTED",
+          reason: `${softPaywallCheck.errorPayload.reason}: ${softPaywallCheck.ruleTriggered}`
+        });
+        continue;
+      }
+    }
 
     let upstreamJson: unknown = null;
     try {
@@ -906,7 +1052,10 @@ clearRouter.post("/", async (c) => {
       payer: winningPaymentPayload.payload.authorization.from
     };
 
-    c.header("PAYMENT-RESPONSE", encodeBase64Json(paymentResponsePayload));
+    attachDualX402Headers(c, {
+      paymentResponse: paymentResponsePayload,
+      verified: true
+    });
     c.header("X-NullClear-Attestation", encodeBase64Json(winningSignedReceipt));
 
     return c.json({

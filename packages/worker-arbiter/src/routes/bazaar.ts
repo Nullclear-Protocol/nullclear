@@ -22,6 +22,10 @@ import {
   consumeSponsoredFreeCall,
   shouldUseFreeTierForBazaar
 } from "../middleware/free-tier.js";
+import {
+  extractPaymentAuthorization,
+  attachDualX402Headers
+} from "../utils/x402-headers.js";
 
 export const bazaarRouter = new Hono<Env>();
 
@@ -706,7 +710,11 @@ async function handleBazaarPayment(
   description: string,
   bazaarExtension: any
 ): Promise<SettlementResult> {
-  const rawPaymentHeader = c.req.header("payment-signature") || c.req.header("x-payment");
+  const rawPaymentHeader =
+    c.req.header("payment-signature") ||
+    c.req.header("x-payment") ||
+    c.req.header("x-nullclear-authorization") ||
+    c.req.header("authorization");
   const paymentHeader =
     rawPaymentHeader &&
     rawPaymentHeader.toLowerCase() !== "free-trial" &&
@@ -721,7 +729,7 @@ async function handleBazaarPayment(
   // Always expose x402 payment challenge and Free Tier headers
   c.header(
     "Access-Control-Expose-Headers",
-    "PAYMENT-REQUIRED, Payment-Required, X-Payment-Response, Pay-To, PAYMENT-RESPONSE, X-NullClear-Attestation, x-nullclear-tier, x-nullclear-remaining-free-calls"
+    "PAYMENT-REQUIRED, Payment-Required, X-Payment-Required, X-Payment-Response, Pay-To, PAYMENT-RESPONSE, X-NullClear-Attestation, X-NullClear-Verified, x-nullclear-tier, x-nullclear-remaining-free-calls"
   );
   c.header("Pay-To", NULLCLEAR_TREASURY_ADDRESS);
 
@@ -762,6 +770,7 @@ async function handleBazaarPayment(
       "10000"
     );
     c.header("PAYMENT-REQUIRED", paymentReqHeader);
+    c.header("X-Payment-Required", paymentReqHeader);
     return {
       settled: false,
       errorResponse: c.json(
@@ -811,6 +820,7 @@ async function handleBazaarPayment(
       "10000"
     );
     c.header("PAYMENT-REQUIRED", paymentReqHeader);
+    c.header("X-Payment-Required", paymentReqHeader);
     return {
       settled: false,
       errorResponse: c.json(
@@ -858,10 +868,8 @@ async function handleBazaarPayment(
     };
   }
 
-  let paymentPayload: any;
-  try {
-    paymentPayload = decodeBase64Json(paymentHeader);
-  } catch (err: any) {
+  const parsedAuth = extractPaymentAuthorization(c.req);
+  if (!parsedAuth || !parsedAuth.from || !parsedAuth.signature) {
     const paymentReqHeader = createPaymentRequiredHeader(
       resourcePath,
       description,
@@ -869,12 +877,13 @@ async function handleBazaarPayment(
       "10000"
     );
     c.header("PAYMENT-REQUIRED", paymentReqHeader);
+    c.header("X-Payment-Required", paymentReqHeader);
     return {
       settled: false,
       errorResponse: c.json(
         {
           error: "Payment Required",
-          message: `Malformed payment signature header: ${err.message}`,
+          message: "Payment payload missing valid EIP-3009 authorization or signature",
           x402Version: 2,
           scheme: "exact",
           network: "eip155:8453",
@@ -886,7 +895,7 @@ async function handleBazaarPayment(
     };
   }
 
-  const accepted: X402PaymentOption = paymentPayload.accepted || {
+  const accepted: X402PaymentOption = parsedAuth.accepted || {
     scheme: "exact",
     network: "eip155:8453",
     amount: "10000",
@@ -896,33 +905,15 @@ async function handleBazaarPayment(
     extra: { name: "USD Coin", version: "2" }
   };
 
-  const authorization = paymentPayload.payload?.authorization;
-  const signature = paymentPayload.payload?.signature;
-
-  if (!authorization || !signature) {
-    const paymentReqHeader = createPaymentRequiredHeader(
-      resourcePath,
-      description,
-      bazaarExtension,
-      "10000"
-    );
-    c.header("PAYMENT-REQUIRED", paymentReqHeader);
-    return {
-      settled: false,
-      errorResponse: c.json(
-        {
-          error: "Payment Required",
-          message: "Payment payload missing authorization or signature",
-          x402Version: 2,
-          scheme: "exact",
-          network: "eip155:8453",
-          amount: "10000",
-          payTo: NULLCLEAR_TREASURY_ADDRESS
-        },
-        402
-      )
-    };
-  }
+  const authorization = {
+    from: parsedAuth.from,
+    to: parsedAuth.to,
+    value: parsedAuth.value,
+    validAfter: parsedAuth.validAfter,
+    validBefore: parsedAuth.validBefore,
+    nonce: parsedAuth.nonce
+  };
+  const signature = parsedAuth.signature;
 
   const payer = (authorization.from as string).toLowerCase() as `0x${string}`;
 
@@ -934,14 +925,13 @@ async function handleBazaarPayment(
     const simulatedTx = keccak256(
       stringToHex(`bazaar_simulated:${payer}:${authorization.nonce}:${Date.now()}`)
     );
-    const respPayload: X402PaymentResponse = {
-      success: true,
+    attachDualX402Headers(c, {
+      status: 200,
       transaction: simulatedTx,
       network: "eip155:8453",
-      payer: authorization.from
-    };
-    c.header("PAYMENT-RESPONSE", encodeBase64Json(respPayload));
-    c.header("X-PAYMENT-RESPONSE", encodeBase64Json(respPayload));
+      payer: authorization.from,
+      verified: true
+    });
     return { settled: true, transaction: simulatedTx, payer: authorization.from };
   }
 
@@ -981,6 +971,7 @@ async function handleBazaarPayment(
       "10000"
     );
     c.header("PAYMENT-REQUIRED", paymentReqHeader);
+    c.header("X-Payment-Required", paymentReqHeader);
     return {
       settled: false,
       errorResponse: c.json(
@@ -1025,15 +1016,13 @@ async function handleBazaarPayment(
     }
   );
 
-  const respPayload: X402PaymentResponse = {
-    success: true,
+  attachDualX402Headers(c, {
+    status: 200,
     transaction: settlement.transaction,
     network: "eip155:8453",
-    payer: authorization.from
-  };
-
-  c.header("PAYMENT-RESPONSE", encodeBase64Json(respPayload));
-  c.header("X-PAYMENT-RESPONSE", encodeBase64Json(respPayload));
+    payer: authorization.from,
+    verified: true
+  });
 
   return { settled: true, transaction: settlement.transaction, payer: authorization.from };
 }

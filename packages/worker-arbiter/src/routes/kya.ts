@@ -1,14 +1,36 @@
 import { Hono } from "hono";
 import { getChainConfig, type KYAMandate } from "@nullclear/shared";
 import { getArbiterStore, type Env, type StoredKyaRecord } from "../env.js";
+import {
+  getVerifiedKyaHeaderForBuyer,
+  verifyKyaHeaderAttestation
+} from "../services/kya-verifier.js";
+
+export { getVerifiedKyaHeaderForBuyer, verifyKyaHeaderAttestation };
 
 export const kyaRouter = new Hono<Env>();
 
 export interface AttestKyaRequestBody {
-  mandate: KYAMandate;
-  chainId: number;
+  mandate?: Partial<KYAMandate> & {
+    agentAddress?: `0x${string}`;
+    buyerAddress?: `0x${string}`;
+    maxPerCallAtomic?: string;
+  };
+  chainId?: number | string;
   signature?: string;
   signerAddress?: `0x${string}`;
+  // Also support top-level fields for ergonomic B2B mandate registration
+  corporateEntity?: string;
+  entityRegistrationNumber?: string;
+  agentId?: string;
+  agentWallet?: `0x${string}`;
+  agentAddress?: `0x${string}`;
+  buyerAddress?: `0x${string}`;
+  maxTxLimitUsd?: number;
+  maxPerCallAtomic?: string;
+  liabilityCoverageUsd?: number;
+  validUntil?: number;
+  jurisdiction?: string;
 }
 
 kyaRouter.post("/attest", async (c) => {
@@ -19,32 +41,61 @@ kyaRouter.post("/attest", async (c) => {
     return c.json({ error: "Invalid JSON request body" }, 400);
   }
 
-  const { mandate, chainId, signature, signerAddress } = body;
-  if (!mandate || !mandate.agentId || !mandate.corporateEntity || !mandate.agentWallet) {
-    return c.json({ error: "Missing required mandate fields (agentId, corporateEntity, agentWallet)" }, 400);
+  const m: any = body.mandate || body;
+  const corporateEntity = m.corporateEntity || body.corporateEntity;
+  const agentWallet = (m.agentWallet ||
+    m.agentAddress ||
+    m.buyerAddress ||
+    body.agentWallet ||
+    body.agentAddress ||
+    body.buyerAddress) as `0x${string}` | undefined;
+  const agentId = String(m.agentId || body.agentId || agentWallet || "");
+
+  if (!corporateEntity || !agentWallet || !agentId) {
+    return c.json(
+      { error: "Missing required mandate fields (agentId, corporateEntity, agentWallet)" },
+      400
+    );
   }
 
+  const rawChainId = body.chainId ?? m.chainId ?? 8453;
+  let chainId = 8453;
   try {
-    getChainConfig(chainId);
+    chainId = getChainConfig(rawChainId).chainId;
   } catch (err: any) {
     return c.json({ error: err.message }, 400);
   }
 
+  const maxPerCallAtomic =
+    m.maxPerCallAtomic !== undefined
+      ? String(m.maxPerCallAtomic)
+      : body.maxPerCallAtomic !== undefined
+        ? String(body.maxPerCallAtomic)
+        : undefined;
+
+  const maxTxLimitUsd =
+    m.maxTxLimitUsd !== undefined
+      ? Number(m.maxTxLimitUsd)
+      : maxPerCallAtomic
+        ? Number(maxPerCallAtomic) / 1_000_000
+        : 1000;
+
   const store = getArbiterStore(c.env);
-  const id = `kya_${mandate.agentId}_${chainId}_${Date.now()}`;
+  const id = m.mandateId || m.id || `kya_${agentId}_${chainId}_${Date.now()}`;
   const record: StoredKyaRecord = {
     id,
     chainId,
-    corporateEntity: mandate.corporateEntity,
-    entityRegistrationNumber: mandate.entityRegistrationNumber || "UNSPECIFIED",
-    agentId: mandate.agentId,
-    agentWallet: mandate.agentWallet,
-    maxTxLimitUsd: Number(mandate.maxTxLimitUsd || 1000),
-    liabilityCoverageUsd: Number(mandate.liabilityCoverageUsd || 10000),
-    validUntil: Number(mandate.validUntil || Math.floor(Date.now() / 1000) + 365 * 86400),
-    jurisdiction: mandate.jurisdiction || "GLOBAL",
-    signature: signature || "0x0",
-    signerAddress: signerAddress || mandate.agentWallet,
+    corporateEntity,
+    entityRegistrationNumber: m.entityRegistrationNumber || body.entityRegistrationNumber || "UNSPECIFIED",
+    agentId,
+    agentWallet,
+    maxTxLimitUsd,
+    maxPerCallAtomic,
+    liabilityCoverageUsd: Number(m.liabilityCoverageUsd ?? body.liabilityCoverageUsd ?? 10000),
+    validUntil: Number(m.validUntil ?? body.validUntil ?? Math.floor(Date.now() / 1000) + 365 * 86400),
+    jurisdiction: m.jurisdiction || body.jurisdiction || "GLOBAL",
+    signature: body.signature || m.signature || "0x0",
+    signerAddress: body.signerAddress || m.signerAddress || agentWallet,
     createdAt: Date.now()
   };
 
@@ -64,6 +115,7 @@ kyaRouter.get("/", (c) => {
     endpoints: {
       attest: "POST /v1/kya/attest",
       verify: "POST /v1/kya/verify",
+      verifyHeader: "POST /v1/kya/verify-header",
       getMandate: "GET /v1/kya/{chainId}/{agentId}"
     }
   });
@@ -87,6 +139,71 @@ kyaRouter.get("/verify", (c) => {
   });
 });
 
+/**
+ * POST /v1/kya/verify-header
+ * Allows any third-party B2B seller to verify an incoming X-NullClear-Verified-KYA
+ * and X-NullClear-KYA-Signature header in a single call.
+ */
+kyaRouter.post("/verify-header", async (c) => {
+  let body: Record<string, any> = {};
+  try {
+    body = await c.req.json();
+  } catch {
+    body = {};
+  }
+
+  const kyaHeader =
+    body["X-NullClear-Verified-KYA"] ||
+    body["x-nullclear-verified-kya"] ||
+    body.kyaHeader ||
+    body.verifiedKya ||
+    body.header ||
+    body.payload ||
+    c.req.header("X-NullClear-Verified-KYA") ||
+    c.req.header("x-nullclear-verified-kya") ||
+    "";
+
+  const signature =
+    body["X-NullClear-KYA-Signature"] ||
+    body["x-nullclear-kya-signature"] ||
+    body.kyaSignature ||
+    body.signature ||
+    c.req.header("X-NullClear-KYA-Signature") ||
+    c.req.header("x-nullclear-kya-signature") ||
+    "";
+
+  if (!kyaHeader || !signature) {
+    return c.json(
+      {
+        valid: false,
+        verified: false,
+        error: "Missing X-NullClear-Verified-KYA or X-NullClear-KYA-Signature"
+      },
+      400
+    );
+  }
+
+  const verification = await verifyKyaHeaderAttestation(c.env, String(kyaHeader), String(signature));
+  if (!verification.valid || !verification.payload) {
+    return c.json(
+      {
+        valid: false,
+        verified: false,
+        error: verification.error || "Invalid KYA header signature"
+      },
+      401
+    );
+  }
+
+  return c.json({
+    valid: true,
+    verified: true,
+    payload: verification.payload,
+    mandate: verification.payload,
+    ...verification.payload
+  });
+});
+
 kyaRouter.get("/:chainId/:agentId", async (c) => {
   let chainIdParam = c.req.param("chainId");
   let agentId = c.req.param("agentId");
@@ -107,7 +224,10 @@ kyaRouter.get("/:chainId/:agentId", async (c) => {
   }
 
   const store = getArbiterStore(c.env);
-  const record = await store.getKyaMandate(agentId, chainId);
+  let record = await store.getKyaMandate(agentId, chainId);
+  if (!record) {
+    record = await store.getKyaMandateByWallet(agentId);
+  }
 
   if (!record) {
     return c.json({
@@ -154,7 +274,10 @@ kyaRouter.post("/verify", async (c) => {
 
   const transactionAmountUsd = Number(body.transactionAmountUsd || 0);
   const store = getArbiterStore(c.env);
-  const record = await store.getKyaMandate(agentId, chainId);
+  let record = await store.getKyaMandate(agentId, chainId);
+  if (!record) {
+    record = await store.getKyaMandateByWallet(agentId);
+  }
 
   if (!record) {
     return c.json({
@@ -183,4 +306,3 @@ kyaRouter.post("/verify", async (c) => {
     approvedForAmount: !isExpired && !exceedsLimit
   });
 });
-

@@ -27,6 +27,12 @@ import {
   consumeSponsoredFreeCall,
   isExplicitFreeTrialRequest
 } from "../middleware/free-tier.js";
+import {
+  attachDualX402Headers,
+  extractPaymentAuthorization
+} from "../utils/x402-headers.js";
+import { inspectSoftPaywallAndContent } from "../services/soft-paywall-guard.js";
+import { getVerifiedKyaHeaderForBuyer } from "../services/kya-verifier.js";
 
 const DEFAULT_TREASURY = "0xB586eFcCa41dF27ad3873BEcA54da0c30bf04d5c";
 
@@ -354,7 +360,9 @@ async function executeGatewayProxy(c: Context<Env>): Promise<Response> {
     c.req.header("PAYMENT-SIGNATURE") ||
     c.req.header("x-payment") ||
     c.req.header("X-Payment") ||
-    c.req.header("x-nullclear-authorization");
+    c.req.header("x-nullclear-authorization") ||
+    c.req.header("X-NullClear-Authorization") ||
+    (c.req.header("Authorization")?.match(/^x402\s+(.+)$/i)?.[1]);
 
   const method = c.req.method || "GET";
   let reqBody: string | undefined;
@@ -423,8 +431,31 @@ async function executeGatewayProxy(c: Context<Env>): Promise<Response> {
         "X-NullClear-Escrow-Hold": "true",
         "X-NullClear-Verified-Escrow": clearingId
       };
+      const explicitBuyerAddr =
+        c.req.header("X-Buyer-Address") || c.req.header("x-buyer-address");
+      if (explicitBuyerAddr) {
+        const kyaHeaders = await getVerifiedKyaHeaderForBuyer(c.env, explicitBuyerAddr);
+        if (kyaHeaders) {
+          trialHeaders["X-NullClear-Verified-KYA"] = kyaHeaders["X-NullClear-Verified-KYA"];
+          trialHeaders["X-NullClear-KYA-Signature"] = kyaHeaders["X-NullClear-KYA-Signature"];
+        }
+      }
       const probe = await executeUpstreamFetch(fullTargetUrl, method, trialHeaders, reqBody);
       const rawText = probe.error && probe.status >= 500 ? JSON.stringify({ error: probe.error }) : probe.text;
+
+      if (!(probe.error && probe.status >= 500)) {
+        const softPaywallCheck = inspectSoftPaywallAndContent(
+          rawText,
+          probe.contentType || "",
+          probe.status
+        );
+        if (softPaywallCheck.triggered && softPaywallCheck.errorPayload) {
+          c.header("X-NullClear-Verified", "false");
+          c.header("X-NullClear-Payment-Shredded", "true");
+          return c.json(softPaywallCheck.errorPayload, 502);
+        }
+      }
+
       const valResult = await validateGatewayResponse(probe.status, rawText);
 
       c.header("x-nullclear-tier", "free-trial");
@@ -518,7 +549,7 @@ async function executeGatewayProxy(c: Context<Env>): Promise<Response> {
       }
     };
 
-    c.header("PAYMENT-REQUIRED", encodeBase64Json(paymentRequired));
+    attachDualX402Headers(c, { paymentRequired });
     c.header("X-NullClear-Gateway", gateway.slug);
     return c.json(
       {
@@ -540,10 +571,11 @@ async function executeGatewayProxy(c: Context<Env>): Promise<Response> {
   // Decode & verify EIP-3009 payment signature
   let paymentSigPayload: X402PaymentSignaturePayload;
   try {
-    paymentSigPayload = decodeBase64Json<X402PaymentSignaturePayload>(paymentHeader);
-    if (!paymentSigPayload.payload || !paymentSigPayload.accepted) {
+    const normalized = extractPaymentAuthorization(c.req) || extractPaymentAuthorization(paymentHeader);
+    if (!normalized) {
       throw new Error("Malformed payment payload");
     }
+    paymentSigPayload = normalized.paymentSigPayload;
   } catch (err: any) {
     return c.json(
       {
@@ -604,8 +636,49 @@ async function executeGatewayProxy(c: Context<Env>): Promise<Response> {
     "X-NullClear-Clearing-Id": clearingId
   };
 
+  // Pre-Flight Corporate KYA Header Forwarding
+  const buyerAddrForKya =
+    authorization.from ||
+    c.req.header("X-Buyer-Address") ||
+    c.req.header("x-buyer-address");
+  const kyaHeaders = await getVerifiedKyaHeaderForBuyer(c.env, buyerAddrForKya);
+  if (kyaHeaders) {
+    upstreamHeaders["X-NullClear-Verified-KYA"] = kyaHeaders["X-NullClear-Verified-KYA"];
+    upstreamHeaders["X-NullClear-KYA-Signature"] = kyaHeaders["X-NullClear-KYA-Signature"];
+  }
+
   const probe = await executeUpstreamFetch(fullTargetUrl, method, upstreamHeaders, reqBody);
   const rawText = probe.error && probe.status >= 500 ? JSON.stringify({ error: probe.error }) : probe.text;
+
+  // Soft-Paywall, CAPTCHA & Truncated Teaser Guard
+  if (!(probe.error && probe.status >= 500)) {
+    const softPaywallCheck = inspectSoftPaywallAndContent(
+      rawText,
+      probe.contentType || "",
+      probe.status
+    );
+    if (softPaywallCheck.triggered && softPaywallCheck.errorPayload) {
+      await store.recordFailedValidation(`gateway:${gateway.slug}`, authorization.from, {
+        id: clearingId,
+        network: accepted.network,
+        buyerAddress: authorization.from,
+        sellerAgentId: `gateway:${gateway.slug}`,
+        amount: accepted.amount,
+        fee: "0",
+        targetUrl: fullTargetUrl,
+        status: "FAILED_VALIDATION",
+        errorReason: `${softPaywallCheck.errorPayload.reason}: ${softPaywallCheck.ruleTriggered}`,
+        eip3009Nonce: authorization.nonce,
+        createdAt: Date.now()
+      });
+
+      c.header("X-NullClear-Gateway", gateway.slug);
+      c.header("X-NullClear-Verified", "false");
+      c.header("X-NullClear-Payment-Shredded", "true");
+      return c.json(softPaywallCheck.errorPayload, 502);
+    }
+  }
+
   const valResult = await validateGatewayResponse(probe.status, rawText);
 
   c.header("X-NullClear-Gateway", gateway.slug);
@@ -721,8 +794,10 @@ async function executeGatewayProxy(c: Context<Env>): Promise<Response> {
     })
   ]);
 
-  c.header("PAYMENT-RESPONSE", encodeBase64Json(settlement));
-  c.header("X-NullClear-Verified", "true");
+  attachDualX402Headers(c, {
+    paymentResponse: settlement,
+    verified: true
+  });
   c.header("X-NullClear-Receipt-Id", clearingId);
   c.header("X-NullClear-Attestation", encodeBase64Json(signedReceipt));
 

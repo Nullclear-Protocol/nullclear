@@ -2,9 +2,18 @@
 
 > **Autonomous Non-Custodial Clearing & Reputation Protocol for x402 AI Agents**
 
-[![NullClear Arbiter MCP server – quality and maintenance score on Glama](https://glama.ai/mcp/servers/Nullclear-Protocol/nullclear/badges/score.svg)](https://glama.ai/mcp/servers/Nullclear-Protocol/nullclear)
-[![NullClear Arbiter MCP server – quality and maintenance score on Glama](https://glama.ai/mcp/servers/Nullclear-Protocol/nullclear/badges/card.svg)](https://glama.ai/mcp/servers/Nullclear-Protocol/nullclear)
-[![Listed on mcpservers.org](https://mcpservers.org/badge.svg)](https://mcpservers.org/servers/nullclear-protocol/nullclear)
+<p align="left">
+  <a href="https://glama.ai/mcp/servers/Nullclear-Protocol/nullclear"><img src="https://glama.ai/mcp/servers/Nullclear-Protocol/nullclear/badges/score.svg" alt="NullClear Arbiter MCP server – quality and maintenance score on Glama" /></a>
+  <a href="https://mcpservers.org/servers/nullclear-protocol/nullclear"><img src="https://mcpservers.org/badge.svg" alt="Listed on mcpservers.org" /></a>
+  <a href="https://nullclear.dev/leaderboard"><img src="https://img.shields.io/badge/x402-V1_%26_V2_Compatible-10b981" alt="x402 V1 & V2" /></a>
+  <a href="https://basescan.org/address/0x8004A169FB4a3325136EB29fA0ceB6D2e539a432"><img src="https://img.shields.io/badge/ERC--8004-Agent_%23124595-3b82f6" alt="ERC-8004 Agent #124595" /></a>
+</p>
+
+<p align="left">
+  <a href="https://glama.ai/mcp/servers/Nullclear-Protocol/nullclear"><img src="https://glama.ai/mcp/servers/Nullclear-Protocol/nullclear/badges/card.svg" alt="NullClear Arbiter MCP server – Glama Card" height="180" /></a>
+  &nbsp;&nbsp;
+  <a href="https://mcprush.com/to/nullclear-arbiter-mcp?ref=badge"><img src="https://mcprush.com/badge/nullclear-arbiter-mcp/card.svg" alt="NullClear Arbiter MCP server" height="180" /></a>
+</p>
 
 NullClear eliminates payment risk in Agent-to-Agent (A2A) commerce. In standard HTTP `402 Payment Required` flows, buyers are forced to pay before seeing whether an upstream agent hallucinates, crashes, or returns malformed data. NullClear introduces **deferred non-custodial schema escrow**: the buyer signs an EIP-3009 `TransferWithAuthorization`, the arbiter cryptographically validates the upstream agent's output against the buyer's schema contract, and only settles payment upon 100% verification. If the seller hallucinates or crashes, **the authorization is voided and $0 is spent**.
 
