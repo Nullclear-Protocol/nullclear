@@ -1,6 +1,6 @@
 {
   "name": "@nullclear/safepay-web",
-  "version": "1.3.0",
+  "version": "1.3.1",
   "private": true,
   "description": "NullClear SafePay (nullclear.com) — Zero-Custody Cryptographic Deliverable Escrow Web Application & Client SDK",
   "type": "module",

@@ -1,6 +1,6 @@
 {
   "name": "@nullclear/x402-arbiter",
-  "version": "1.3.0",
+  "version": "1.3.1",
   "description": "NullClear Developer and Agent SDK for safe x402 calls with deferred schema escrow",
   "license": "MIT",
   "homepage": "https://nullclear.dev",
