@@ -14,10 +14,12 @@ import { safepayWebRouter } from "./routes/safepay-web.js";
 import { proxyRouter, handleUrlProxyRequest } from "./routes/proxy.js";
 import { gatewaysRouter, gatewayProxyRouter } from "./routes/gateways.js";
 import { radarRouter } from "./routes/radar.js";
+import { forensicsRouter } from "./routes/forensics.js";
 import { telemetryMiddleware, telemetryRouter } from "./middleware/telemetry.js";
 import { buildNullClearMetadata } from "./middleware/free-tier.js";
 import { runEcosystemCrawlAndAudit } from "./services/ecosystem-crawler.js";
 import { syncBaseEip3009Logs } from "./services/base-eip3009-indexer.js";
+import { runTrendingTokenCronScan } from "./services/forensics-engine.js";
 
 declare const process: any;
 
@@ -100,8 +102,6 @@ app.use("*", async (c, next) => {
       p === "/agents.md" ||
       p === "/leaderboard" ||
       p.startsWith("/.well-known/") ||
-      p.startsWith("/v1/") ||
-      p.startsWith("/mcp") ||
       p.startsWith("/a2a");
 
     if (isAgentProtocolPath) {
@@ -145,6 +145,9 @@ app.get("/v1/stats", async (c) => {
   });
 });
 
+// V2.2 On-Chain Forensics, Proxy-Aware Bytecode Inspector, Calldata Decoder, Content Negotiation & /x402 Tab
+app.route("/", forensicsRouter);
+
 // SafePay Backend API & Web Routes
 app.route("/api/safepay", safepayRouter);
 app.route("/safepay", safepayWebRouter);
@@ -158,23 +161,25 @@ app.route("/v1/gateways", gatewaysRouter);
 app.route("/g", gatewayProxyRouter);
 app.route("/v1/radar", radarRouter);
 
-// A2A & x402 Route mountings
+// A2A & x402 Route mountings (preserving both /v1/clear and /v1/escrow)
 app.route("/v1/sandbox", sandboxRouter);
 app.route("/v1/bazaar", bazaarRouter);
 app.route("/v1/clear", clearRouter);
+app.route("/v1/escrow", clearRouter);
 app.route("/v1/score", scoreRouter);
 app.route("/v1/kya", kyaRouter);
 app.route("/mcp", mcpHttpRouter);
 app.route("/a2a", a2aRouter);
 app.route("/", discoveryRouter);
 
-// Scheduled Cron Handler for Autonomous Ecosystem Crawler & Base Mainnet EIP-3009 Volume Indexer
+// Scheduled Cron Handler for 15-Minute Trending Token Scanner + IndexNow, Ecosystem Crawler & Base EIP-3009 Indexer
 export async function scheduled(
   _event: any,
   env: Env["Bindings"],
   ctx?: { waitUntil?: (promise: Promise<unknown>) => void }
 ): Promise<void> {
   const task = Promise.all([
+    runTrendingTokenCronScan(env),
     runEcosystemCrawlAndAudit(env),
     syncBaseEip3009Logs(env)
   ]);

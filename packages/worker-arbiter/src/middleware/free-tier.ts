@@ -2,6 +2,7 @@ import type { Context, Next } from "hono";
 import { getArbiterStore, type Env } from "../env.js";
 
 export const FREE_TIER_DAILY_LIMIT = 10;
+export const FORENSIC_FREE_TIER_DAILY_LIMIT = 100;
 
 export interface NullClearMetadata {
   verified: boolean;
@@ -155,6 +156,66 @@ export async function consumeSponsoredFreeCall(
     c.header("x-nullclear-remaining-free-calls", String(res.remaining));
   } else {
     c.header("x-nullclear-tier", "free-trial-exhausted");
+    c.header("x-nullclear-remaining-free-calls", "0");
+  }
+
+  return {
+    ...res,
+    clientKey
+  };
+}
+
+export async function consumeForensicFreeCall(
+  c: Context<Env>,
+  dailyLimit = FORENSIC_FREE_TIER_DAILY_LIMIT
+): Promise<{
+  allowed: boolean;
+  used: number;
+  remaining: number;
+  limit: number;
+  clientKey: string;
+}> {
+  const rawClientKey = getClientIdentifier(c);
+  const clientKey = `forensic:${rawClientKey}`;
+  const store = getArbiterStore(c.env);
+  const kv = c.env?.KV || c.env?.NULLCLEAR_CACHE;
+  const utcDate = new Date().toISOString().slice(0, 10);
+  const kvKey = `forensic_free_tier:${utcDate}:${rawClientKey.toLowerCase()}`;
+
+  if (kv && !c.env?.DB) {
+    const rawCount = await kv.get(kvKey);
+    const current = Number(rawCount || 0);
+    if (current >= dailyLimit) {
+      c.header("x-nullclear-tier", "free-tier-exhausted");
+      c.header("x-nullclear-remaining-free-calls", "0");
+      return {
+        allowed: false,
+        used: current,
+        remaining: 0,
+        limit: dailyLimit,
+        clientKey
+      };
+    }
+    const nextUsed = current + 1;
+    await kv.put(kvKey, String(nextUsed), { expirationTtl: 86400 });
+    const remaining = Math.max(0, dailyLimit - nextUsed);
+    c.header("x-nullclear-tier", "zero-key-free");
+    c.header("x-nullclear-remaining-free-calls", String(remaining));
+    return {
+      allowed: true,
+      used: nextUsed,
+      remaining,
+      limit: dailyLimit,
+      clientKey
+    };
+  }
+
+  const res = await store.consumeFreeTierCall(clientKey, dailyLimit);
+  if (res.allowed) {
+    c.header("x-nullclear-tier", "zero-key-free");
+    c.header("x-nullclear-remaining-free-calls", String(res.remaining));
+  } else {
+    c.header("x-nullclear-tier", "free-tier-exhausted");
     c.header("x-nullclear-remaining-free-calls", "0");
   }
 

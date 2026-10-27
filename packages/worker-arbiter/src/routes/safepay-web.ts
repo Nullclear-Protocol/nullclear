@@ -1,6 +1,8 @@
 import { Hono } from "hono";
 import { SAFEPAY_TREASURY_ADDRESS } from "@nullclear/shared";
 import { getArbiterStore, type Env } from "../env.js";
+import { getTrendingScans } from "../services/forensics-engine.js";
+import { CLAUDE_AGENTS_MD_RULE_SNIPPET } from "./forensics.js";
 
 export const safepayWebRouter = new Hono<Env>();
 
@@ -459,6 +461,8 @@ export function renderSafePayLandingHtml(options: {
         <span class="base-badge mono">Base Mainnet · 8453</span>
       </a>
       <nav class="nav-links">
+        <a href="#forensics-omnibox" style="color:var(--emerald);font-weight:700;">🔍 On-Chain Forensics</a>
+        <a href="/x402" style="color:#38BDF8;font-weight:700;">⚡ /x402 Gateway</a>
         <a href="/for/freelancers">Freelancers</a>
         <a href="/for/data-brokers">Data Brokers</a>
         <a href="/for/ai-bounties">AI Bounties</a>
@@ -491,6 +495,138 @@ export function renderSafePayLandingHtml(options: {
   </div>
 
   <main class="container">
+    <!-- PHASE 5: UNIVERSAL ON-CHAIN FORENSICS & CALLDATA DECODER OMNIBOX + 1-CLICK AGENT INTEGRATION BAR -->
+    <section id="forensics-omnibox" class="card card-emerald" style="margin-top:28px;padding:24px 28px;background:linear-gradient(180deg, rgba(16,185,129,0.06) 0%, rgba(12,16,24,0.95) 100%);">
+      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:12px;">
+        <div>
+          <span class="pill-badge mono" style="margin-right:8px;">ZERO API KEY · 100 FREE REQ/DAY/IP</span>
+          <span style="font-weight:800;font-size:18px;">Universal On-Chain Forensics, Proxy-Aware Bytecode Inspector &amp; Calldata Decoder</span>
+        </div>
+        <div class="mono" style="font-size:12px;color:#38BDF8;">
+          Supports Base · Ethereum · Solana · EIP-1967 Proxies · Revert Hex
+        </div>
+      </div>
+
+      <form id="universalOmniboxForm" onsubmit="event.preventDefault(); executeOmniboxInput();" style="display:flex;gap:10px;flex-wrap:wrap;">
+        <select id="omniboxChain" class="mono" style="width:140px;font-weight:700;">
+          <option value="base">Base (8453)</option>
+          <option value="eth">Ethereum (1)</option>
+          <option value="solana">Solana</option>
+        </select>
+        <input
+          id="omniboxInput"
+          class="mono"
+          style="flex:1;min-width:260px;font-size:13.5px;"
+          placeholder="Paste Token/Contract (0x... or Solana base58), 66-char Tx Hash, Raw Calldata/Revert Hex, or BaseScan/DexScreener URL..."
+          value="0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
+        />
+        <button type="submit" class="btn-primary" style="width:auto;padding:10px 22px;">
+          🔍 Inspect &amp; Decode
+        </button>
+      </form>
+
+      <!-- 4 One-Click Live Demo Pills -->
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:12px;">
+        <span class="mono" style="font-size:11px;color:var(--muted);">LIVE DEMOS:</span>
+        <button type="button" class="preset-btn active" onclick="runOmniboxDemo('usdc')">🛡️ $USDC Proxy Audit</button>
+        <button type="button" class="preset-btn" onclick="runOmniboxDemo('trending')">🔥 Live Trending Base Token</button>
+        <button type="button" class="preset-btn" onclick="runOmniboxDemo('decode')">🧬 Decode Revert Hex</button>
+        <button type="button" class="preset-btn" onclick="runOmniboxDemo('feed')">📡 Live Feed</button>
+        <a href="/scan/base/0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913" class="preset-btn" style="text-decoration:none;">↗ Open Full $USDC Scorecard</a>
+      </div>
+
+      <!-- 1-Click Agent Integration Bar -->
+      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-top:14px;padding:12px 14px;background:#05070B;border:1px solid var(--border);border-radius:10px;">
+        <div class="mono" style="font-size:12px;color:#E2E8F0;">
+          <span style="color:var(--emerald);font-weight:700;">1-Click Agent Setup:</span>
+          <code style="margin-left:6px;color:#38BDF8;">claude mcp add --transport http nullclear https://api.nullclear.dev/mcp</code>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          <button type="button" class="preset-btn" onclick="copyOmniboxText('claude mcp add --transport http nullclear https://api.nullclear.dev/mcp', this)">📋 Copy Claude MCP Command</button>
+          <button type="button" class="preset-btn" onclick="copyOmniboxRule(this)">📘 Copy CLAUDE.md / AGENTS.md Rule</button>
+          <a id="omniboxShareX" href="https://twitter.com/intent/tweet?text=Audited%20on%20NullClear%20On-Chain%20Forensics&url=https%3A%2F%2Fnullclear.com%2Fscan%2Fbase%2F0x833589fcd6edb6e08f4c7c32d4f71b54bda02913" target="_blank" rel="noopener" class="preset-btn" style="text-decoration:none;">🐦 Share Scorecard on X</a>
+          <button type="button" class="preset-btn" onclick="copyOmniboxText('[![NullClear Verified](https://nullclear.com/og/base/0x833589fcd6edb6e08f4c7c32d4f71b54bda02913.svg)](https://nullclear.com/scan/base/0x833589fcd6edb6e08f4c7c32d4f71b54bda02913)', this)">🛡️ Copy Verified Badge</button>
+        </div>
+      </div>
+
+      <pre id="omniboxOutput" class="terminal mono" style="display:none;white-space:pre-wrap;overflow-x:auto;max-height:320px;"></pre>
+    </section>
+
+    <script>
+      const NULLCLEAR_AGENT_RULE = ${JSON.stringify(CLAUDE_AGENTS_MD_RULE_SNIPPET)};
+      function copyOmniboxText(txt, btn) {
+        navigator.clipboard.writeText(txt).catch(() => {});
+        const prev = btn.textContent;
+        btn.textContent = '✅ Copied!';
+        setTimeout(() => { btn.textContent = prev; }, 1600);
+      }
+      function copyOmniboxRule(btn) {
+        copyOmniboxText(NULLCLEAR_AGENT_RULE, btn);
+      }
+      async function executeOmniboxInput() {
+        const raw = document.getElementById('omniboxInput').value.trim();
+        let chain = document.getElementById('omniboxChain').value;
+        const out = document.getElementById('omniboxOutput');
+        out.style.display = 'block';
+        out.textContent = '⏳ Running block-pinned forensic & bytecode analysis...';
+
+        // Auto-detect URL (BaseScan / Etherscan / DexScreener)
+        let cleaned = raw;
+        if (/^https?:\\/\\//i.test(raw)) {
+          if (/etherscan\\.io/i.test(raw)) chain = 'eth';
+          if (/solscan\\.io|dexscreener\\.com\\/solana/i.test(raw)) chain = 'solana';
+          const addrMatch = raw.match(/0x[a-fA-F0-9]{40,64}/);
+          if (addrMatch) cleaned = addrMatch[0];
+        }
+
+        // Detect 66-char tx hash or raw calldata/revert hex (>42 chars starting with 0x)
+        if (/^0x[a-fA-F0-9]+$/.test(cleaned) && cleaned.length !== 42) {
+          const res = await fetch('/v1/decode', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ input: cleaned, chain })
+          });
+          const data = await res.json();
+          out.textContent = JSON.stringify(data, null, 2);
+          return;
+        }
+
+        // Detect Solana base58 address
+        if (!cleaned.startsWith('0x') && cleaned.length >= 32 && cleaned.length <= 44) {
+          chain = 'solana';
+        }
+
+        const res = await fetch('/v1/scan/' + encodeURIComponent(chain) + '/' + encodeURIComponent(cleaned));
+        const data = await res.json();
+        out.textContent = JSON.stringify(data, null, 2);
+      }
+
+      async function runOmniboxDemo(type) {
+        const input = document.getElementById('omniboxInput');
+        const chainSel = document.getElementById('omniboxChain');
+        const out = document.getElementById('omniboxOutput');
+        out.style.display = 'block';
+        if (type === 'usdc') {
+          chainSel.value = 'base';
+          input.value = '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913';
+          await executeOmniboxInput();
+        } else if (type === 'trending') {
+          chainSel.value = 'base';
+          input.value = '0x940181a94a35a4569e4529a3cdfb74e38fd98631';
+          await executeOmniboxInput();
+        } else if (type === 'decode') {
+          chainSel.value = 'base';
+          input.value = '0x08c379a00000000000000000000000000000000000000000000000000000000000000020000000000000000000000000000000000000000000000000000000000000001d45524332303a20696e73756666696369656e7420616c6c6f77616e6365000000';
+          await executeOmniboxInput();
+        } else if (type === 'feed') {
+          out.textContent = '⏳ Loading Live Trending Forensic Feed (/v1/trending)...';
+          const res = await fetch('/v1/trending');
+          const data = await res.json();
+          out.textContent = JSON.stringify(data, null, 2);
+        }
+      }
+    </script>
+
     <section class="hero-grid">
       <div>
         <div class="pill-badge mono">
@@ -1657,13 +1793,16 @@ safepayWebRouter.get("/deal/:dealId", async (c) => {
 });
 
 // SEO Sitemap & Robots for nullclear.com
-safepayWebRouter.get("/sitemap.xml", (c) => {
+safepayWebRouter.get("/sitemap.xml", async (c) => {
+  const trending = await getTrendingScans(c.env, undefined, 25);
   const urls = [
     "https://nullclear.com/",
+    "https://nullclear.com/x402",
     "https://nullclear.com/for/freelancers",
     "https://nullclear.com/for/data-brokers",
     "https://nullclear.com/for/ai-bounties",
-    "https://nullclear.com/for/otc-digital"
+    "https://nullclear.com/for/otc-digital",
+    ...trending.map((t) => `https://nullclear.com/scan/${t.chain}/${t.address}`)
   ];
   const xml = `<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">

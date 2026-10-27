@@ -106,10 +106,160 @@ async function callBazaarOrProxyWithFreeTrialFirst(
   };
 }
 
-// 1. Tool Definitions with First-Class Capability Tools at the Top
+// 1. Tool Definitions with 5 Zero-Key Forensic Tools First, followed by x402 Capability Tools
 server.setRequestHandler(ListToolsRequestSchema, async () => {
   return {
     tools: [
+      {
+        name: "scan_token_forensics",
+        description:
+          "[ZERO API KEY REQUIRED] Block-pinned on-chain security, EIP-1967/1822 proxy resolution, instruction-boundary opcode disassembly, honeypot, and buy/sell tax audit for Base, Ethereum (ETH), or Solana tokens. Includes cross-chain self-healing auto-detection and <400-token deterministic provenance receipt (100 free calls/day/IP).",
+        annotations: {
+          title: "Block-Pinned Token & Proxy Forensic Scanner (Zero API Key)",
+          readOnlyHint: true,
+          destructiveHint: false,
+          idempotentHint: true,
+          openWorldHint: true
+        },
+        inputSchema: {
+          type: "object",
+          required: ["address"],
+          properties: {
+            address: {
+              type: "string",
+              description: "Token or smart contract address (0x... for Base/ETH or base58 mint for Solana)",
+              default: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
+            },
+            chain: {
+              type: "string",
+              enum: ["base", "eth", "solana"],
+              description: "Target blockchain ('base', 'eth', or 'solana'). Auto-heals if deployed on alternate chain.",
+              default: "base"
+            }
+          }
+        }
+      },
+      {
+        name: "inspect_contract_abi_and_proxy",
+        description:
+          "[ZERO API KEY REQUIRED] Resolves EIP-1967, EIP-1822, and EIP-1167 proxy implementation addresses via eth_getStorageAt and extracts decoded 4-byte PUSH4 function selectors and dangerous opcodes (SELFDESTRUCT / DELEGATECALL) directly from on-chain bytecode without an Etherscan or Basescan API key.",
+        annotations: {
+          title: "Proxy Implementation & 4-Byte Selector Disassembler (Zero API Key)",
+          readOnlyHint: true,
+          destructiveHint: false,
+          idempotentHint: true,
+          openWorldHint: true
+        },
+        inputSchema: {
+          type: "object",
+          required: ["address"],
+          properties: {
+            address: {
+              type: "string",
+              description: "Smart contract address (0x...) on Base or Ethereum",
+              default: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
+            },
+            chain: {
+              type: "string",
+              enum: ["base", "eth"],
+              description: "Target EVM chain ('base' or 'eth')",
+              default: "base"
+            }
+          }
+        }
+      },
+      {
+        name: "decode_calldata_or_failed_tx",
+        description:
+          "[ZERO API KEY REQUIRED] Universal Calldata, Custom Revert Error & Failed Transaction Post-Mortem Decoder. Accepts raw hex calldata/revert bytes (0x...) OR a 66-char transaction hash (0x...), replays reverted transactions at their exact block, decodes 4-byte signatures & parameters, and flags malicious approvals (approve / permit / setApprovalForAll).",
+        annotations: {
+          title: "Calldata, Revert Error & Failed Tx Decoder (Zero API Key)",
+          readOnlyHint: true,
+          destructiveHint: false,
+          idempotentHint: true,
+          openWorldHint: true
+        },
+        inputSchema: {
+          type: "object",
+          required: ["input"],
+          properties: {
+            input: {
+              type: "string",
+              description: "Raw hex calldata/revert error (0x...) OR 66-char transaction hash (0x...)"
+            },
+            chain: {
+              type: "string",
+              enum: ["base", "eth"],
+              description: "EVM chain ('base' or 'eth', default 'base')",
+              default: "base"
+            }
+          }
+        }
+      },
+      {
+        name: "simulate_transaction_preflight",
+        description:
+          "[ZERO API KEY REQUIRED] Pre-flight EVM transaction simulator. Dry-runs eth_call + eth_estimateGas on Base or Ethereum before signing/broadcasting, decodes any custom revert reason, detects unlimited drainer approvals, and outputs recommendedAgentAction ('EXECUTE_SAFE', 'ABORT_WILL_REVERT', or 'ABORT_DRAINER_APPROVAL').",
+        annotations: {
+          title: "Pre-Flight EVM Transaction Simulator (Zero API Key)",
+          readOnlyHint: true,
+          destructiveHint: false,
+          idempotentHint: true,
+          openWorldHint: true
+        },
+        inputSchema: {
+          type: "object",
+          required: ["to"],
+          properties: {
+            chain: {
+              type: "string",
+              enum: ["base", "eth"],
+              description: "Target EVM chain ('base' or 'eth', default 'base')",
+              default: "base"
+            },
+            from: {
+              type: "string",
+              description: "Sender 0x address for simulation"
+            },
+            to: {
+              type: "string",
+              description: "Target contract 0x address"
+            },
+            data: {
+              type: "string",
+              description: "Hex calldata (0x...)",
+              default: "0x"
+            },
+            value: {
+              type: "string",
+              description: "Hex or wei value to send (default '0x0')",
+              default: "0x0"
+            }
+          }
+        }
+      },
+      {
+        name: "read_url_clean_markdown",
+        description:
+          "[ZERO API KEY REQUIRED] Converts any public web URL or documentation page into clean, token-efficient Markdown (<400 tokens) with cryptographic SHA-256 provenance and zero HTML clutter.",
+        annotations: {
+          title: "Clean Markdown URL Reader (Zero API Key)",
+          readOnlyHint: true,
+          destructiveHint: false,
+          idempotentHint: true,
+          openWorldHint: true
+        },
+        inputSchema: {
+          type: "object",
+          required: ["url"],
+          properties: {
+            url: {
+              type: "string",
+              description: "Public HTTPS URL or documentation page to convert into clean Markdown"
+            }
+          }
+        }
+      },
       {
         name: "nullclear_discover_verified_x402_apis",
         description:
@@ -577,6 +727,96 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   const { name, arguments: args } = request.params;
 
   try {
+    if (name === "scan_token_forensics") {
+      const chain = encodeURIComponent(String(args?.chain || "base"));
+      const address = encodeURIComponent(
+        String(args?.address || "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913")
+      );
+      const url = `${ARBITER_URL}/v1/scan/${chain}/${address}`;
+      const res = await callBazaarOrProxyWithFreeTrialFirst(url, "GET");
+      return {
+        content: [
+          {
+            type: "text",
+            text: typeof res.data === "string" ? res.data : JSON.stringify(res.data)
+          }
+        ]
+      };
+    }
+
+    if (name === "inspect_contract_abi_and_proxy") {
+      const chain = encodeURIComponent(String(args?.chain || "base"));
+      const address = encodeURIComponent(
+        String(args?.address || "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913")
+      );
+      const url = `${ARBITER_URL}/v1/inspect/${chain}/${address}`;
+      const res = await callBazaarOrProxyWithFreeTrialFirst(url, "GET");
+      return {
+        content: [
+          {
+            type: "text",
+            text: typeof res.data === "string" ? res.data : JSON.stringify(res.data)
+          }
+        ]
+      };
+    }
+
+    if (name === "decode_calldata_or_failed_tx") {
+      const url = `${ARBITER_URL}/v1/decode`;
+      const res = await callBazaarOrProxyWithFreeTrialFirst(url, "POST", {
+        input: String(args?.input || "0x"),
+        chain: String(args?.chain || "base")
+      });
+      return {
+        content: [
+          {
+            type: "text",
+            text: typeof res.data === "string" ? res.data : JSON.stringify(res.data)
+          }
+        ]
+      };
+    }
+
+    if (name === "simulate_transaction_preflight") {
+      const url = `${ARBITER_URL}/v1/simulate`;
+      const res = await callBazaarOrProxyWithFreeTrialFirst(url, "POST", {
+        chain: String(args?.chain || "base"),
+        from: args?.from ? String(args.from) : undefined,
+        to: String(args?.to || "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"),
+        data: args?.data ? String(args.data) : "0x",
+        value: args?.value ? String(args.value) : "0x0"
+      });
+      return {
+        content: [
+          {
+            type: "text",
+            text: typeof res.data === "string" ? res.data : JSON.stringify(res.data)
+          }
+        ]
+      };
+    }
+
+    if (name === "read_url_clean_markdown") {
+      const targetUrl = String(args?.url || "https://nullclear.dev/llms.txt");
+      const rpcRes = await fetch(`${ARBITER_URL}/mcp`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-mcp-session": MCP_SESSION_ID },
+        body: JSON.stringify({
+          jsonrpc: "2.0",
+          id: 1,
+          method: "tools/call",
+          params: { name: "read_url_clean_markdown", arguments: { url: targetUrl } }
+        })
+      });
+      const rpcData: any = await rpcRes.json();
+      if (rpcData?.result?.content) {
+        return { content: rpcData.result.content };
+      }
+      return {
+        content: [{ type: "text", text: JSON.stringify(rpcData) }]
+      };
+    }
+
     if (name === "nullclear_discover_verified_x402_apis") {
       const params = new URLSearchParams();
       const query =

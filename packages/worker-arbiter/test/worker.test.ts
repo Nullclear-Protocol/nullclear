@@ -516,7 +516,7 @@ describe("NullClear Worker Arbiter Test Suite", () => {
     expect(getRes.status).toBe(200);
     const getData = (await getRes.json()) as any;
     expect(getData.name).toBe("nullclear-mcp");
-    expect(getData.tools.length).toBe(8);
+    expect(getData.tools.length).toBe(13);
 
     const postRes = await app.fetch(
       new Request("http://localhost/mcp", {
@@ -528,7 +528,12 @@ describe("NullClear Worker Arbiter Test Suite", () => {
     );
     expect(postRes.status).toBe(200);
     const postData = (await postRes.json()) as any;
-    expect(postData.result.tools.length).toBe(8);
+    expect(postData.result.tools.length).toBe(13);
+    expect(postData.result.tools[0].name).toBe("scan_token_forensics");
+    expect(postData.result.tools[1].name).toBe("inspect_contract_abi_and_proxy");
+    expect(postData.result.tools[2].name).toBe("decode_calldata_or_failed_tx");
+    expect(postData.result.tools[3].name).toBe("simulate_transaction_preflight");
+    expect(postData.result.tools[4].name).toBe("read_url_clean_markdown");
     expect(postData.result.tools.some((t: any) => t.name === "nullclear_token_security_audit")).toBe(true);
     expect(postData.result.tools.some((t: any) => t.name === "nullclear_discover_verified_x402_apis")).toBe(true);
   });
@@ -1995,6 +2000,265 @@ describe("NullClear Worker Arbiter Test Suite", () => {
     expect(lbHtml).toContain("Live Base EIP-3009 On-Chain Volume Radar");
     expect(lbHtml).toContain("base-seller-aaaaaaaa");
     expect(lbHtml).toContain("[Claim Verified NullClear Gateway]");
+  });
+
+  // ============================================================================
+  // NULLCLEAR V2.2: ON-CHAIN FORENSICS, PROXY DISASSEMBLER, CALLDATA DECODER,
+  // CONTENT NEGOTIATION & ZERO-KEY MCP VERIFICATION
+  // ============================================================================
+  it("V2.2: GET /v1/scan/base/0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913 ($USDC) resolves EIP-1967 proxy, 0% tax, provenance & EXECUTE_SAFE (<400 tokens)", async () => {
+    const res = await app.fetch(
+      new Request("https://api.nullclear.dev/v1/scan/base/0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", {
+        headers: { "CF-Connecting-IP": "198.51.100.10" }
+      }),
+      testEnv
+    );
+    expect(res.status).toBe(200);
+    const scan = (await res.json()) as any;
+    expect(scan.symbol).toBe("USDC");
+    expect(scan.verdict).toBe("VERIFIED CLEAR");
+    expect(scan.recommendedAgentAction).toBe("EXECUTE_SAFE");
+    expect(scan.score).toBeGreaterThanOrEqual(95);
+    expect(scan.evidence.isProxy).toBe(true);
+    expect(scan.evidence.implementationAddress).toBeTruthy();
+    expect(scan.evidence.buyTaxPercent).toBe(0);
+    expect(scan.evidence.sellTaxPercent).toBe(0);
+    expect(scan.provenance.blockNumber).toBeGreaterThan(0);
+    expect(scan.provenance.attestationSha256).toMatch(/^0x[a-f0-9]{64}$/);
+    expect(scan.links.webReportUrl).toContain("https://nullclear.com/scan/base/0x833589fcd6edb6e08f4c7c32d4f71b54bda02913");
+
+    // Verify deterministic response stays strictly under 400 tokens (~1,600 chars)
+    const rawJsonLen = JSON.stringify(scan).length;
+    expect(rawJsonLen).toBeLessThan(1600);
+  });
+
+  it("V2.2: Cross-chain self-healing auto-detects ETH contract queried on Base and Solana base58 queried on Base", async () => {
+    // Query Ethereum mainnet USDC on 'base' -> auto-corrects to 'eth'
+    const ethOnBaseRes = await app.fetch(
+      new Request("https://api.nullclear.dev/v1/scan/base/0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48", {
+        headers: { "CF-Connecting-IP": "198.51.100.11" }
+      }),
+      testEnv
+    );
+    expect(ethOnBaseRes.status).toBe(200);
+    const ethScan = (await ethOnBaseRes.json()) as any;
+    expect(ethScan.chain).toBe("eth");
+    expect(ethScan.autoCorrectedChain).toBe(true);
+    expect(ethScan.recommendedAgentAction).toBe("EXECUTE_SAFE");
+
+    // Query Solana USDC mint on 'base' -> auto-corrects to 'solana'
+    const solOnBaseRes = await app.fetch(
+      new Request("https://api.nullclear.dev/v1/scan/base/EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v", {
+        headers: { "CF-Connecting-IP": "198.51.100.12" }
+      }),
+      testEnv
+    );
+    expect(solOnBaseRes.status).toBe(200);
+    const solScan = (await solOnBaseRes.json()) as any;
+    expect(solScan.chain).toBe("solana");
+    expect(solScan.autoCorrectedChain).toBe(true);
+    expect(solScan.symbol).toBe("USDC");
+  });
+
+  it("V2.2: Content Negotiation (Accept: text/markdown & AI User-Agent) returns <300-token Markdown, browser gets HTML + OG SVG", async () => {
+    // 1. Accept: text/markdown on nullclear.com/scan/base/:address
+    const mdRes = await app.fetch(
+      new Request("https://nullclear.com/scan/base/0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", {
+        headers: { Accept: "text/markdown" }
+      }),
+      testEnv
+    );
+    expect(mdRes.status).toBe(200);
+    expect(mdRes.headers.get("Content-Type")).toContain("text/markdown");
+    const mdText = await mdRes.text();
+    expect(mdText).toContain("# NullClear Forensic Report: USD Coin ($USDC)");
+    expect(mdText).toContain("EXECUTE_SAFE");
+    expect(mdText).toContain("EIP-1967");
+    expect(mdText).not.toContain("<!DOCTYPE html>");
+    expect(mdText.length).toBeLessThan(1200); // Strictly <300 tokens
+
+    // 2. AI User-Agent (ClaudeBot) automatically receives Markdown
+    const uaRes = await app.fetch(
+      new Request("https://nullclear.com/scan/base/0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", {
+        headers: { "User-Agent": "ClaudeBot/1.0 (+https://anthropic.com)" }
+      }),
+      testEnv
+    );
+    expect(uaRes.status).toBe(200);
+    expect(uaRes.headers.get("Content-Type")).toContain("text/markdown");
+
+    // 3. Standard browser receives semantic HTML with JSON-LD, 1-Click Agent Integration Bar & OG SVG
+    const htmlRes = await app.fetch(
+      new Request("https://nullclear.com/scan/base/0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", {
+        headers: { Accept: "text/html", "User-Agent": "Mozilla/5.0 Chrome/125.0" }
+      }),
+      testEnv
+    );
+    expect(htmlRes.status).toBe(200);
+    expect(htmlRes.headers.get("Content-Type")).toContain("text/html");
+    const htmlText = await htmlRes.text();
+    expect(htmlText).toContain("claude mcp add --transport http nullclear https://api.nullclear.dev/mcp");
+    expect(htmlText).toContain("Copy CLAUDE.md / AGENTS.md Rule");
+    expect(htmlText).toContain("Share Scorecard on X");
+    expect(htmlText).toContain("Copy Verified Badge");
+
+    // 4. Dynamic OG SVG Scorecard
+    const ogRes = await app.fetch(
+      new Request("https://nullclear.com/og/base/0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913.svg"),
+      testEnv
+    );
+    expect(ogRes.status).toBe(200);
+    expect(ogRes.headers.get("Content-Type")).toContain("image/svg+xml");
+    const svgText = await ogRes.text();
+    expect(svgText).toContain("<svg");
+    expect(svgText).toContain("VERIFIED CLEAR");
+  });
+
+  it("V2.2: POST /v1/decode and POST /v1/simulate decode unlimited approvals, custom reverts, and pre-flight calls", async () => {
+    // 1. Decode unlimited ERC-20 approve calldata
+    const approveCalldata =
+      "0x095ea7b3000000000000000000000000b586efcca41df27ad3873beca54da0c30bf04d5cffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff";
+    const decRes = await app.fetch(
+      new Request("https://api.nullclear.dev/v1/decode", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "CF-Connecting-IP": "198.51.100.13" },
+        body: JSON.stringify({ input: approveCalldata, chain: "base" })
+      }),
+      testEnv
+    );
+    expect(decRes.status).toBe(200);
+    const decJson = (await decRes.json()) as any;
+    expect(decJson.selector).toBe("0x095ea7b3");
+    expect(decJson.signature).toBe("approve(address,uint256)");
+    expect(decJson.isDangerousApproval).toBe(true);
+    expect(decJson.recommendedAgentAction).toBe("ABORT_DRAINER_APPROVAL");
+
+    // 2. Decode standard Error(string) revert data
+    const revertHex =
+      "0x08c379a00000000000000000000000000000000000000000000000000000000000000020000000000000000000000000000000000000000000000000000000000000001d45524332303a20696e73756666696369656e7420616c6c6f77616e6365000000";
+    const revRes = await app.fetch(
+      new Request("https://api.nullclear.dev/v1/decode", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "CF-Connecting-IP": "198.51.100.13" },
+        body: JSON.stringify({ input: revertHex, chain: "base" })
+      }),
+      testEnv
+    );
+    expect(revRes.status).toBe(200);
+    const revJson = (await revRes.json()) as any;
+    expect(revJson.revertReason).toContain("ERC20: insufficient allowance");
+    expect(revJson.recommendedAgentAction).toBe("ABORT_WILL_REVERT");
+
+    // 3. Pre-flight simulate unlimited approve -> flags ABORT_DRAINER_APPROVAL
+    const simRes = await app.fetch(
+      new Request("https://api.nullclear.dev/v1/simulate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "CF-Connecting-IP": "198.51.100.13" },
+        body: JSON.stringify({
+          chain: "base",
+          from: "0xfd74fF802EA0E735514C070AF04E0D6528deD145",
+          to: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+          data: approveCalldata,
+          value: "0x0"
+        })
+      }),
+      testEnv
+    );
+    expect(simRes.status).toBe(200);
+    const simJson = (await simRes.json()) as any;
+    expect(simJson.isDangerousApproval).toBe(true);
+    expect(simJson.recommendedAgentAction).toBe("ABORT_DRAINER_APPROVAL");
+  });
+
+  it("V2.2: Zero-Auth 100/day Free Tier + Request #101 graceful x402 upgrade & cached scan fallback", async () => {
+    const testIp = "198.51.100.250";
+    // Exhaust 100 calls for this IP
+    let lastStatus = 0;
+    for (let i = 1; i <= 100; i++) {
+      const r = await app.fetch(
+        new Request("https://api.nullclear.dev/v1/scan/base/0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", {
+          headers: { "CF-Connecting-IP": testIp }
+        }),
+        testEnv
+      );
+      lastStatus = r.status;
+    }
+    expect(lastStatus).toBe(200);
+
+    // Request #101 on cached /v1/scan returns cached scan with rateLimited: true + x402Upgrade
+    const req101Scan = await app.fetch(
+      new Request("https://api.nullclear.dev/v1/scan/base/0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", {
+        headers: { "CF-Connecting-IP": testIp }
+      }),
+      testEnv
+    );
+    expect(req101Scan.status).toBe(200);
+    const body101 = (await req101Scan.json()) as any;
+    expect(body101.rateLimited).toBe(true);
+    expect(body101.x402Upgrade).toBeDefined();
+    expect(body101.x402Upgrade.priceUsdc).toBe("0.005");
+
+    // Request #102 on live /v1/decode returns HTTP 402 Payment Required with agentPaymentInstructions
+    const req102Decode = await app.fetch(
+      new Request("https://api.nullclear.dev/v1/decode", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "CF-Connecting-IP": testIp },
+        body: JSON.stringify({ input: "0xa9059cbb", chain: "base" })
+      }),
+      testEnv
+    );
+    expect(req102Decode.status).toBe(402);
+    expect(req102Decode.headers.get("PAYMENT-REQUIRED")).toBeTruthy();
+    const err402 = (await req102Decode.json()) as any;
+    expect(err402.rateLimited).toBe(true);
+    expect(err402.agentPaymentInstructions).toContain("EIP-3009");
+  });
+
+  it("V2.2: Stateless Telegram Webhook & 5 Zero-Key MCP tools/call work end-to-end", async () => {
+    // 1. Telegram message webhook
+    const tgRes = await app.fetch(
+      new Request("https://api.nullclear.dev/v1/telegram/webhook", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          message: {
+            chat: { id: 777888 },
+            text: "Check 0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
+          }
+        })
+      }),
+      testEnv
+    );
+    expect(tgRes.status).toBe(200);
+    const tgJson = (await tgRes.json()) as any;
+    expect(tgJson.method).toBe("sendMessage");
+    expect(tgJson.chat_id).toBe(777888);
+    expect(tgJson.text).toContain("VERIFIED CLEAR");
+    expect(tgJson.text).toContain("https://nullclear.com/scan/base/0x833589fcd6edb6e08f4c7c32d4f71b54bda02913");
+
+    // 2. MCP tools/call -> scan_token_forensics
+    const mcpScanRes = await app.fetch(
+      new Request("https://api.nullclear.dev/mcp", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "CF-Connecting-IP": "198.51.100.40" },
+        body: JSON.stringify({
+          jsonrpc: "2.0",
+          id: 99,
+          method: "tools/call",
+          params: {
+            name: "scan_token_forensics",
+            arguments: { chain: "base", address: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913" }
+          }
+        })
+      }),
+      testEnv
+    );
+    expect(mcpScanRes.status).toBe(200);
+    const mcpScanJson = (await mcpScanRes.json()) as any;
+    const toolContent = JSON.parse(mcpScanJson.result.content[0].text);
+    expect(toolContent.recommendedAgentAction).toBe("EXECUTE_SAFE");
+    expect(toolContent.llmDigest).toContain("VERIFIED CLEAR");
+    expect(toolContent.provenance.blockNumber).toBeGreaterThan(0);
   });
 });
 

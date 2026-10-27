@@ -25,9 +25,33 @@ export interface Env {
     BASE_RPC_URL?: string;
     BASE_MAINNET_RPC_URL?: string;
     BASE_SEPOLIA_RPC_URL?: string;
+    ETH_RPC_URL?: string;
+    SOLANA_RPC_URL?: string;
+    TELEGRAM_BOT_TOKEN?: string;
+    INDEXNOW_KEY?: string;
     MIN_ONCHAIN_ATOMIC?: string;
     MAX_DAILY_ONCHAIN_PER_WALLET?: string;
   };
+}
+
+export interface ForensicScanRecord {
+  id: string;
+  chain: string;
+  address: string;
+  symbol: string;
+  name: string;
+  score: number;
+  verdict: string;
+  recommendedAction: string;
+  isProxy: boolean;
+  implementationAddress?: string | null;
+  buyTaxPercent: number;
+  sellTaxPercent: number;
+  liquidityUsd: number;
+  blockNumber: number;
+  attestationSha256: string;
+  payloadJson: string;
+  scannedAt: number;
 }
 
 export interface SafePayDealRecord {
@@ -423,6 +447,9 @@ export interface IArbiterStore {
   upsertOnchainCounterpartyProfile(profile: OnchainCounterpartyProfileRecord): Promise<void>;
   getOnchainCounterpartyProfile(address: string): Promise<OnchainCounterpartyProfileRecord | null>;
   listOnchainCounterpartyProfiles(roleFilter?: "SELLER" | "BUYER" | "BOTH", limit?: number): Promise<OnchainCounterpartyProfileRecord[]>;
+  saveForensicScan(record: ForensicScanRecord): Promise<void>;
+  getForensicScan(chain: string, address: string): Promise<ForensicScanRecord | null>;
+  listForensicScans(chain?: string, limit?: number): Promise<ForensicScanRecord[]>;
   reset(): void;
 }
 
@@ -445,6 +472,7 @@ export class MemoryArbiterStore implements IArbiterStore {
   private indexerState = new Map<string, IndexerStateRecord>();
   private onchainTransfers = new Map<string, OnchainEip3009TransferRecord>();
   private counterpartyProfiles = new Map<string, OnchainCounterpartyProfileRecord>();
+  private forensicScans = new Map<string, ForensicScanRecord>();
 
   constructor() {
     this.seedDefaults();
@@ -471,6 +499,7 @@ export class MemoryArbiterStore implements IArbiterStore {
     this.indexerState.clear();
     this.onchainTransfers.clear();
     this.counterpartyProfiles.clear();
+    this.forensicScans.clear();
     this.seedDefaults();
   }
 
@@ -788,6 +817,31 @@ export class MemoryArbiterStore implements IArbiterStore {
         const volDiff = BigInt(b.total_volume_atomic || "0") - BigInt(a.total_volume_atomic || "0");
         return volDiff > 0n ? 1 : volDiff < 0n ? -1 : 0;
       })
+      .slice(0, limit);
+  }
+
+  async saveForensicScan(record: ForensicScanRecord): Promise<void> {
+    const key = `${record.chain.toLowerCase()}:${record.address.toLowerCase()}`;
+    this.forensicScans.set(key, {
+      ...record,
+      chain: record.chain.toLowerCase(),
+      address: record.chain.toLowerCase() === "solana" ? record.address : record.address.toLowerCase()
+    });
+  }
+
+  async getForensicScan(chain: string, address: string): Promise<ForensicScanRecord | null> {
+    const key = `${chain.toLowerCase()}:${address.toLowerCase()}`;
+    const found = this.forensicScans.get(key);
+    return found ? { ...found } : null;
+  }
+
+  async listForensicScans(chain?: string, limit = 50): Promise<ForensicScanRecord[]> {
+    let all = Array.from(this.forensicScans.values());
+    if (chain) {
+      all = all.filter((s) => s.chain.toLowerCase() === chain.toLowerCase());
+    }
+    return all
+      .sort((a, b) => b.scannedAt - a.scannedAt || b.liquidityUsd - a.liquidityUsd)
       .slice(0, limit);
   }
 }
@@ -2038,6 +2092,144 @@ export class D1ArbiterStore implements IArbiterStore {
     }
 
     return rows.slice(0, limit);
+  }
+
+  private async ensureForensicScansTable(): Promise<void> {
+    await this.db
+      .prepare(
+        `CREATE TABLE IF NOT EXISTS forensic_scans (
+          id TEXT PRIMARY KEY,
+          chain TEXT NOT NULL,
+          address TEXT NOT NULL,
+          symbol TEXT,
+          name TEXT,
+          score INTEGER NOT NULL,
+          verdict TEXT NOT NULL,
+          recommended_action TEXT NOT NULL,
+          is_proxy INTEGER DEFAULT 0,
+          implementation_address TEXT,
+          buy_tax_percent REAL DEFAULT 0,
+          sell_tax_percent REAL DEFAULT 0,
+          liquidity_usd REAL DEFAULT 0,
+          block_number INTEGER DEFAULT 0,
+          attestation_sha256 TEXT,
+          payload_json TEXT NOT NULL,
+          scanned_at INTEGER NOT NULL
+        )`
+      )
+      .run();
+  }
+
+  async saveForensicScan(record: ForensicScanRecord): Promise<void> {
+    await this.ensureForensicScansTable();
+    const normChain = record.chain.toLowerCase();
+    const normAddr = normChain === "solana" ? record.address : record.address.toLowerCase();
+    const id = `${normChain}:${normAddr}`;
+    await this.db
+      .prepare(
+        `INSERT INTO forensic_scans (
+          id, chain, address, symbol, name, score, verdict, recommended_action,
+          is_proxy, implementation_address, buy_tax_percent, sell_tax_percent,
+          liquidity_usd, block_number, attestation_sha256, payload_json, scanned_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(id) DO UPDATE SET
+          symbol = excluded.symbol,
+          name = excluded.name,
+          score = excluded.score,
+          verdict = excluded.verdict,
+          recommended_action = excluded.recommended_action,
+          is_proxy = excluded.is_proxy,
+          implementation_address = excluded.implementation_address,
+          buy_tax_percent = excluded.buy_tax_percent,
+          sell_tax_percent = excluded.sell_tax_percent,
+          liquidity_usd = excluded.liquidity_usd,
+          block_number = excluded.block_number,
+          attestation_sha256 = excluded.attestation_sha256,
+          payload_json = excluded.payload_json,
+          scanned_at = excluded.scanned_at`
+      )
+      .bind(
+        id,
+        normChain,
+        normAddr,
+        record.symbol,
+        record.name,
+        record.score,
+        record.verdict,
+        record.recommendedAction,
+        record.isProxy ? 1 : 0,
+        record.implementationAddress ?? null,
+        record.buyTaxPercent,
+        record.sellTaxPercent,
+        record.liquidityUsd,
+        record.blockNumber,
+        record.attestationSha256,
+        record.payloadJson,
+        record.scannedAt
+      )
+      .run();
+  }
+
+  async getForensicScan(chain: string, address: string): Promise<ForensicScanRecord | null> {
+    await this.ensureForensicScansTable();
+    const normChain = chain.toLowerCase();
+    const normAddr = normChain === "solana" ? address : address.toLowerCase();
+    const id = `${normChain}:${normAddr}`;
+    const row = await this.db
+      .prepare("SELECT * FROM forensic_scans WHERE id = ? OR (chain = ? AND lower(address) = ?) LIMIT 1")
+      .bind(id, normChain, address.toLowerCase())
+      .first<any>();
+    if (!row) return null;
+    return {
+      id: row.id,
+      chain: row.chain,
+      address: row.address,
+      symbol: row.symbol || "TOKEN",
+      name: row.name || "On-Chain Contract",
+      score: Number(row.score || 0),
+      verdict: row.verdict || "CAUTION",
+      recommendedAction: row.recommended_action || "CAUTION_HIGH_RISK",
+      isProxy: Number(row.is_proxy || 0) === 1,
+      implementationAddress: row.implementation_address ?? null,
+      buyTaxPercent: Number(row.buy_tax_percent || 0),
+      sellTaxPercent: Number(row.sell_tax_percent || 0),
+      liquidityUsd: Number(row.liquidity_usd || 0),
+      blockNumber: Number(row.block_number || 0),
+      attestationSha256: row.attestation_sha256 || "",
+      payloadJson: row.payload_json || "{}",
+      scannedAt: Number(row.scanned_at || Date.now())
+    };
+  }
+
+  async listForensicScans(chain?: string, limit = 50): Promise<ForensicScanRecord[]> {
+    await this.ensureForensicScansTable();
+    const stmt = chain
+      ? this.db
+          .prepare("SELECT * FROM forensic_scans WHERE lower(chain) = ? ORDER BY scanned_at DESC, liquidity_usd DESC LIMIT ?")
+          .bind(chain.toLowerCase(), limit)
+      : this.db
+          .prepare("SELECT * FROM forensic_scans ORDER BY scanned_at DESC, liquidity_usd DESC LIMIT ?")
+          .bind(limit);
+    const res = await stmt.all<any>();
+    return (res.results || []).map((row: any) => ({
+      id: row.id,
+      chain: row.chain,
+      address: row.address,
+      symbol: row.symbol || "TOKEN",
+      name: row.name || "On-Chain Contract",
+      score: Number(row.score || 0),
+      verdict: row.verdict || "CAUTION",
+      recommendedAction: row.recommended_action || "CAUTION_HIGH_RISK",
+      isProxy: Number(row.is_proxy || 0) === 1,
+      implementationAddress: row.implementation_address ?? null,
+      buyTaxPercent: Number(row.buy_tax_percent || 0),
+      sellTaxPercent: Number(row.sell_tax_percent || 0),
+      liquidityUsd: Number(row.liquidity_usd || 0),
+      blockNumber: Number(row.block_number || 0),
+      attestationSha256: row.attestation_sha256 || "",
+      payloadJson: row.payload_json || "{}",
+      scannedAt: Number(row.scanned_at || Date.now())
+    }));
   }
 }
 
