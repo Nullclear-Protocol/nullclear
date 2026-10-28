@@ -235,11 +235,11 @@ importers:
         specifier: ^1.6.1
         version: 1.32.1(zod@3.25.76)
       '@nullclear/shared':
-        specifier: workspace:*
-        version: link:../shared
+        specifier: ^1.3.1
+        version: 1.3.1(typescript@5.9.3)
       '@nullclear/x402-arbiter':
-        specifier: workspace:*
-        version: link:../x402-arbiter
+        specifier: ^1.3.0
+        version: 1.3.0(typescript@5.9.3)
       viem:
         specifier: ^2.23.0
         version: 2.57.5(typescript@5.9.3)(zod@3.25.76)
@@ -1006,6 +1006,15 @@ packages:
   '@noble/hashes@1.8.0':
     resolution: {integrity: sha512-jCs9ldd7NwzpgXDIf6P3+NrHh9/sD6CQdxHyjQI+h/6rDNo88ypBxxz45UDuZHz9r3tNz7N/VInSVoVdtXEI4A==}
     engines: {node: ^14.21.3 || >=16}
+
+  '@nullclear/shared@1.3.0':
+    resolution: {integrity: sha512-blhVEaLQMMAR+gJ6wTIqDNs/n6S+EtLGuQvdiYLkl/wYttXz+K9779/B9DTsr/XtvE5VfkNMEa09QhJNa6ZTGw==}
+
+  '@nullclear/shared@1.3.1':
+    resolution: {integrity: sha512-3Ocdyi9o97nArZoeqYYwru/XtHEtn5pUr7G1DDMc2ixQLwW4ClSEXPxJwN9LEycXQpBx9GeOevVSVLi0t16nQg==}
+
+  '@nullclear/x402-arbiter@1.3.0':
+    resolution: {integrity: sha512-pTW8wyMaBg4XFCHA6mz3+41oz7jC1TYhawVLY8DqU7Xk+o+GhcfAiwiz9Q6810rtzVkx1pDqgvHsBVQW/ROVcA==}
 
   '@rollup/rollup-android-arm-eabi@4.64.5':
     resolution: {integrity: sha512-MrfgRQSpD5hkkRg6XI16B6EDLb+6+xp8xje6bpdSwkYw+qxrBKbUVrRAQu9h82UT+QumSIVQ8HXsXjPd2dlhqw==}
@@ -2558,6 +2567,34 @@ snapshots:
       '@noble/hashes': 1.8.0
 
   '@noble/hashes@1.8.0': {}
+
+  '@nullclear/shared@1.3.0(typescript@5.9.3)':
+    dependencies:
+      viem: 2.57.5(typescript@5.9.3)(zod@3.25.76)
+      zod: 3.25.76
+    transitivePeerDependencies:
+      - bufferutil
+      - typescript
+      - utf-8-validate
+
+  '@nullclear/shared@1.3.1(typescript@5.9.3)':
+    dependencies:
+      viem: 2.57.5(typescript@5.9.3)(zod@3.25.76)
+      zod: 3.25.76
+    transitivePeerDependencies:
+      - bufferutil
+      - typescript
+      - utf-8-validate
+
+  '@nullclear/x402-arbiter@1.3.0(typescript@5.9.3)':
+    dependencies:
+      '@nullclear/shared': 1.3.0(typescript@5.9.3)
+      viem: 2.57.5(typescript@5.9.3)(zod@3.25.76)
+      zod: 3.25.76
+    transitivePeerDependencies:
+      - bufferutil
+      - typescript
+      - utf-8-validate
 
   '@rollup/rollup-android-arm-eabi@4.64.5':
     optional: true
