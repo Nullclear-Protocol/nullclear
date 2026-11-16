@@ -192,7 +192,11 @@ gatewaysRouter.post("/", async (c) => {
   const store = getArbiterStore(c.env);
   let body: Record<string, any>;
   try {
-    body = await c.req.json();
+    const parsed = await c.req.json();
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      return c.json({ success: false, error: "Request body must be a JSON object" }, 400);
+    }
+    body = parsed;
   } catch {
     return c.json({ success: false, error: "Invalid JSON request body" }, 400);
   }

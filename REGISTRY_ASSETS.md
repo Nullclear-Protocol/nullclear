@@ -19,13 +19,13 @@ Zero-key, proxy-aware smart contract security, honeypot scanner, calldata/revert
 NullClear Protocol (`https://nullclear.com` / `https://nullclear.dev`)
 
 ### Repository URL
-`https://github.com/nullclear/nullclear`
+`https://github.com/Nullclear-Protocol/nullclear`
 
 ### npm Package
-`@nullclear/mcp`
+`@nullclear/mcp` (`1.4.0`)
 
 ### Remote HTTP Endpoint
-`https://nullclear.dev/mcp` (or `https://api.nullclear.dev/mcp`)
+`https://api.nullclear.dev/mcp`
 
 ### License
 MIT / Apache-2.0
@@ -55,15 +55,15 @@ NullClear is the definitive **Zero-Registration On-Chain Forensic Oracle, Proxy-
 4. `simulate_transaction_preflight` — [ZERO API KEY REQUIRED] Run pre-flight `eth_call` & gas estimation to verify whether a tx will succeed or revert before signing.
 5. `read_url_clean_markdown` — [ZERO API KEY REQUIRED] Strip ads, scripts, and navigation clutter into token-efficient clean Markdown (<350 tokens).
 
-### High-Frequency x402 Clearinghouse & Micro-Payment Tools
-6. `fetch_with_auto_guard` — Fetch any URL with automated schema verification and response validation.
-7. `simulate_escrow_settlement` — Dry-run an x402 clearing settlement with seller score check.
-8. `get_seller_trust_score` — Retrieve reputation and attestation history for any x402 seller.
-9. `register_seller_gateway` — Create a 1-click x402 paywall gateway.
-10. `get_escrow_status` — Check status of an x402 escrow hold.
-11. `query_market_oracle` — Query verified real-time pricing feeds with attestation receipts.
-12. `check_wallet_risk` — Query AML/Sybil risk score for any EVM wallet.
-13. `verify_response_data` — Validate arbitrary JSON data against a JSON schema.
+### x402 Discovery, Bazaar Oracles, Escrow & Reputation Tools
+6. `nullclear_discover_verified_x402_apis` — Search NullClear's live ecosystem directory for audited high-uptime x402 endpoints and Zero-Loss Proxy URLs.
+7. `nullclear_token_security_audit` — Base Mainnet ERC-20 token security audit with signed Bazaar clearing receipt ($0.01 USDC / 10 free trials/day).
+8. `nullclear_wallet_risk_score` — Base Mainnet `0x` wallet OFAC sanctions, Sybil concentration, and ERC-8004 profile ($0.01 USDC / 10 free trials/day).
+9. `nullclear_crypto_market_oracle` — Spread-verified spot price oracle (Coinbase + Binance) with invariant attestation ($0.01 USDC / 10 free trials/day).
+10. `nullclear_safe_fetch` — Auto-guarded HTTP JSON/API fetcher blocking 5xx crashes, soft-paywalls, and Canonical LLM Refusals ($0.01 USDC / 10 free trials/day).
+11. `nullclear_escrow_x402_call` — Execute paid x402 requests through deferred non-custodial EIP-3009 schema escrow, deep invariants, failover & spend caps.
+12. `nullclear_check_reputation` — Inspect an ERC-8004 numeric `agentId` composite trust score, grade, and Sybil wash-trading flags.
+13. `nullclear_verify_kya_mandate` — Verify a Know Your Agent (KYA) EIP-712 corporate liability mandate and per-transaction limits.
 
 ---
 
@@ -98,12 +98,12 @@ NullClear is the definitive **Zero-Registration On-Chain Forensic Oracle, Proxy-
 npx -y @smithery/cli install @nullclear/mcp --client claude
 ```
 
-### 4. Zero-Install Remote HTTP SSE (Cursor / OpenCode / Windsurf)
+### 4. Zero-Install Remote Streamable HTTP (Claude Code / Cursor / OpenCode / Windsurf)
 ```json
 {
   "mcpServers": {
     "nullclear-remote": {
-      "url": "https://nullclear.dev/mcp"
+      "url": "https://api.nullclear.dev/mcp"
     }
   }
 }

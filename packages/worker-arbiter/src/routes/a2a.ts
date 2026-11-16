@@ -12,7 +12,7 @@ function getExtendedCard(c: any) {
 
   return {
     name: "NullClear Arbiter",
-    version: "1.1.2",
+    version: "1.4.0",
     protocolVersion: "0.2.1",
     url: "https://api.nullclear.dev/a2a",
     documentationUrl: "https://api.nullclear.dev/agents.md",

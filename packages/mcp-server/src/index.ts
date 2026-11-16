@@ -19,7 +19,7 @@ const client = new NullClearClient({ arbiterUrl: ARBITER_URL });
 const server = new Server(
   {
     name: "nullclear-mcp-server",
-    version: "1.3.0"
+    version: "1.4.0"
   },
   {
     capabilities: {
@@ -113,9 +113,9 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       {
         name: "scan_token_forensics",
         description:
-          "[ZERO API KEY REQUIRED] Block-pinned on-chain security, EIP-1967/1822 proxy resolution, instruction-boundary opcode disassembly, honeypot, and buy/sell tax audit for Base, Ethereum (ETH), or Solana tokens. Includes cross-chain self-healing auto-detection and <400-token deterministic provenance receipt (100 free calls/day/IP).",
+          "Perform a free multi-chain (Base, Ethereum, Solana) token security, EIP-1967 proxy resolution, honeypot, and buy/sell tax audit. Use this as the primary pre-trade check for any token or contract (100 free calls/day/IP, zero API key; then $0.005 USDC). Returns score, verdict, recommendedAgentAction, proxy implementation, tax percentages, LP USD, and provenance block number (<400 tokens). Do NOT use for low-level 4-byte selector disassembly on non-token contracts (use inspect_contract_abi_and_proxy) or when an EIP-712 Bazaar payment receipt is explicitly required on Base ERC-20 tokens (use nullclear_token_security_audit).",
         annotations: {
-          title: "Block-Pinned Token & Proxy Forensic Scanner (Zero API Key)",
+          title: "Multi-Chain Token Security & Proxy Scanner (Free)",
           readOnlyHint: true,
           destructiveHint: false,
           idempotentHint: true,
@@ -127,13 +127,13 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           properties: {
             address: {
               type: "string",
-              description: "Token or smart contract address (0x... for Base/ETH or base58 mint for Solana)",
+              description: "Token or contract address (0x-prefixed 42-char EVM hex for Base/ETH, or Base58 mint address for Solana)",
               default: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
             },
             chain: {
               type: "string",
               enum: ["base", "eth", "solana"],
-              description: "Target blockchain ('base', 'eth', or 'solana'). Auto-heals if deployed on alternate chain.",
+              description: "Target blockchain network ('base', 'eth', or 'solana'); auto-detects if address exists on an alternate supported chain",
               default: "base"
             }
           }
@@ -142,9 +142,9 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       {
         name: "inspect_contract_abi_and_proxy",
         description:
-          "[ZERO API KEY REQUIRED] Resolves EIP-1967, EIP-1822, and EIP-1167 proxy implementation addresses via eth_getStorageAt and extracts decoded 4-byte PUSH4 function selectors and dangerous opcodes (SELFDESTRUCT / DELEGATECALL) directly from on-chain bytecode without an Etherscan or Basescan API key.",
+          "Disassemble deployed EVM bytecode on Base or Ethereum to resolve EIP-1967/1822/1167 proxies and extract decoded 4-byte PUSH4 function selectors without an Etherscan key. Use this for arbitrary smart contracts (vaults, routers, pools) to inspect proxy admin/implementation slots and SELFDESTRUCT/DELEGATECALL opcodes (100 free calls/day/IP). Returns isProxy, proxyType, implementationAddress, decodedFunctions, and dangerousSelectorsFound. Do NOT use for token market liquidity/honeypot tax audits (use scan_token_forensics).",
         annotations: {
-          title: "Proxy Implementation & 4-Byte Selector Disassembler (Zero API Key)",
+          title: "EVM Proxy Slot & Bytecode Selector Disassembler (Free)",
           readOnlyHint: true,
           destructiveHint: false,
           idempotentHint: true,
@@ -156,13 +156,13 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           properties: {
             address: {
               type: "string",
-              description: "Smart contract address (0x...) on Base or Ethereum",
+              description: "0x-prefixed 42-char EVM smart contract address on Base or Ethereum",
               default: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
             },
             chain: {
               type: "string",
               enum: ["base", "eth"],
-              description: "Target EVM chain ('base' or 'eth')",
+              description: "Target EVM chain ('base' for Base Mainnet 8453 or 'eth' for Ethereum Mainnet 1)",
               default: "base"
             }
           }
@@ -171,9 +171,9 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       {
         name: "decode_calldata_or_failed_tx",
         description:
-          "[ZERO API KEY REQUIRED] Universal Calldata, Custom Revert Error & Failed Transaction Post-Mortem Decoder. Accepts raw hex calldata/revert bytes (0x...) OR a 66-char transaction hash (0x...), replays reverted transactions at their exact block, decodes 4-byte signatures & parameters, and flags malicious approvals (approve / permit / setApprovalForAll).",
+          "Decode existing hex calldata, custom Solidity revert bytes, or a mined transaction hash to explain historical failures and flag malicious approvals. Use this AFTER a transaction failed or when auditing opaque 0x calldata bytes before signing (100 free calls/day/IP). Returns decoded 4-byte function signature, argument breakdown, revert reason, and approval-drainer warnings. Do NOT use to dry-run an unsigned transaction against live chain state (use simulate_transaction_preflight instead).",
         annotations: {
-          title: "Calldata, Revert Error & Failed Tx Decoder (Zero API Key)",
+          title: "Historical Calldata, Revert & Failed Tx Decoder (Free)",
           readOnlyHint: true,
           destructiveHint: false,
           idempotentHint: true,
@@ -185,12 +185,12 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           properties: {
             input: {
               type: "string",
-              description: "Raw hex calldata/revert error (0x...) OR 66-char transaction hash (0x...)"
+              description: "0x-prefixed raw hex calldata/revert bytes OR a 66-character mined transaction hash to replay"
             },
             chain: {
               type: "string",
               enum: ["base", "eth"],
-              description: "EVM chain ('base' or 'eth', default 'base')",
+              description: "Target EVM chain ('base' or 'eth', default 'base')",
               default: "base"
             }
           }
@@ -199,9 +199,9 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       {
         name: "simulate_transaction_preflight",
         description:
-          "[ZERO API KEY REQUIRED] Pre-flight EVM transaction simulator. Dry-runs eth_call + eth_estimateGas on Base or Ethereum before signing/broadcasting, decodes any custom revert reason, detects unlimited drainer approvals, and outputs recommendedAgentAction ('EXECUTE_SAFE', 'ABORT_WILL_REVERT', or 'ABORT_DRAINER_APPROVAL').",
+          "Execute a live eth_call and eth_estimateGas dry-run on Base or Ethereum BEFORE signing or broadcasting an unsigned transaction. Use this immediately before wallet execution when you have target `to` + `data` and need to confirm whether the call will succeed, estimate gas, and verify allowance safety (100 free calls/day/IP). Returns simulation success, gas estimate, decoded revert reason if any, and recommendedAgentAction. Do NOT use for standalone hex bytes without `to` or past mined tx hashes (use decode_calldata_or_failed_tx).",
         annotations: {
-          title: "Pre-Flight EVM Transaction Simulator (Zero API Key)",
+          title: "Pre-Flight EVM eth_call Transaction Simulator (Free)",
           readOnlyHint: true,
           destructiveHint: false,
           idempotentHint: true,
@@ -219,20 +219,20 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
             },
             from: {
               type: "string",
-              description: "Sender 0x address for simulation"
+              description: "Sender 0x EVM address whose balance/allowance context will be simulated"
             },
             to: {
               type: "string",
-              description: "Target contract 0x address"
+              description: "Destination 0x smart contract or recipient address"
             },
             data: {
               type: "string",
-              description: "Hex calldata (0x...)",
+              description: "0x-prefixed hex calldata payload for the simulated call",
               default: "0x"
             },
             value: {
               type: "string",
-              description: "Hex or wei value to send (default '0x0')",
+              description: "Native wei amount as hex ('0x0') or decimal string",
               default: "0x0"
             }
           }
@@ -241,9 +241,9 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       {
         name: "read_url_clean_markdown",
         description:
-          "[ZERO API KEY REQUIRED] Converts any public web URL or documentation page into clean, token-efficient Markdown (<400 tokens) with cryptographic SHA-256 provenance and zero HTML clutter.",
+          "Fetch and convert any public web documentation URL or HTML article into clean, stripped Markdown (<400 tokens) with a SHA-256 content hash. Use this when reading documentation, blog posts, or web pages while minimizing context-window noise (100 free calls/day/IP). Returns markdown body and provenance hash. Do NOT use for JSON REST APIs or schema-enforced x402 data endpoints needing LLM-refusal/5xx protection (use nullclear_safe_fetch or nullclear_escrow_x402_call).",
         annotations: {
-          title: "Clean Markdown URL Reader (Zero API Key)",
+          title: "HTML Documentation to Clean Markdown Reader (Free)",
           readOnlyHint: true,
           destructiveHint: false,
           idempotentHint: true,
@@ -255,7 +255,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           properties: {
             url: {
               type: "string",
-              description: "Public HTTPS URL or documentation page to convert into clean Markdown"
+              description: "Public HTTPS webpage or documentation URL to extract into clean Markdown"
             }
           }
         }
@@ -263,9 +263,9 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       {
         name: "nullclear_discover_verified_x402_apis",
         description:
-          "Search the live NullClear Ecosystem Directory for audited, high-uptime x402 & ERC-8004 APIs by topic/keyword, category, minimum uptime, or max latency. Automatically returns the NullClear-protected Zero-Loss Proxy URL ('https://api.nullclear.dev/https://...') for each endpoint.",
+          "Search NullClear's audited x402 and ERC-8004 endpoint directory by keyword, category, minimum uptime, and maximum latency. Use this before paying external x402 sellers to find reliable APIs and retrieve their NullClear Zero-Loss Proxy URL (`https://api.nullclear.dev/https://...`). Returns matched endpoints with priceAtomic, uptimeScore, latencyMs, and proxy URL. Do NOT use to execute a call (pass the returned URL to nullclear_escrow_x402_call).",
         annotations: {
-          title: "Discover Verified High-Uptime x402 APIs",
+          title: "Search Audited x402 & ERC-8004 API Directory",
           readOnlyHint: true,
           destructiveHint: false,
           idempotentHint: true,
@@ -276,25 +276,25 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           properties: {
             query: {
               type: "string",
-              description: "Topic or keyword search (e.g. 'oracle', 'security', 'token', 'wallet', 'price')"
+              description: "Keyword filter matching endpoint URL or description (e.g. 'oracle', 'security', 'token', 'wallet')"
             },
             category: {
               type: "string",
-              description: "Category filter (e.g. 'oracle', 'security', 'data', 'ai')"
+              description: "Exact category filter ('oracle', 'security', 'data', or 'ai')"
             },
             minUptime: {
               type: "number",
-              description: "Minimum rolling uptime score percentage (0-100, default 95)",
+              description: "Minimum rolling uptime percentage threshold from 0 to 100 (default 95)",
               default: 95
             },
             maxLatencyMs: {
               type: "number",
-              description: "Maximum acceptable edge round-trip latency in ms (default 2000)",
+              description: "Maximum acceptable edge round-trip latency in milliseconds (default 2000)",
               default: 2000
             },
             verifiedOnly: {
               type: "boolean",
-              description: "Only return verified x402 endpoints (default true)",
+              description: "When true, filter exclusively to canary-verified HTTP 402 endpoints (default true)",
               default: true
             }
           }
@@ -303,9 +303,9 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       {
         name: "nullclear_token_security_audit",
         description:
-          "Audit any Base ERC-20 token address for honeypots, buy/sell taxes, verified bytecode, and x402 compatibility via NullClear Bazaar. Works out-of-the-box with zero configuration (10 free daily calls included).",
+          "Run NullClear's x402 Bazaar paid oracle for Base Mainnet (8453) ERC-20 tokens returning a cryptographically signed clearing receipt (10 free trial calls/day, then $0.01 USDC). Use this ONLY when you specifically require a Base Bazaar EIP-712/keccak256 settlement receipt alongside token LP and bytecode verification. For free (100/day) multi-chain Base/ETH/Solana token & proxy scanning, use scan_token_forensics instead.",
         annotations: {
-          title: "Base Token Honeypot & Security Audit",
+          title: "Base Token x402 Bazaar Attested Audit ($0.01)",
           readOnlyHint: true,
           destructiveHint: false,
           idempotentHint: true,
@@ -317,7 +317,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           properties: {
             tokenAddress: {
               type: "string",
-              description: "Base ERC-20 token contract address (e.g. '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913' for USDC)",
+              description: "0x-prefixed Base Mainnet (chain 8453) ERC-20 token contract address",
               default: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
             }
           }
@@ -326,9 +326,9 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       {
         name: "nullclear_wallet_risk_score",
         description:
-          "Check any wallet or agent address on Base for OFAC sanctions, Sybil wash-trading concentration flags, and ERC-8004 counterparty reputation. Works out-of-the-box with zero configuration (10 free daily calls included).",
+          "Profile a raw 0x EVM wallet address on Base Mainnet (8453) for OFAC sanctions exposure, on-chain counterparty wash-trade concentration, ETH/USDC balances, transaction count, and ERC-8004 ownership (10 free trials/day, then $0.01 USDC). Returns riskScore (0-100), riskLevel, and ERC-8004 registration status. Do NOT pass a numeric ERC-8004 agent ID here — use nullclear_check_reputation for numeric agentId trust audits.",
         annotations: {
-          title: "Wallet & Agent Sanctions / Sybil Risk Score",
+          title: "0x Wallet Address Sanctions & Sybil Profiler ($0.01)",
           readOnlyHint: true,
           destructiveHint: false,
           idempotentHint: true,
@@ -340,11 +340,11 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           properties: {
             walletAddress: {
               type: "string",
-              description: "0x wallet address or ERC-8004 agent ID to inspect"
+              description: "0x-prefixed 42-char EVM wallet address on Base Mainnet to screen"
             },
             chainId: {
               type: "number",
-              description: "Base chain ID (default 8453)",
+              description: "EVM chain ID (default 8453 for Base Mainnet)",
               default: 8453
             }
           }
@@ -353,9 +353,9 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       {
         name: "nullclear_crypto_market_oracle",
         description:
-          "Fetch multi-exchange spread-verified crypto spot prices (ETH/USDC, BTC/USDC, SOL/USDC, BASE/USDC) with cryptographic NullClear invariant receipts. Works out-of-the-box with zero configuration (10 free daily calls included).",
+          "Query cross-exchange spot prices (Coinbase + Binance) for major crypto pairs with deterministic positive-price invariant verification and signed attestation (10 free trials/day, then $0.01 USDC). Returns priceUsd, source, invariantCheck ('PASSED'), and execution receipt. Use this whenever a verified non-hallucinated crypto spot price feed is needed.",
         annotations: {
-          title: "Spread-Verified Crypto Market Price Oracle",
+          title: "Spread-Verified Crypto Spot Price Oracle ($0.01)",
           readOnlyHint: true,
           destructiveHint: false,
           idempotentHint: true,
@@ -367,7 +367,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           properties: {
             pair: {
               type: "string",
-              description: "Trading pair symbol (e.g. 'ETH/USDC', 'BTC/USDC', 'SOL/USDC')",
+              description: "Asset ticker or pair such as 'ETH/USDC', 'BTC/USDC', 'SOL/USDC', or 'ETH-USD'",
               default: "ETH/USDC"
             }
           }
@@ -376,9 +376,9 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       {
         name: "nullclear_safe_fetch",
         description:
-          "Zero-config drop-in URL fetcher with automatic Canonical LLM Refusal Guard, HTTP 5xx crash guard, empty-JSON guard, and cryptographic execution receipt. Protects agents from hallucinated or broken API responses.",
+          "Execute a zero-schema Auto-Guarded HTTP GET/POST request through NullClear's firewall against HTTP 5xx crashes, empty JSON bodies, Cloudflare/soft-paywall traps, and LLM refusal strings (10 free trials/day, then $0.01 USDC via Bazaar). Returns verified payload and executionReceipt, or voids settlement on failure. Do NOT use for plain HTML docs-to-Markdown conversion (use read_url_clean_markdown) or when custom JSON Schema/invariants/failover are needed (use nullclear_escrow_x402_call).",
         annotations: {
-          title: "Auto-Guarded URL Fetcher (Zero Schema Required)",
+          title: "Auto-Guarded JSON/API Safe HTTP Fetch ($0.01)",
           readOnlyHint: true,
           destructiveHint: false,
           idempotentHint: true,
@@ -390,16 +390,17 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           properties: {
             url: {
               type: "string",
-              description: "Target HTTPS URL to fetch and verify through NullClear Auto-Guard"
+              description: "Public HTTPS API or data endpoint URL to fetch with automatic crash, paywall, and refusal guards"
             },
             method: {
               type: "string",
               enum: ["GET", "POST"],
+              description: "HTTP method ('GET' or 'POST', default 'GET')",
               default: "GET"
             },
             body: {
               type: "string",
-              description: "Optional JSON string body for POST requests"
+              description: "Optional serialized JSON request body string for POST requests"
             }
           }
         }
@@ -407,9 +408,9 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       {
         name: "nullclear_escrow_x402_call",
         description:
-          "Execute an x402-gated HTTP API call through NullClear deferred schema escrow. The arbiter guarantees payment is only settled if upstream returns valid data matching your schema contract. Works out-of-the-box with 10 free daily trial calls before requiring NULLCLEAR_PRIVATE_KEY.",
+          "Execute a paid x402 API request protected by NullClear deferred non-custodial EIP-3009 escrow, custom JSON Schema/value invariants, multi-seller failover routing, and outbound spend caps (10 free trials/day, then requires configured wallet key). Settles upstream payment ONLY when all schema, numeric, staleness, and refusal checks pass; otherwise voids authorization ($0 lost). Use this instead of nullclear_safe_fetch whenever calling third-party x402 paid APIs with strict output contracts or fallback sellers.",
         annotations: {
-          title: "Execute Escrowed x402 Call with Invariants",
+          title: "Deferred x402 Escrow Call with Schema & Failover",
           readOnlyHint: false,
           destructiveHint: false,
           idempotentHint: false,
@@ -421,39 +422,40 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           properties: {
             targetUrl: {
               type: "string",
-              description: "Upstream API endpoint demanding x402 payment"
+              description: "Primary upstream HTTPS endpoint demanding HTTP 402 payment"
             },
             method: {
               type: "string",
               enum: ["GET", "POST", "PUT", "DELETE"],
+              description: "HTTP method for upstream call",
               default: "GET"
             },
             sellerAgentId: {
               type: "string",
-              description: "Seller's agent ID for reputation check and Sybil wash-trade gating"
+              description: "ERC-8004 seller agent ID for pre-flight trust and Sybil gating"
             },
             minTrustScore: {
               type: "number",
-              description: "Minimum acceptable trust score for seller (0-100, default 50)",
+              description: "Minimum seller trust score (0-100, default 50)",
               default: 50
             },
             requiredFields: {
               type: "array",
               items: { type: "string" },
-              description: "Dot-notation field paths that must exist in response (e.g. ['data.price'])"
+              description: "Dot-notation field paths that must exist in upstream JSON (e.g. ['data.price'])"
             },
             jsonSchema: {
               type: "object",
-              description: "JSON Schema draft-07 contract that response must strictly satisfy"
+              description: "JSON Schema Draft-07 object that upstream JSON must strictly satisfy"
             },
             invariants: {
               type: "array",
-              description: "Deep value invariants (numeric bounds, regex, forbidden substrings, timestamp freshness)",
+              description: "Field-level semantic invariants (numeric bounds, regex, forbidden substrings, timestamp freshness)",
               items: {
                 type: "object",
                 required: ["path"],
                 properties: {
-                  path: { type: "string", description: "Dot-notation property path" },
+                  path: { type: "string", description: "Dot-notation JSON property path" },
                   gt: { type: "number" },
                   gte: { type: "number" },
                   lt: { type: "number" },
@@ -470,12 +472,12 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
             },
             rejectRefusals: {
               type: "boolean",
-              description: "Reject canonical LLM refusal strings (default: true)",
+              description: "Void settlement if response contains canonical LLM refusal strings (default true)",
               default: true
             },
             fallbacks: {
               type: "array",
-              description: "Ordered fallback candidates for autonomous multi-seller failover routing (max 3)",
+              description: "Up to 3 ordered backup seller objects ({ targetUrl, sellerAgentId, paymentSignatureHeader }) for automatic failover",
               items: {
                 type: "object",
                 required: ["targetUrl", "paymentSignatureHeader"],
@@ -489,7 +491,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
             },
             spendPolicy: {
               type: "object",
-              description: "Outbound spend firewall limits (maxPerCallAtomic, maxDailyWalletAtomic)",
+              description: "Outbound spend firewall caps ({ maxPerCallAtomic, maxDailyWalletAtomic })",
               properties: {
                 maxPerCallAtomic: { type: "string", description: "Max atomic USDC spend allowed per call" },
                 maxDailyWalletAtomic: { type: "string", description: "Max rolling daily atomic USDC spend allowed" }
@@ -497,7 +499,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
             },
             buyerPrivateKey: {
               type: "string",
-              description: "Optional buyer private key (defaults to Sponsored Free Tier, then NULLCLEAR_PRIVATE_KEY)"
+              description: "Optional buyer 0x private key overriding default Sponsored Free Trial or NULLCLEAR_PRIVATE_KEY"
             }
           }
         }
@@ -505,9 +507,9 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       {
         name: "nullclear_check_reputation",
         description:
-          "Inspect an AI agent's trust score (0-100), clearing reliability, Sybil wash-trade penalty flags, and corporate KYA backing on Base",
+          "Retrieve an ERC-8004 registered agent's composite trust score (0-100), letter grade (A-F), historical clearing count, and Sybil wash-trading penalty flags by numeric agentId. Returns arbiter-signed reputation metrics and sybilFlags. Use this ONLY for registered ERC-8004 agent IDs (e.g. '124595'); for raw 0x wallet address OFAC/balance profiling use nullclear_wallet_risk_score, and for legal corporate liability limits use nullclear_verify_kya_mandate.",
         annotations: {
-          title: "Inspect AI Agent Trust & Sybil Score",
+          title: "Check ERC-8004 AgentId Trust & Sybil Score",
           readOnlyHint: true,
           destructiveHint: false,
           idempotentHint: true,
@@ -519,11 +521,11 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           properties: {
             agentId: {
               type: "string",
-              description: "The ERC-8004 agent token ID or registered identifier (e.g. '124595')"
+              description: "Registered numeric ERC-8004 agent token ID (e.g. '124595')"
             },
             chainId: {
               type: "number",
-              description: "Base chain ID (8453 for Mainnet, 84532 for Sepolia)",
+              description: "Target EVM chain ID (8453 for Base Mainnet, 84532 for Base Sepolia)",
               default: 8453
             }
           }
@@ -532,9 +534,9 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       {
         name: "nullclear_verify_kya_mandate",
         description:
-          "Verify an agent's Know Your Agent (KYA) corporate liability mandate, active validity, and whether a proposed transaction amount is within corporate limits",
+          "Verify an autonomous agent's Know Your Agent (KYA) EIP-712 corporate liability mandate, jurisdiction, expiration status, and whether a proposed USD transaction amount complies with corporate per-transaction caps. Returns approved boolean, corporateEntity, liabilityCoverageUsd, maxTxLimitUsd, and expiration/limit flags. Use this specifically for corporate authorization checks — not for on-chain Sybil scoring (use nullclear_check_reputation).",
         annotations: {
-          title: "Verify Corporate KYA Mandate & Limits",
+          title: "Verify Corporate KYA Liability Mandate & Caps",
           readOnlyHint: true,
           destructiveHint: false,
           idempotentHint: true,
@@ -546,16 +548,16 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           properties: {
             agentId: {
               type: "string",
-              description: "The ERC-8004 agent token ID"
+              description: "Registered numeric ERC-8004 agent token ID bound to a KYA mandate"
             },
             chainId: {
               type: "number",
-              description: "Base chain ID (default 8453)",
+              description: "EVM chain ID (default 8453 for Base Mainnet)",
               default: 8453
             },
             transactionAmountUsd: {
               type: "number",
-              description: "Amount in USD intended to spend in the transaction"
+              description: "Proposed transaction size in USD to validate against the mandate limit"
             }
           }
         }

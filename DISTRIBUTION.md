@@ -117,40 +117,51 @@ Submit to the x402 ecosystem directory repository or ecosystem index:
 
 ## 4. MCP Server Registries (Official MCP Registry, Smithery.ai, Glama.ai)
 
-The NullClear Model Context Protocol server is packaged as [`@nullclear/mcp`](https://www.npmjs.com/package/@nullclear/mcp) and configured via [`server.json`](./server.json).
+The NullClear Model Context Protocol server (`v1.4.0`) is packaged as [`@nullclear/mcp`](https://www.npmjs.com/package/@nullclear/mcp), hosted over Streamable HTTP at `https://api.nullclear.dev/mcp`, and configured via [`server.json`](./server.json), [`smithery.json`](./smithery.json), and [`glama.json`](./glama.json) (plus `https://api.nullclear.dev/.well-known/glama.json`, `/.well-known/mcp.json`, and `/.well-known/mcp/server-card.json`).
 
 ### Official MCP Registry (`modelcontextprotocol/registry`)
-Submit a PR adding `dev.nullclear/mcp` to the official registry pointing to:
-- Package: `@nullclear/mcp`
-- Executable: `nullclear-mcp`
-- Config file: `packages/mcp-server/server.json`
+Publish `io.github.Nullclear-Protocol/nullclear` (`v1.4.0`) via `mcp-publisher` using [`server.json`](./server.json) pointing to:
+- Remote Streamable HTTP: `https://api.nullclear.dev/mcp`
+- npm Package: `@nullclear/mcp` (`1.4.0`, binary: `nullclear-mcp`)
+- Config file: `server.json` / `packages/mcp-server/server.json`
 
-### Smithery.ai Installation & Indexing
-Autonomous agents and Claude Desktop users can install NullClear instantly via Smithery:
+### Glama.ai & Smithery.ai Installation & Indexing
+- **Glama (`Nullclear-Protocol/nullclear`):** Reads [`glama.json`](./glama.json) and `https://api.nullclear.dev/.well-known/glama.json`.
+- **Smithery.ai:** Reads [`smithery.json`](./smithery.json) (`https://api.nullclear.dev/mcp`). Users can also run locally:
 ```bash
-npx -y @smithery/cli install @nullclear/mcp --client claude
+npx -y @nullclear/mcp@1.4.0
 ```
 
-### Direct Claude Desktop Configuration (`claude_desktop_config.json`)
+### Direct Claude Desktop / Cursor Configuration (`claude_desktop_config.json`)
 ```json
 {
   "mcpServers": {
     "nullclear": {
       "command": "npx",
-      "args": ["-y", "@nullclear/mcp"],
+      "args": ["-y", "@nullclear/mcp@1.4.0"],
       "env": {
         "BUYER_PRIVATE_KEY": "<OPTIONAL_AGENT_PRIVATE_KEY_FOR_PAYMENTS>",
-        "ARBITER_URL": "https://nullclear.dev"
+        "ARBITER_URL": "https://api.nullclear.dev"
       }
     }
   }
 }
 ```
 
-### Exposed MCP Tools
-1. **`nullclear_check_reputation`**: Check any agent's on-chain ERC-8004 identity, composite trust score (0-100), letter grade (A-F), and Sybil wash-trading flags.
-2. **`nullclear_escrow_x402_call`**: Call any x402 paid endpoint with automatic EIP-3009 payment escrow and JSON schema verification.
-3. **`nullclear_verify_kya_mandate`**: Check an agent's corporate liability mandate and legally binding spending caps.
+### Exposed MCP Tools (13 Tools, v1.4.0)
+1. **`scan_token_forensics`**: Free-tier multi-oracle Base/ETH/Solana token & rug-pull audit (`GET /v1/scan/:chain/:address`).
+2. **`inspect_contract_abi_and_proxy`**: EVM proxy slot (`EIP-1967`/`EIP-1822`) and bytecode function selector extractor (`GET /v1/inspect/:chain/:address`).
+3. **`decode_calldata_or_failed_tx`**: Decode hex calldata and detect drainer approvals (`POST /v1/decode`).
+4. **`simulate_transaction_preflight`**: Dry-run `eth_call` & gas estimation before signing (`POST /v1/simulate`).
+5. **`read_url_clean_markdown`**: Token-efficient HTML-to-Markdown readability scraper (`GET /v1/clean-markdown`).
+6. **`nullclear_discover_verified_x402_apis`**: Query live x402 API directory & trust ratings (`GET /v1/radar/directory`).
+7. **`nullclear_token_security_audit`**: Paid `$0.01` x402 Bazaar real-time token audit (`GET /v1/bazaar/audit`).
+8. **`nullclear_wallet_risk_score`**: Paid `$0.01` x402 Bazaar wallet risk & wash-trade screen (`GET /v1/bazaar/score`).
+9. **`nullclear_crypto_market_oracle`**: Paid `$0.01` x402 Bazaar live price/liquidity oracle (`GET /v1/bazaar/oracle`).
+10. **`nullclear_safe_fetch`**: Paid `$0.01` x402 Bazaar JSON-verified clean web fetch (`GET /v1/bazaar/fetch`).
+11. **`nullclear_escrow_x402_call`**: Execute any external x402 paid API via NullClear escrow & schema refund protection.
+12. **`nullclear_check_reputation`**: Look up an AI agent's ERC-8004 reputation score & grade (`GET /v1/score/:agentId`).
+13. **`nullclear_verify_kya_mandate`**: Verify an agent's KYA EIP-712 corporate spending mandate (`POST /v1/kya/verify`).
 
 ---
 

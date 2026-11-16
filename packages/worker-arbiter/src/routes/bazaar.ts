@@ -868,7 +868,12 @@ async function handleBazaarPayment(
     };
   }
 
-  const parsedAuth = extractPaymentAuthorization(c.req);
+  let parsedAuth = null;
+  try {
+    parsedAuth = extractPaymentAuthorization(c.req);
+  } catch {
+    parsedAuth = null;
+  }
   if (!parsedAuth || !parsedAuth.from || !parsedAuth.signature) {
     const paymentReqHeader = createPaymentRequiredHeader(
       resourcePath,
@@ -939,6 +944,7 @@ async function handleBazaarPayment(
   const facilitatorUrl = c.env?.FACILITATOR_URL || "https://facilitator.payai.network";
   const rpcUrl = c.env?.BASE_MAINNET_RPC_URL || c.env?.BASE_RPC_URL || "https://mainnet.base.org";
 
+  const resourceUrl = `https://api.nullclear.dev${resourcePath}`;
   const settlement = await settleTransfer({
     authorization: {
       from: authorization.from,
@@ -960,7 +966,13 @@ async function handleBazaarPayment(
     settlementMode: "facilitator",
     arbiterPrivateKey: c.env?.ARBITER_PRIVATE_KEY,
     rpcUrl,
-    environment: c.env?.ENVIRONMENT || "production"
+    environment: c.env?.ENVIRONMENT || "production",
+    resource: {
+      url: resourceUrl,
+      description,
+      mimeType: "application/json"
+    },
+    bazaarExtension
   });
 
   if (!settlement.success || !settlement.transaction) {
@@ -1709,6 +1721,18 @@ bazaarRouter.get("/", async (c) => {
       sellerAddress: NULLCLEAR_TREASURY_ADDRESS,
       category: "security",
       description: BAZAAR_AUDIT_EXTENSION.description
+    },
+    {
+      id: "bazaar-verify",
+      slug: "verify",
+      path: "/v1/bazaar/verify",
+      url: "https://api.nullclear.dev/v1/bazaar/verify",
+      method: "POST",
+      priceAtomic: "10000",
+      priceUsdc: "0.01",
+      sellerAddress: NULLCLEAR_TREASURY_ADDRESS,
+      category: "ai",
+      description: BAZAAR_VERIFY_EXTENSION.description
     }
   ];
 

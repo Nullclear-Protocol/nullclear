@@ -12,6 +12,7 @@ import {
 } from "@nullclear/shared";
 import app from "../src/index.js";
 import { getArbiterStore } from "../src/env.js";
+import { syncBaseEip3009Logs } from "../src/services/base-eip3009-indexer.js";
 
 describe("NullClear Worker Arbiter Test Suite", () => {
   let mockServer: http.Server;
@@ -811,13 +812,13 @@ describe("NullClear Worker Arbiter Test Suite", () => {
   });
 
   // 21. Health Check Endpoint
-  it("GET /health returns 200 with status ok and version 1.1.2", async () => {
+  it("GET /health returns 200 with status ok and version 1.4.0", async () => {
     const res = await app.fetch(new Request("http://localhost/health"), testEnv);
     expect(res.status).toBe(200);
     const json = (await res.json()) as any;
     expect(json.status).toBe("ok");
     expect(json.protocol).toBe("NullClear");
-    expect(json.version).toBe("1.1.2");
+    expect(json.version).toBe("1.4.0");
   });
 
   // 22. Live Sandbox 402 Seller Endpoints & Public Stats
@@ -2259,6 +2260,317 @@ describe("NullClear Worker Arbiter Test Suite", () => {
     expect(toolContent.recommendedAgentAction).toBe("EXECUTE_SAFE");
     expect(toolContent.llmDigest).toContain("VERIFIED CLEAR");
     expect(toolContent.provenance.blockNumber).toBeGreaterThan(0);
+  });
+
+  // 34. Regression tests: Nov 2 settlement_pending recovery, error hardening, registry metadata, paid forensics, indexer guard
+  async function withLocalServer(
+    handler: http.RequestListener,
+    fn: (baseUrl: string) => Promise<void>
+  ) {
+    const srv = http.createServer(handler);
+    await new Promise<void>((resolve) => srv.listen(0, "127.0.0.1", () => resolve()));
+    const { port } = srv.address() as { port: number };
+    try {
+      await fn(`http://127.0.0.1:${port}`);
+    } finally {
+      await new Promise<void>((resolve) => srv.close(() => resolve()));
+    }
+  }
+
+  it("recovers PayAI settlement_pending + broadcast txHash via on-chain receipt and emits Bazaar extension metadata", async () => {
+    const pendingTxHash = ("0x" + "ab".repeat(32)) as `0x${string}`;
+    let capturedSettleBody: any = null;
+
+    await withLocalServer(async (req, res) => {
+      const chunks: Buffer[] = [];
+      for await (const chunk of req) chunks.push(chunk as Buffer);
+      if (req.url === "/settle") {
+        capturedSettleBody = JSON.parse(Buffer.concat(chunks).toString("utf8"));
+        res.writeHead(200, { "Content-Type": "application/json" });
+        res.end(
+          JSON.stringify({
+            success: false,
+            errorReason: "settlement_pending",
+            transaction: pendingTxHash
+          })
+        );
+        return;
+      }
+      res.writeHead(404).end();
+    }, async (facUrl) => {
+      await withLocalServer(async (req, res) => {
+        const chunks: Buffer[] = [];
+        for await (const chunk of req) chunks.push(chunk as Buffer);
+        const rpcReq = JSON.parse(Buffer.concat(chunks).toString("utf8"));
+        res.writeHead(200, { "Content-Type": "application/json" });
+        if (rpcReq.method === "eth_getTransactionReceipt") {
+          res.end(
+            JSON.stringify({
+              jsonrpc: "2.0",
+              id: rpcReq.id,
+              result: { status: "0x1", transactionHash: pendingTxHash }
+            })
+          );
+          return;
+        }
+        res.end(JSON.stringify({ jsonrpc: "2.0", id: rpcReq.id, result: null }));
+      }, async (rpcUrl) => {
+        const sig = await createValidPaymentSignature(
+          "0xB586eFcCa41dF27ad3873BEcA54da0c30bf04d5c",
+          "10000"
+        );
+        const res = await app.fetch(
+          new Request("https://api.nullclear.dev/v1/bazaar/verify", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "PAYMENT-SIGNATURE": sig
+            },
+            body: JSON.stringify({
+              payload: { asset: "ETH", price: 2645.5 },
+              invariants: [{ path: "price", gt: 0 }]
+            })
+          }),
+          {
+            ...testEnv,
+            ENVIRONMENT: "production",
+            FACILITATOR_URL: facUrl,
+            BASE_MAINNET_RPC_URL: rpcUrl
+          }
+        );
+
+        expect(res.status).toBe(200);
+        const json = (await res.json()) as any;
+        expect(json.verified).toBe(true);
+        expect(capturedSettleBody?.paymentPayload?.resource?.url).toBe(
+          "https://api.nullclear.dev/v1/bazaar/verify"
+        );
+        expect(capturedSettleBody?.paymentPayload?.extensions?.bazaar).toBeDefined();
+        expect(capturedSettleBody?.serverExtensions?.bazaar).toBeDefined();
+
+        const paymentResHeader = res.headers.get("PAYMENT-RESPONSE");
+        expect(paymentResHeader).toBeTruthy();
+        const decodedRes = JSON.parse(Buffer.from(paymentResHeader!, "base64").toString("utf8"));
+        expect(decodedRes.transaction).toBe(pendingTxHash);
+
+        const statsRes = await app.fetch(new Request("https://api.nullclear.dev/v1/stats"), testEnv);
+        const statsJson = (await statsRes.json()) as any;
+        expect(statsJson.validSettlements).toBeGreaterThanOrEqual(1);
+      });
+    });
+  });
+
+  it("recovers PayAI HTTP 502 via on-chain AuthorizationUsed log lookup", async () => {
+    const recoveredTxHash = ("0x" + "cd".repeat(32)) as `0x${string}`;
+
+    await withLocalServer(async (req, res) => {
+      if (req.url === "/settle") {
+        res.writeHead(502, { "Content-Type": "text/plain" });
+        res.end("Bad Gateway");
+        return;
+      }
+      res.writeHead(404).end();
+    }, async (facUrl) => {
+      await withLocalServer(async (req, res) => {
+        const chunks: Buffer[] = [];
+        for await (const chunk of req) chunks.push(chunk as Buffer);
+        const rpcReq = JSON.parse(Buffer.concat(chunks).toString("utf8"));
+        res.writeHead(200, { "Content-Type": "application/json" });
+        if (rpcReq.method === "eth_blockNumber") {
+          res.end(JSON.stringify({ jsonrpc: "2.0", id: rpcReq.id, result: "0x32eee90" }));
+          return;
+        }
+        if (rpcReq.method === "eth_getLogs") {
+          const topics = rpcReq.params?.[0]?.topics || [];
+          const hit =
+            topics[0] ===
+            "0x98de503528ee59b575ef0c0a2576a82497bfc029a5685b209e9ec333479b10a5";
+          res.end(
+            JSON.stringify({
+              jsonrpc: "2.0",
+              id: rpcReq.id,
+              result: hit ? [{ transactionHash: recoveredTxHash }] : []
+            })
+          );
+          return;
+        }
+        res.end(JSON.stringify({ jsonrpc: "2.0", id: rpcReq.id, result: null }));
+      }, async (rpcUrl) => {
+        const sig = await createValidPaymentSignature(
+          "0xB586eFcCa41dF27ad3873BEcA54da0c30bf04d5c",
+          "10000"
+        );
+        const res = await app.fetch(
+          new Request("https://api.nullclear.dev/v1/bazaar/verify", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "PAYMENT-SIGNATURE": sig
+            },
+            body: JSON.stringify({
+              payload: { asset: "USDC", price: 1.0 },
+              invariants: [{ path: "price", gt: 0 }]
+            })
+          }),
+          {
+            ...testEnv,
+            ENVIRONMENT: "production",
+            FACILITATOR_URL: facUrl,
+            BASE_MAINNET_RPC_URL: rpcUrl
+          }
+        );
+
+        expect(res.status).toBe(200);
+        const paymentResHeader = res.headers.get("PAYMENT-RESPONSE");
+        expect(paymentResHeader).toBeTruthy();
+        const decodedRes = JSON.parse(Buffer.from(paymentResHeader!, "base64").toString("utf8"));
+        expect(decodedRes.transaction).toBe(recoveredTxHash);
+      });
+    });
+  });
+
+  it("handles malformed PAYMENT-SIGNATURE on GET/HEAD Bazaar routes as 402 and JSON null body on POST /v1/gateways as 400", async () => {
+    for (const method of ["GET", "HEAD"] as const) {
+      const res = await app.fetch(
+        new Request("https://api.nullclear.dev/v1/bazaar/audit", {
+          method,
+          headers: { "PAYMENT-SIGNATURE": "not-valid-base64-@@@" }
+        }),
+        testEnv
+      );
+      expect(res.status).toBe(402);
+    }
+
+    const gwRes = await app.fetch(
+      new Request("https://api.nullclear.dev/v1/gateways", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: "null"
+      }),
+      testEnv
+    );
+    expect(gwRes.status).toBe(400);
+    const gwJson = (await gwRes.json()) as any;
+    expect(gwJson.success).toBe(false);
+  });
+
+  it("serves v1.4.0 Glama, MCP Server Card, and 13-tool MCP discovery metadata", async () => {
+    const glamaRes = await app.fetch(
+      new Request("https://api.nullclear.dev/.well-known/glama.json"),
+      testEnv
+    );
+    expect(glamaRes.status).toBe(200);
+    const glamaJson = (await glamaRes.json()) as any;
+    expect(glamaJson.maintainers).toContain("mithgalalfayez");
+
+    for (const path of ["/.well-known/mcp.json", "/.well-known/mcp/server-card.json"]) {
+      const res = await app.fetch(new Request(`https://api.nullclear.dev${path}`), testEnv);
+      expect(res.status).toBe(200);
+      const manifest = (await res.json()) as any;
+      expect(manifest.version).toBe("1.4.0");
+      expect(manifest.transport).toBe("streamable-http");
+      expect(manifest.tools).toHaveLength(13);
+      const scanTool = manifest.tools.find((t: any) => t.name === "scan_token_forensics");
+      const paidAuditTool = manifest.tools.find((t: any) => t.name === "nullclear_token_security_audit");
+      expect(scanTool?.description).toContain("Do NOT use");
+      expect(paidAuditTool?.description).toContain("$0.01");
+    }
+  });
+
+  it("enforces paid EIP-3009 headers on forensic routes (402 invalid, 200 settled + clearing recorded)", async () => {
+    const approveCalldata =
+      "0x095ea7b3000000000000000000000000b586efcca41df27ad3873beca54da0c30bf04d5cffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff";
+
+    const invalidRes = await app.fetch(
+      new Request("https://api.nullclear.dev/v1/decode", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "CF-Connecting-IP": "203.0.113.44",
+          "PAYMENT-SIGNATURE": "malformed-payment-header"
+        },
+        body: JSON.stringify({ input: approveCalldata, chain: "base" })
+      }),
+      testEnv
+    );
+    expect(invalidRes.status).toBe(402);
+    const invalidJson = (await invalidRes.json()) as any;
+    expect(invalidJson.recommendedAgentAction).toBe("ATTACH_X402_PAYMENT_HEADER");
+
+    const settledHash = ("0x" + "ef".repeat(32)) as `0x${string}`;
+    await withLocalServer(async (req, res) => {
+      if (req.url === "/settle") {
+        res.writeHead(200, { "Content-Type": "application/json" });
+        res.end(
+          JSON.stringify({
+            success: true,
+            transaction: settledHash,
+            network: "eip155:8453"
+          })
+        );
+        return;
+      }
+      res.writeHead(404).end();
+    }, async (facUrl) => {
+      const validSig = await createValidPaymentSignature(
+        "0xB586eFcCa41dF27ad3873BEcA54da0c30bf04d5c",
+        "5000"
+      );
+      const paidRes = await app.fetch(
+        new Request("https://api.nullclear.dev/v1/decode", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "CF-Connecting-IP": "203.0.113.44",
+            "PAYMENT-SIGNATURE": validSig
+          },
+          body: JSON.stringify({ input: approveCalldata, chain: "base" })
+        }),
+        {
+          ...testEnv,
+          ENVIRONMENT: "production",
+          FACILITATOR_URL: facUrl
+        }
+      );
+
+      expect(paidRes.status).toBe(200);
+      expect(paidRes.headers.get("x-nullclear-tier")).toBe("x402-paid");
+      const paidJson = (await paidRes.json()) as any;
+      expect(paidJson.recommendedAgentAction).toBe("ABORT_DRAINER_APPROVAL");
+
+      const statsRes = await app.fetch(new Request("https://api.nullclear.dev/v1/stats"), testEnv);
+      const statsJson = (await statsRes.json()) as any;
+      expect(statsJson.validSettlements).toBeGreaterThanOrEqual(1);
+    });
+  });
+
+  it("does not advance base_usdc_eip3009 indexer state when eth_getLogs hits -32011 rate limit", async () => {
+    const store = getArbiterStore(testEnv);
+    await store.setIndexerState("base_usdc_eip3009", 53171295);
+
+    await withLocalServer(async (req, res) => {
+      const chunks: Buffer[] = [];
+      for await (const chunk of req) chunks.push(chunk as Buffer);
+      const rpcReq = JSON.parse(Buffer.concat(chunks).toString("utf8"));
+      res.writeHead(200, { "Content-Type": "application/json" });
+      if (rpcReq.method === "eth_blockNumber") {
+        res.end(JSON.stringify({ jsonrpc: "2.0", id: rpcReq.id, result: "0x32ca000" }));
+        return;
+      }
+      res.end(
+        JSON.stringify({
+          jsonrpc: "2.0",
+          id: rpcReq.id,
+          error: { code: -32011, message: "request limit reached" }
+        })
+      );
+    }, async (rpcUrl) => {
+      const result = await syncBaseEip3009Logs(testEnv, { rpcUrl });
+      expect(result.newTransfersIndexed).toBe(0);
+      expect(result.lastIndexedBlock).toBe(53171295);
+      const stateAfter = await store.getIndexerState("base_usdc_eip3009");
+      expect(stateAfter?.last_indexed_block).toBe(53171295);
+    });
   });
 });
 

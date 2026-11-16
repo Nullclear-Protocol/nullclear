@@ -6,7 +6,7 @@
       "command": "npx",
       "args": ["-y", "@nullclear/mcp"],
       "env": {
-        "ARBITER_URL": "https://nullclear.dev"
+        "ARBITER_URL": "https://api.nullclear.dev"
       }
     }
   }

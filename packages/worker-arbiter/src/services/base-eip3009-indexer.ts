@@ -349,11 +349,23 @@ export async function syncBaseEip3009Logs(
   options?: SyncBaseEip3009Options
 ): Promise<SyncBaseEip3009Result> {
   const store = getArbiterStore(bindings);
-  const rpcUrl =
+  const primaryRpc =
     options?.rpcUrl ||
     bindings?.BASE_RPC_URL ||
     bindings?.BASE_MAINNET_RPC_URL ||
-    "https://mainnet.base.org";
+    "https://base-rpc.publicnode.com";
+  const rpcCandidates = options?.rpcUrl
+    ? [options.rpcUrl]
+    : Array.from(
+        new Set([
+          primaryRpc,
+          "https://base-rpc.publicnode.com",
+          "https://1rpc.io/base",
+          "https://mainnet.base.org"
+        ])
+      );
+  let activeRpcUrl = primaryRpc;
+  const SAFE_LIVE_CHUNK = 250;
 
   const existingState = await store.getIndexerState(INDEXER_STATE_KEY);
   let fromBlock = options?.fromBlock ?? (existingState ? existingState.last_indexed_block + 1 : 0);
@@ -361,8 +373,10 @@ export async function syncBaseEip3009Logs(
 
   let authLogs: RawEthLog[] = [];
   let transferLogs: RawEthLog[] = [];
+  let rpcSucceeded = false;
 
   if (Array.isArray(options?.mockLogs)) {
+    rpcSucceeded = true;
     authLogs = options.mockLogs.filter(
       (l) => (l.topics?.[0] || "").toLowerCase() === EIP3009_AUTHORIZATION_USED_TOPIC0
     );
@@ -376,76 +390,96 @@ export async function syncBaseEip3009Logs(
     if (!fromBlock) fromBlock = Math.max(1, maxLogBlock - 100);
     if (!toBlock) toBlock = maxLogBlock;
   } else {
-    try {
-      const latestHex = await rpcCall<string>(rpcUrl, "eth_blockNumber", []);
-      const latestBlock = parseBlockNum(latestHex);
+    for (const candidateRpc of rpcCandidates) {
+      try {
+        const latestHex = await rpcCall<string>(candidateRpc, "eth_blockNumber", []);
+        const latestBlock = parseBlockNum(latestHex);
+        if (!latestBlock) continue;
 
-      if (!fromBlock || fromBlock <= 0) {
-        fromBlock = Math.max(1, latestBlock - 250);
-      }
-      if (!toBlock || toBlock <= 0) {
-        toBlock = Math.min(latestBlock, fromBlock + MAX_BLOCK_CHUNK - 1);
-      } else if (toBlock - fromBlock >= MAX_BLOCK_CHUNK) {
-        toBlock = fromBlock + MAX_BLOCK_CHUNK - 1;
-      }
+        let chunkFrom = options?.fromBlock ?? (existingState ? existingState.last_indexed_block + 1 : 0);
+        // If stale cursor is far behind chain tip without explicit range, snap near tip so radar sees live flows
+        if (!options?.fromBlock && (!chunkFrom || chunkFrom <= 0 || latestBlock - chunkFrom > 25_000)) {
+          chunkFrom = Math.max(1, latestBlock - SAFE_LIVE_CHUNK + 1);
+        }
 
-      if (toBlock >= fromBlock) {
-        // 1. Fetch EIP-3009 AuthorizationUsed logs across chunk
-        const rawAuthLogs = await rpcCall<RawEthLog[]>(rpcUrl, "eth_getLogs", [
-          {
-            address: BASE_USDC_ADDRESS,
-            fromBlock: toHexBlock(fromBlock),
-            toBlock: toHexBlock(toBlock),
-            topics: [EIP3009_AUTHORIZATION_USED_TOPIC0]
-          }
-        ]);
+        let chunkTo = options?.toBlock ?? 0;
+        if (!chunkTo || chunkTo <= 0) {
+          chunkTo = Math.min(latestBlock, chunkFrom + SAFE_LIVE_CHUNK - 1);
+        } else if (chunkTo - chunkFrom >= MAX_BLOCK_CHUNK) {
+          chunkTo = chunkFrom + MAX_BLOCK_CHUNK - 1;
+        }
 
-        if (Array.isArray(rawAuthLogs) && rawAuthLogs.length > 0) {
-          authLogs = rawAuthLogs.filter(
-            (l) => (l.topics?.[0] || "").toLowerCase() === EIP3009_AUTHORIZATION_USED_TOPIC0
-          );
-          // Check if the RPC or mock already returned Transfer logs in the same payload
-          const embeddedTransfers = rawAuthLogs.filter(
-            (l) => (l.topics?.[0] || "").toLowerCase() === ERC20_TRANSFER_TOPIC0
-          );
+        if (chunkTo >= chunkFrom) {
+          const rawAuthLogs = await rpcCall<RawEthLog[]>(candidateRpc, "eth_getLogs", [
+            {
+              address: BASE_USDC_ADDRESS,
+              fromBlock: toHexBlock(chunkFrom),
+              toBlock: toHexBlock(chunkTo),
+              topics: [EIP3009_AUTHORIZATION_USED_TOPIC0]
+            }
+          ]);
 
-          if (embeddedTransfers.length > 0) {
-            transferLogs = embeddedTransfers;
-          } else {
-            // 2. Fetch Transfer logs for the exact block sub-range containing AuthorizationUsed events
-            const blockNums = authLogs.map((l) => parseBlockNum(l.blockNumber)).filter((n) => n > 0);
-            const minBlk = blockNums.length > 0 ? Math.min(...blockNums) : fromBlock;
-            const maxBlk = blockNums.length > 0 ? Math.max(...blockNums) : toBlock;
+          if (Array.isArray(rawAuthLogs)) {
+            fromBlock = chunkFrom;
+            toBlock = chunkTo;
+            activeRpcUrl = candidateRpc;
+            rpcSucceeded = true;
 
-            try {
-              const rawTransferLogs = await rpcCall<RawEthLog[]>(rpcUrl, "eth_getLogs", [
-                {
-                  address: BASE_USDC_ADDRESS,
-                  fromBlock: toHexBlock(minBlk),
-                  toBlock: toHexBlock(maxBlk),
-                  topics: [ERC20_TRANSFER_TOPIC0]
-                }
-              ]);
-              if (Array.isArray(rawTransferLogs)) {
-                transferLogs = rawTransferLogs;
-              }
-            } catch {
-              // Fallback: fetch individual transaction receipts for matched AuthorizationUsed txs
-              const uniqueTxs = Array.from(new Set(authLogs.map((a) => a.transactionHash))).slice(0, 15);
-              for (const txHash of uniqueTxs) {
+            if (rawAuthLogs.length > 0) {
+              authLogs = rawAuthLogs.filter(
+                (l) => (l.topics?.[0] || "").toLowerCase() === EIP3009_AUTHORIZATION_USED_TOPIC0
+              );
+              const embeddedTransfers = rawAuthLogs.filter(
+                (l) => (l.topics?.[0] || "").toLowerCase() === ERC20_TRANSFER_TOPIC0
+              );
+
+              if (embeddedTransfers.length > 0) {
+                transferLogs = embeddedTransfers;
+              } else {
+                const blockNums = authLogs.map((l) => parseBlockNum(l.blockNumber)).filter((n) => n > 0);
+                const minBlk = blockNums.length > 0 ? Math.min(...blockNums) : chunkFrom;
+                const maxBlk = blockNums.length > 0 ? Math.max(...blockNums) : chunkTo;
+
                 try {
-                  const receipt = await rpcCall<any>(rpcUrl, "eth_getTransactionReceipt", [txHash]);
-                  if (Array.isArray(receipt?.logs)) {
-                    transferLogs.push(...receipt.logs);
+                  const rawTransferLogs = await rpcCall<RawEthLog[]>(candidateRpc, "eth_getLogs", [
+                    {
+                      address: BASE_USDC_ADDRESS,
+                      fromBlock: toHexBlock(minBlk),
+                      toBlock: toHexBlock(maxBlk),
+                      topics: [ERC20_TRANSFER_TOPIC0]
+                    }
+                  ]);
+                  if (Array.isArray(rawTransferLogs)) {
+                    transferLogs = rawTransferLogs;
                   }
-                } catch {}
+                } catch {
+                  const uniqueTxs = Array.from(new Set(authLogs.map((a) => a.transactionHash))).slice(0, 15);
+                  for (const txHash of uniqueTxs) {
+                    try {
+                      const receipt = await rpcCall<any>(candidateRpc, "eth_getTransactionReceipt", [txHash]);
+                      if (Array.isArray(receipt?.logs)) {
+                        transferLogs.push(...receipt.logs);
+                      }
+                    } catch {}
+                  }
+                }
               }
             }
+            break;
           }
+        } else {
+          fromBlock = chunkFrom;
+          toBlock = chunkTo;
+          activeRpcUrl = candidateRpc;
+          rpcSucceeded = true;
+          break;
         }
+      } catch {
+        // Try next Base RPC provider in pool
       }
-    } catch {
-      // Fallback block window if RPC is unreachable in offline environment
+    }
+
+    if (!rpcSucceeded) {
       if (!fromBlock) fromBlock = existingState?.last_indexed_block || 28_500_000;
       if (!toBlock) toBlock = fromBlock;
     }
@@ -464,8 +498,10 @@ export async function syncBaseEip3009Logs(
     }
   }
 
-  const lastIndexedBlock = Math.max(toBlock, existingState?.last_indexed_block || 0);
-  if (lastIndexedBlock > 0) {
+  const lastIndexedBlock = rpcSucceeded
+    ? Math.max(toBlock, existingState?.last_indexed_block || 0)
+    : existingState?.last_indexed_block || 0;
+  if (rpcSucceeded && lastIndexedBlock > 0) {
     await store.setIndexerState(INDEXER_STATE_KEY, lastIndexedBlock);
   }
 
@@ -480,7 +516,7 @@ export async function syncBaseEip3009Logs(
 
   return {
     syncedAt: Date.now(),
-    rpcUrl,
+    rpcUrl: activeRpcUrl,
     fromBlock,
     toBlock,
     lastIndexedBlock,

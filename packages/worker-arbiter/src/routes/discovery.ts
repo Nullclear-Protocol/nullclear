@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import { getArbiterStore, type Env } from "../env.js";
 import { getTrendingScans } from "../services/forensics-engine.js";
 import { CLAUDE_AGENTS_MD_RULE_SNIPPET } from "./forensics.js";
+import { MCP_TOOLS } from "./mcp-http.js";
 
 export const discoveryRouter = new Hono<Env>();
 
@@ -10,7 +11,7 @@ discoveryRouter.get("/health", (c) => {
   return c.json({
     status: "ok",
     protocol: "NullClear",
-    version: "1.1.2",
+    version: "1.4.0",
     timestamp: Date.now()
   });
 });
@@ -159,7 +160,7 @@ discoveryRouter.get("/", (c) => {
 <body>
   <div class="container">
     <header>
-      <div class="badge">PROTOCOL SPECIFICATION v1.3.0 &bull; 10 FREE DAILY CALLS</div>
+      <div class="badge">PROTOCOL SPECIFICATION v1.4.0 &bull; ZERO-KEY FORENSICS + x402 ESCROW</div>
       <h1>NullClear Arbiter</h1>
       <p class="subtitle">Autonomous Non-Custodial Clearing, Deep Invariant Verification, URL-Prefix Auto-Guard & 1-Click Seller Gateways for x402 AI Agents on Base</p>
       <div class="quick-copy">
@@ -253,7 +254,7 @@ discoveryRouter.get("/", (c) => {
           <tr><td><span class="method-get">GET</span></td><td><code>/v1/bazaar/market-oracle</code></td><td>Multi-exchange spread-verified price feed (10 free/day)</td></tr>
           <tr><td><span class="method-get">GET</span></td><td><a href="/llms.txt"><code>/llms.txt</code></a></td><td>Agent-tailored integration instructions &amp; menu</td></tr>
           <tr><td><span class="method-get">GET</span></td><td><a href="/openapi.json"><code>/openapi.json</code></a></td><td>Full OpenAPI 3.1.0 Specification</td></tr>
-          <tr><td><span class="method-get">GET</span></td><td><a href="/.well-known/mcp.json"><code>/.well-known/mcp.json</code></a></td><td>Model Context Protocol server discovery (7 first-class tools)</td></tr>
+          <tr><td><span class="method-get">GET</span></td><td><a href="/.well-known/mcp.json"><code>/.well-known/mcp.json</code></a></td><td>Model Context Protocol server discovery (13 curated tools)</td></tr>
           <tr><td><span class="method-get">GET</span></td><td><a href="/.well-known/x402.json"><code>/.well-known/x402.json</code></a></td><td>x402 Service Manifest with Bazaar extensions</td></tr>
         </tbody>
       </table>
@@ -624,7 +625,7 @@ const getX402Manifest = async (c: any) => {
 
   return {
     x402Version: 2,
-    protocolVersion: "1.1.2",
+    protocolVersion: "1.4.0",
     service: "NullClear Arbiter",
     description: "Autonomous non-custodial schema escrow, deep value invariant verification, and reputation clearinghouse on Base Mainnet",
     erc8004AgentId: agentId,
@@ -1143,7 +1144,7 @@ const getAgentCard = (c: any) => {
   return {
     type: "https://eips.ethereum.org/EIPS/eip-8004#registration-v1",
     name: "NullClear Arbiter",
-    version: "1.1.2",
+    version: "1.4.0",
     protocolVersion: "0.2.1",
     description: "Autonomous non-custodial clearing, reputation scoring, and KYA arbiter for AI commerce on Base Mainnet",
     url: "https://api.nullclear.dev/a2a",
@@ -1194,7 +1195,8 @@ const getAgentCard = (c: any) => {
       {
         id: "nullclear-bazaar-oracles",
         name: "nullclear-bazaar-oracles",
-        description: "5 live x402 payable Base Mainnet intelligence endpoints ($0.01 USDC): market-oracle, token-security, wallet-risk, verified-fetch, and audit.",
+        description:
+          "6 live x402 payable Base Mainnet intelligence endpoints ($0.01 USDC): market-oracle, token-security, wallet-risk, verified-fetch, audit, and verify (plus $0.005 USDC forensic upgrades on scan/inspect/decode/simulate).",
         endpoint: "https://api.nullclear.dev/openapi.json",
         tags: ["x402", "bazaar", "defi", "oracle", "security"]
       }
@@ -1243,57 +1245,38 @@ const getErc8004Verification = (c: any) => {
 discoveryRouter.get("/.well-known/erc-8004.json", (c) => c.json(getErc8004Verification(c)));
 discoveryRouter.get("/_aixyz/erc-8004.json", (c) => c.json(getErc8004Verification(c)));
 
-// GET /.well-known/mcp.json
-discoveryRouter.get("/.well-known/mcp.json", (c) => {
-  return c.json({
-    name: "NullClear MCP Server",
-    package: "@nullclear/mcp",
-    version: "2.2.0",
-    transport: "streamable-http",
-    url: "https://api.nullclear.dev/mcp",
-    description:
-      "Zero-Key On-Chain Forensics, Proxy-Aware Bytecode Inspector, Calldata/Revert Decoder, Pre-Flight Tx Simulator, and Non-Custodial x402 Escrow Clearinghouse",
-    tools: [
-      {
-        name: "scan_token_forensics",
-        description:
-          "[ZERO API KEY REQUIRED] Block-pinned security, proxy, honeypot, and buy/sell tax audit for Base, ETH, or Solana tokens."
-      },
-      {
-        name: "inspect_contract_abi_and_proxy",
-        description:
-          "[ZERO API KEY REQUIRED] Resolves EIP-1967/1822 implementation addresses and extracts decoded 4-byte function selectors without an Etherscan key."
-      },
-      {
-        name: "decode_calldata_or_failed_tx",
-        description:
-          "[ZERO API KEY REQUIRED] Decodes raw hex calldata, custom revert errors, or failed transaction hashes into human-readable parameters and revert reasons."
-      },
-      {
-        name: "simulate_transaction_preflight",
-        description:
-          "[ZERO API KEY REQUIRED] Dry-runs an EVM call (eth_call + gas estimation) and returns recommendedAgentAction."
-      },
-      {
-        name: "read_url_clean_markdown",
-        description:
-          "[ZERO API KEY REQUIRED] Converts any URL or documentation page into clean Markdown."
-      },
-      {
-        name: "nullclear_escrow_x402_call",
-        description: "Execute an x402-gated HTTP API call through NullClear deferred schema escrow with deep invariants and autonomous failover."
-      },
-      {
-        name: "nullclear_check_reputation",
-        description: "Inspect an AI agent's trust score (0-100), clearing reliability, Sybil wash-trade penalty flags, and corporate KYA backing on Base."
-      },
-      {
-        name: "nullclear_verify_kya_mandate",
-        description: "Verify an agent's Know Your Agent (KYA) corporate liability mandate, active validity, and transaction spending limits."
-      }
-    ]
-  });
+// GET /.well-known/mcp.json (full 13-tool manifest matching /mcp)
+const getMcpDiscoveryPayload = () => ({
+  name: "NullClear MCP Server",
+  package: "@nullclear/mcp",
+  mcpName: "io.github.Nullclear-Protocol/nullclear",
+  version: "1.4.0",
+  transport: "streamable-http",
+  url: "https://api.nullclear.dev/mcp",
+  repository: "https://github.com/Nullclear-Protocol/nullclear",
+  description:
+    "Zero-Key On-Chain Forensics, Proxy-Aware Bytecode Inspector, Calldata/Revert Decoder, Pre-Flight Tx Simulator, and Non-Custodial x402 Escrow Clearinghouse",
+  tools: MCP_TOOLS.map((t) => ({
+    name: t.name,
+    description: t.description,
+    annotations: t.annotations,
+    inputSchema: t.inputSchema
+  }))
 });
+
+discoveryRouter.get("/.well-known/mcp.json", (c) => c.json(getMcpDiscoveryPayload()));
+
+// GET /.well-known/mcp/server-card.json & GET /mcp/server-card
+discoveryRouter.get("/.well-known/mcp/server-card.json", (c) => c.json(getMcpDiscoveryPayload()));
+discoveryRouter.get("/mcp/server-card", (c) => c.json(getMcpDiscoveryPayload()));
+
+// GET /.well-known/glama.json & GET /glama.json (Glama registry verification & ownership)
+const getGlamaManifest = () => ({
+  $schema: "https://glama.ai/mcp/schemas/server.json",
+  maintainers: ["mithgalalfayez"]
+});
+discoveryRouter.get("/.well-known/glama.json", (c) => c.json(getGlamaManifest()));
+discoveryRouter.get("/glama.json", (c) => c.json(getGlamaManifest()));
 
 // GET /.well-known/ai-plugin.json
 discoveryRouter.get("/.well-known/ai-plugin.json", (c) => {
@@ -1327,11 +1310,11 @@ const getOpenApiSpec = () => ({
   openapi: "3.1.0",
   info: {
     title: "NullClear",
-    version: "1.1.2",
+    version: "1.4.0",
     description:
       "Non-custodial x402 payment clearinghouse, schema & LLM-refusal escrow firewall, and ERC-8004 Sybil reputation & DeFi intelligence oracle on Base Mainnet (Agent #124595).",
     "x-guidance":
-      "NullClear provides two modes for autonomous AI agents on Base Mainnet (eip155:8453): (1) Direct x402 Payable Intelligence Oracles ($0.01 USDC / 10000 atomic units per call via PayAI Facilitator): call GET /v1/bazaar/market-oracle?symbol=ETH for cross-verified crypto spot prices, GET /v1/bazaar/token-security?address=0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913 for Base ERC-20 contract & liquidity scanning, GET /v1/bazaar/wallet-risk?address=0xfd74fF802EA0E735514C070AF04E0D6528deD145 for wallet counterparty & Sybil profiling, GET/POST /v1/bazaar/verified-fetch?url=https://api.coinbase.com/v2/prices/BTC-USD/spot for schema-verified anti-hallucination HTTP fetching, or GET /v1/bazaar/audit?agentId=124595 for ERC-8004 reputation audits. All paid endpoints return HTTP 402 with a PAYMENT-REQUIRED header first before any parameter rejection. (2) Non-Custodial Schema-Escrow Proxy: use POST /v1/clear (free to call; holds your signed EIP-3009 header in memory and only settles if the upstream response satisfies your JSON schema, numeric invariants, and LLM-refusal checks; voids with $0.00 charged on upstream failure).",
+      "NullClear provides two modes for autonomous AI agents on Base Mainnet (eip155:8453): (1) Direct x402 Payable Intelligence Oracles ($0.01 USDC / 10000 atomic units per call via PayAI Facilitator): call GET /v1/bazaar/market-oracle?symbol=ETH for cross-verified crypto spot prices, GET /v1/bazaar/token-security?address=0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913 for Base ERC-20 contract & liquidity scanning, GET /v1/bazaar/wallet-risk?address=0xfd74fF802EA0E735514C070AF04E0D6528deD145 for wallet counterparty & Sybil profiling, GET/POST /v1/bazaar/verified-fetch?url=https://api.coinbase.com/v2/prices/BTC-USD/spot for schema-verified anti-hallucination HTTP fetching, GET/POST /v1/bazaar/audit?agentId=124595 for ERC-8004 reputation audits, or POST /v1/bazaar/verify for x402 schema readiness verification (plus $0.005 USDC paid access on /v1/scan, /v1/inspect, /v1/decode, /v1/simulate). All paid endpoints return HTTP 402 with a PAYMENT-REQUIRED header first before any parameter rejection. (2) Non-Custodial Schema-Escrow Proxy: use POST /v1/clear (free to call; holds your signed EIP-3009 header in memory and only settles if the upstream response satisfies your JSON schema, numeric invariants, and LLM-refusal checks; voids with $0.00 charged on upstream failure).",
     contact: {
       name: "NullClear Protocol",
       email: "contact@nullclear.dev",

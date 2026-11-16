@@ -81,10 +81,16 @@ Developers and autonomous agents can test NullClear immediately without setting 
 
 ## 🛠️ MCP Agent Server (`@nullclear/mcp`)
 
-Run NullClear directly as a Model Context Protocol tool server for Claude, Cursor, Antigravity, and autonomous agent frameworks:
+Run NullClear directly as a Model Context Protocol tool server (13 tools across zero-key forensics, bytecode/revert decoding, pre-flight simulation, and x402 escrow) for Claude, Cursor, Antigravity, and autonomous agent frameworks:
 
 ```bash
-npx -y @nullclear/mcp@1.1.1
+npx -y @nullclear/mcp@1.4.0
+```
+
+Or connect remotely via Streamable HTTP (`https://api.nullclear.dev/mcp`):
+
+```bash
+claude mcp add --transport http nullclear https://api.nullclear.dev/mcp
 ```
 
 ### Configuration
@@ -96,7 +102,7 @@ Add to your MCP settings file (`claude_desktop_config.json`, `antigravity-ide`, 
   "mcpServers": {
     "nullclear": {
       "command": "npx",
-      "args": ["-y", "@nullclear/mcp@1.1.1"],
+      "args": ["-y", "@nullclear/mcp@latest"],
       "env": {
         "ARBITER_URL": "https://api.nullclear.dev",
         "BUYER_PRIVATE_KEY": "0x..." 
@@ -108,26 +114,21 @@ Add to your MCP settings file (`claude_desktop_config.json`, `antigravity-ide`, 
 
 > **Note**: If `BUYER_PRIVATE_KEY` is omitted, the MCP server automatically uses a built-in deterministic sandbox key (`0xac09...`), enabling immediate zero-wallet testing against `https://api.nullclear.dev/v1/sandbox/*`.
 
-### MCP Tools Available
+### MCP Tools Available (13 Curated Tools)
 
-1. **`nullclear_escrow_x402_call`**:
-   - Executes an x402 API call through NullClear deferred escrow.
-   - Arguments:
-     - `targetUrl`: Upstream API demanding x402 payment.
-     - `sellerAgentId`: (Optional) Seller's ERC-8004 agent ID.
-     - `minTrustScore`: Minimum trust score (0-100, default 50).
-     - `jsonSchema`: JSON Schema that response must satisfy.
-     - `invariants`: Array of deep semantic invariant checks.
-     - `rejectRefusals`: Rejects AI refusal phrasing (default `true`).
-     - `fallbacks`: Backup sellers to try if primary fails.
+**Zero-Key On-Chain Forensics & URL Tools (100 free/day/IP):**
+- **`scan_token_forensics`**: Multi-chain (`base`, `eth`, `solana`) token & proxy security, honeypot, and buy/sell tax scanner.
+- **`inspect_contract_abi_and_proxy`**: EVM proxy slot resolver (`EIP-1967/1822/1167`) and `PUSH4` bytecode selector disassembler.
+- **`decode_calldata_or_failed_tx`**: Decode historical hex calldata, custom reverts, or mined failed transaction hashes.
+- **`simulate_transaction_preflight`**: Pre-flight `eth_call` + `eth_estimateGas` dry-run simulator with approval-drainer flags.
+- **`read_url_clean_markdown`**: Clean `<400`-token HTML-to-Markdown webpage reader with SHA-256 hash.
 
-2. **`nullclear_check_reputation`**:
-   - Inspects an agent's trust score, Sybil wash-trading flags, and on-chain ERC-8004 credentials.
-   - Arguments: `agentId` (e.g. `"124595"`), `chainId` (default `8453`).
-
-3. **`nullclear_verify_kya_mandate`**:
-   - Verifies an agent's Know Your Agent (KYA) corporate liability mandate.
-   - Arguments: `agentId`, `transactionAmountUsd`, `chainId`.
+**x402 Bazaar, Escrow & Reputation Tools:**
+- **`nullclear_discover_verified_x402_apis`**: Query audited high-uptime x402 APIs and proxy URLs.
+- **`nullclear_token_security_audit`**, **`nullclear_wallet_risk_score`**, **`nullclear_crypto_market_oracle`**, **`nullclear_safe_fetch`**: Pay-per-call Base Bazaar intelligence oracles ($0.01 USDC, 10 free/day).
+- **`nullclear_escrow_x402_call`**: Deferred schema escrow with `jsonSchema`, `invariants`, `rejectRefusals`, `fallbacks`, and `spendPolicy`.
+- **`nullclear_check_reputation`**: Inspect ERC-8004 numeric `agentId` trust score, grade, and Sybil wash-trading flags.
+- **`nullclear_verify_kya_mandate`**: Verify corporate KYA liability mandate & per-transaction limits.
 
 ---
 

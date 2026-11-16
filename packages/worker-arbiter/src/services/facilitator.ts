@@ -31,6 +31,85 @@ export interface SettlementOptions {
   arbiterPrivateKey?: string;
   rpcUrl?: string;
   environment?: string;
+  resource?: { url: string; description?: string; mimeType?: string };
+  bazaarExtension?: unknown;
+}
+
+const AUTHORIZATION_USED_TOPIC0 =
+  "0x98de503528ee59b575ef0c0a2576a82497bfc029a5685b209e9ec333479b10a5";
+
+async function jsonRpcPost(rpcUrl: string, method: string, params: unknown[], timeoutMs = 3000): Promise<any> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const res = await fetch(rpcUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ jsonrpc: "2.0", id: Date.now(), method, params }),
+      signal: controller.signal
+    });
+    if (!res.ok) return null;
+    const json: any = await res.json();
+    return json?.error ? null : json?.result ?? null;
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/**
+ * Verifies whether an EIP-3009 authorization has already settled on-chain (receipt or AuthorizationUsed log).
+ * Prevents charging a buyer on-chain while returning HTTP 402 if PayAI returned settlement_pending or 5xx post-broadcast.
+ */
+export async function verifyAuthorizationSettledOnChain(
+  rpcUrl: string | undefined,
+  network: "eip155:8453" | "eip155:84532",
+  assetAddress: string,
+  authorizer: string,
+  nonce: string,
+  candidateTxHash?: string
+): Promise<`0x${string}` | null> {
+  const defaultRpcs =
+    network === "eip155:8453"
+      ? ["https://base-rpc.publicnode.com", "https://mainnet.base.org"]
+      : ["https://sepolia.base.org"];
+  const candidates = Array.from(new Set([rpcUrl, ...defaultRpcs].filter(Boolean))) as string[];
+
+  const cleanAuthorizer = authorizer.toLowerCase().replace(/^0x/, "");
+  const cleanNonce = nonce.toLowerCase().replace(/^0x/, "").padStart(64, "0");
+  if (cleanAuthorizer.length !== 40) return null;
+  const paddedAuthorizer = "0x" + cleanAuthorizer.padStart(64, "0");
+  const topicNonce = "0x" + cleanNonce;
+
+  for (const endpoint of candidates) {
+    if (candidateTxHash && /^0x[a-fA-F0-9]{64}$/.test(candidateTxHash)) {
+      const receipt = await jsonRpcPost(endpoint, "eth_getTransactionReceipt", [candidateTxHash]);
+      if (receipt?.status === "0x1") {
+        return candidateTxHash as `0x${string}`;
+      }
+    }
+
+    const latestHex = await jsonRpcPost(endpoint, "eth_blockNumber", []);
+    if (typeof latestHex === "string") {
+      const latest = parseInt(latestHex, 16);
+      if (Number.isFinite(latest) && latest > 0) {
+        const fromBlk = Math.max(0, latest - 120);
+        const logs = await jsonRpcPost(endpoint, "eth_getLogs", [
+          {
+            address: assetAddress,
+            fromBlock: "0x" + fromBlk.toString(16),
+            toBlock: latestHex,
+            topics: [AUTHORIZATION_USED_TOPIC0, paddedAuthorizer, topicNonce]
+          }
+        ]);
+        if (Array.isArray(logs) && logs.length > 0 && typeof logs[0]?.transactionHash === "string") {
+          return logs[0].transactionHash as `0x${string}`;
+        }
+      }
+    }
+  }
+  return null;
 }
 
 /**
@@ -204,57 +283,90 @@ export async function settleViaFacilitator(options: SettlementOptions): Promise<
     signature,
     accepted,
     facilitatorUrl,
+    rpcUrl,
+    resource,
+    bazaarExtension,
     environment = "development"
   } = options;
 
   const isProduction = environment === "production";
 
   if (facilitatorUrl) {
+    const paymentRequirements: Record<string, unknown> = {
+      scheme: accepted.scheme || "exact",
+      network: accepted.network,
+      amount: String(accepted.amount),
+      payTo: accepted.payTo,
+      asset: accepted.asset,
+      maxTimeoutSeconds: accepted.maxTimeoutSeconds || 300,
+      extra: accepted.extra || { name: "USD Coin", version: "2" },
+      ...(resource?.url ? { resource: resource.url } : {}),
+      ...(resource?.description ? { description: resource.description } : {}),
+      ...(resource?.mimeType ? { mimeType: resource.mimeType } : {})
+    };
+
+    const normalizedAuth: EIP3009Authorization = {
+      from: authorization.from,
+      to: authorization.to,
+      value: String(authorization.value),
+      validAfter: String(authorization.validAfter),
+      validBefore: String(authorization.validBefore),
+      nonce: authorization.nonce
+    };
+
+    const requestBody: Record<string, unknown> = {
+      x402Version: 2,
+      paymentPayload: {
+        x402Version: 2,
+        ...(resource ? { resource } : {}),
+        accepted: paymentRequirements,
+        payload: {
+          signature,
+          authorization: normalizedAuth
+        },
+        ...(bazaarExtension ? { extensions: { bazaar: bazaarExtension } } : {})
+      },
+      paymentRequirements,
+      ...(bazaarExtension ? { serverExtensions: { bazaar: bazaarExtension } } : {})
+    };
+
+    let candidateTxHash: string | undefined;
+
     try {
       const endpoint = facilitatorUrl.endsWith("/settle")
         ? facilitatorUrl
         : `${facilitatorUrl.replace(/\/$/, "")}/settle`;
 
-      const paymentRequirements = {
-        scheme: accepted.scheme || "exact",
-        network: accepted.network,
-        amount: String(accepted.amount),
-        payTo: accepted.payTo,
-        asset: accepted.asset,
-        maxTimeoutSeconds: accepted.maxTimeoutSeconds || 300,
-        extra: accepted.extra || { name: "USD Coin", version: "2" }
-      };
+      const postSettle = async () =>
+        fetch(endpoint, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(requestBody)
+        });
 
-      const normalizedAuth: EIP3009Authorization = {
-        from: authorization.from,
-        to: authorization.to,
-        value: String(authorization.value),
-        validAfter: String(authorization.validAfter),
-        validBefore: String(authorization.validBefore),
-        nonce: authorization.nonce
-      };
-
-      const requestBody = {
-        x402Version: 2,
-        paymentPayload: {
-          x402Version: 2,
-          accepted: paymentRequirements,
-          payload: {
-            signature,
-            authorization: normalizedAuth
-          }
-        },
-        paymentRequirements
-      };
-
-      const res = await fetch(endpoint, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(requestBody)
-      });
+      let res = await postSettle();
 
       if (!res.ok) {
         const errorText = await res.text();
+        // Check on-chain in case PayAI broadcast before returning HTTP 5xx/timeout
+        const recoveredHash =
+          res.status >= 500
+            ? await verifyAuthorizationSettledOnChain(
+                rpcUrl,
+                accepted.network,
+                accepted.asset,
+                authorization.from,
+                authorization.nonce
+              )
+            : null;
+        if (recoveredHash) {
+          return {
+            success: true,
+            transaction: recoveredHash,
+            network: accepted.network,
+            payer: authorization.from
+          };
+        }
         return {
           success: false,
           network: accepted.network,
@@ -263,26 +375,82 @@ export async function settleViaFacilitator(options: SettlementOptions): Promise<
         };
       }
 
-      const data = (await res.json()) as {
+      let data = (await res.json()) as {
         success?: boolean;
         transaction?: `0x${string}`;
         txHash?: `0x${string}`;
         errorReason?: string;
+        errorMessage?: string;
         network?: "eip155:8453" | "eip155:84532";
         payer?: `0x${string}`;
       };
 
+      candidateTxHash = data.transaction || data.txHash || undefined;
+
+      // Handle PayAI `settlement_pending` (broadcast in flight whose confirmation outran PayAI's response budget)
+      if (
+        data.success === false &&
+        (data.errorReason === "settlement_pending" ||
+          (candidateTxHash && /^0x[a-fA-F0-9]{64}$/.test(candidateTxHash)))
+      ) {
+        for (let attempt = 0; attempt < 3; attempt++) {
+          const onchainHash = await verifyAuthorizationSettledOnChain(
+            rpcUrl,
+            accepted.network,
+            accepted.asset,
+            authorization.from,
+            authorization.nonce,
+            candidateTxHash
+          );
+          if (onchainHash) {
+            return {
+              success: true,
+              transaction: onchainHash,
+              network: accepted.network,
+              payer: authorization.from
+            };
+          }
+
+          await new Promise((r) => setTimeout(r, 850));
+          res = await postSettle();
+          if (res.ok) {
+            data = (await res.json()) as any;
+            candidateTxHash = data.transaction || data.txHash || candidateTxHash;
+            if (data.success !== false && candidateTxHash) {
+              break;
+            }
+          }
+        }
+      }
+
+      const finalTxHash = (data.transaction || data.txHash || candidateTxHash) as `0x${string}` | undefined;
+
       if (data.success === false) {
+        const onchainHash = await verifyAuthorizationSettledOnChain(
+          rpcUrl,
+          accepted.network,
+          accepted.asset,
+          authorization.from,
+          authorization.nonce,
+          finalTxHash
+        );
+        if (onchainHash) {
+          return {
+            success: true,
+            transaction: onchainHash,
+            network: accepted.network,
+            payer: authorization.from
+          };
+        }
         return {
           success: false,
-          network: accepted.network,
-          payer: authorization.from,
-          errorReason: data.errorReason || "Facilitator rejected settlement"
+          network: data.network || accepted.network,
+          payer: data.payer || authorization.from,
+          errorReason: data.errorReason || data.errorMessage || "Facilitator rejected settlement"
         };
       }
 
-      const txHash = data.transaction || data.txHash;
-      if (!txHash) {
+      if (!finalTxHash) {
         return {
           success: false,
           network: accepted.network,
@@ -293,11 +461,27 @@ export async function settleViaFacilitator(options: SettlementOptions): Promise<
 
       return {
         success: true,
-        transaction: txHash,
+        transaction: finalTxHash,
         network: accepted.network,
         payer: authorization.from
       };
     } catch (err: any) {
+      const recoveredHash = await verifyAuthorizationSettledOnChain(
+        rpcUrl,
+        accepted.network,
+        accepted.asset,
+        authorization.from,
+        authorization.nonce,
+        candidateTxHash
+      );
+      if (recoveredHash) {
+        return {
+          success: true,
+          transaction: recoveredHash,
+          network: accepted.network,
+          payer: authorization.from
+        };
+      }
       if (isProduction) {
         return {
           success: false,
@@ -418,18 +602,14 @@ export async function settleTransfer(options: SettlementOptions): Promise<X402Pa
     if (facResult.success) {
       return facResult;
     }
-    // Fallback to direct on-chain settlement if PayAI returns 5xx or connection error and arbiter private key is available
+    // Fallback to direct on-chain settlement if PayAI is unavailable/timed out/pending without receipt and arbiter key is available
     if (
       arbiterPrivateKey &&
       arbiterPrivateKey.startsWith("0x") &&
       facResult.errorReason &&
-      (facResult.errorReason.includes("50") ||
-        facResult.errorReason.includes("502") ||
-        facResult.errorReason.includes("503") ||
-        facResult.errorReason.includes("504") ||
-        facResult.errorReason.includes("500") ||
-        facResult.errorReason.includes("Facilitator connection error") ||
-        facResult.errorReason.includes("fetch failed"))
+      /HTTP 5\d{2}|HTTP 429|settlement_pending|Facilitator connection error|fetch failed|timeout|aborted/i.test(
+        facResult.errorReason
+      )
     ) {
       const onchainResult = await settleOnChain(options);
       if (onchainResult.success) {
