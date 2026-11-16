@@ -340,7 +340,7 @@ export const DEFAULT_SEEDED_ENDPOINTS: IndexedEndpointRecord[] = [
     origin_domain: "api.nullclear.dev",
     agent_id_erc8004: "124595",
     seller_address: "0xB586eFcCa41dF27ad3873BEcA54da0c30bf04d5c",
-    price_atomic: "10000",
+    price_atomic: "5000",
     http_status: 402,
     is_valid_x402: 1,
     latency_ms: 54,

@@ -13,6 +13,7 @@ import {
 import app from "../src/index.js";
 import { getArbiterStore } from "../src/env.js";
 import { syncBaseEip3009Logs } from "../src/services/base-eip3009-indexer.js";
+import { canaryProbeEndpoint } from "../src/services/ecosystem-crawler.js";
 
 describe("NullClear Worker Arbiter Test Suite", () => {
   let mockServer: http.Server;
@@ -812,13 +813,13 @@ describe("NullClear Worker Arbiter Test Suite", () => {
   });
 
   // 21. Health Check Endpoint
-  it("GET /health returns 200 with status ok and version 1.4.0", async () => {
+  it("GET /health returns 200 with status ok and version 1.5.0", async () => {
     const res = await app.fetch(new Request("http://localhost/health"), testEnv);
     expect(res.status).toBe(200);
     const json = (await res.json()) as any;
     expect(json.status).toBe("ok");
     expect(json.protocol).toBe("NullClear");
-    expect(json.version).toBe("1.4.0");
+    expect(json.version).toBe("1.5.0");
   });
 
   // 22. Live Sandbox 402 Seller Endpoints & Public Stats
@@ -2454,7 +2455,7 @@ describe("NullClear Worker Arbiter Test Suite", () => {
     expect(gwJson.success).toBe(false);
   });
 
-  it("serves v1.4.0 Glama, MCP Server Card, and 13-tool MCP discovery metadata", async () => {
+  it("serves v1.5.0 Glama, MCP Server Card, and 13-tool MCP discovery metadata", async () => {
     const glamaRes = await app.fetch(
       new Request("https://api.nullclear.dev/.well-known/glama.json"),
       testEnv
@@ -2467,13 +2468,13 @@ describe("NullClear Worker Arbiter Test Suite", () => {
       const res = await app.fetch(new Request(`https://api.nullclear.dev${path}`), testEnv);
       expect(res.status).toBe(200);
       const manifest = (await res.json()) as any;
-      expect(manifest.version).toBe("1.4.0");
+      expect(manifest.version).toBe("1.5.0");
       expect(manifest.transport).toBe("streamable-http");
       expect(manifest.tools).toHaveLength(13);
       const scanTool = manifest.tools.find((t: any) => t.name === "scan_token_forensics");
       const paidAuditTool = manifest.tools.find((t: any) => t.name === "nullclear_token_security_audit");
       expect(scanTool?.description).toContain("Do NOT use");
-      expect(paidAuditTool?.description).toContain("$0.01");
+      expect(paidAuditTool?.description).toContain("$0.005");
     }
   });
 
@@ -2571,6 +2572,69 @@ describe("NullClear Worker Arbiter Test Suite", () => {
       const stateAfter = await store.getIndexerState("base_usdc_eip3009");
       expect(stateAfter?.last_indexed_block).toBe(53171295);
     });
+  });
+
+  it("serves v1.5.0 Customer 0 discovery upgrades (resources array, guarantee, RFC 9728 stubs) and $0.005 micro-tier pricing", async () => {
+    const x402Res = await app.fetch(new Request("https://api.nullclear.dev/.well-known/x402"), testEnv);
+    expect(x402Res.status).toBe(200);
+    const x402Json = (await x402Res.json()) as any;
+    expect(x402Json.version).toBe(1);
+    expect(x402Json.protocolVersion).toBe("1.5.0");
+    expect(Array.isArray(x402Json.resources)).toBe(true);
+    expect(x402Json.resources).toContain("https://api.nullclear.dev/v1/bazaar/token-security");
+    expect(x402Json.resources).toContain("https://api.nullclear.dev/v1/decode");
+    expect(x402Json.guarantee?.zeroLossEscrow).toBe(true);
+    expect(x402Json.endpoints?.bazaarTokenSecurity?.amountAtomic).toBe("5000");
+    expect(x402Json.endpoints?.bazaarWalletRisk?.amountAtomic).toBe("5000");
+    expect(x402Json.endpoints?.bazaarVerifiedFetch?.amountAtomic).toBe("5000");
+
+    for (const stubPath of [
+      "/.well-known/oauth-protected-resource",
+      "/.well-known/oauth-protected-resource/mcp",
+      "/.well-known/agent-registration.json"
+    ]) {
+      const stubRes = await app.fetch(new Request(`https://api.nullclear.dev${stubPath}`), testEnv);
+      expect(stubRes.status).toBe(200);
+    }
+
+    for (const microPath of [
+      "/v1/bazaar/token-security",
+      "/v1/bazaar/wallet-risk",
+      "/v1/bazaar/verified-fetch"
+    ]) {
+      const challengeRes = await app.fetch(new Request(`https://api.nullclear.dev${microPath}`), testEnv);
+      expect(challengeRes.status).toBe(402);
+      const challengeJson = (await challengeRes.json()) as any;
+      expect(challengeJson.amount).toBe("5000");
+      expect(challengeJson.accepts?.[0]?.amount).toBe("5000");
+    }
+  });
+
+  it("does not false-positive flag /llms.txt documentation text as an LLM refusal in Canary Auditor", async () => {
+    const store = getArbiterStore(testEnv);
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = (async () =>
+      new Response(
+        'Canonical refusal phrases documented here: "as an ai language model", "rate limit exceeded".',
+        { status: 200, headers: { "Content-Type": "text/plain" } }
+      )) as typeof fetch;
+
+    try {
+      const outcome = await canaryProbeEndpoint(
+        {
+          endpointUrl: "https://api.nullclear.dev/llms.txt",
+          source: "X402_MANIFEST",
+          category: "data"
+        },
+        store,
+        "development"
+      );
+      expect(outcome.probeSuccess).toBe(true);
+      expect(outcome.record.uptime_score).toBe(100);
+      expect(outcome.record.hallucination_rate).toBe(0);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
   });
 });
 

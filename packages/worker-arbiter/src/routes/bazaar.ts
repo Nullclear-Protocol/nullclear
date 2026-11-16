@@ -708,8 +708,10 @@ async function handleBazaarPayment(
   c: any,
   resourcePath: string,
   description: string,
-  bazaarExtension: any
+  bazaarExtension: any,
+  amountAtomic = "10000"
 ): Promise<SettlementResult> {
+  const priceUsd = (Number(amountAtomic) / 1_000_000).toFixed(Number(amountAtomic) < 10000 ? 3 : 2);
   const rawPaymentHeader =
     c.req.header("payment-signature") ||
     c.req.header("x-payment") ||
@@ -767,7 +769,7 @@ async function handleBazaarPayment(
       resourcePath,
       description,
       bazaarExtension,
-      "10000"
+      amountAtomic
     );
     c.header("PAYMENT-REQUIRED", paymentReqHeader);
     c.header("X-Payment-Required", paymentReqHeader);
@@ -777,13 +779,13 @@ async function handleBazaarPayment(
         {
           error: "Payment Required",
           message:
-            "Daily Sponsored Free Tier limit (10/10 free calls) reached. Configure NULLCLEAR_PRIVATE_KEY or include an X-Payment EIP-3009 header ($0.01 USDC on Base Mainnet) to continue.",
+            `Daily Sponsored Free Tier limit (10/10 free calls) reached. Configure NULLCLEAR_PRIVATE_KEY or include an X-Payment EIP-3009 header ($${priceUsd} USDC on Base Mainnet) to continue.`,
           tier: "free-trial-exhausted",
           freeTrialRemaining: 0,
           x402Version: 2,
           scheme: "exact",
           network: "eip155:8453",
-          amount: "10000",
+          amount: amountAtomic,
           payTo: NULLCLEAR_TREASURY_ADDRESS,
           resource: {
             url: `https://api.nullclear.dev${resourcePath}`,
@@ -794,7 +796,7 @@ async function handleBazaarPayment(
             {
               scheme: "exact",
               network: "eip155:8453",
-              amount: "10000",
+              amount: amountAtomic,
               asset: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
               payTo: NULLCLEAR_TREASURY_ADDRESS,
               maxTimeoutSeconds: 300,
@@ -817,7 +819,7 @@ async function handleBazaarPayment(
       resourcePath,
       description,
       bazaarExtension,
-      "10000"
+      amountAtomic
     );
     c.header("PAYMENT-REQUIRED", paymentReqHeader);
     c.header("X-Payment-Required", paymentReqHeader);
@@ -826,11 +828,11 @@ async function handleBazaarPayment(
       errorResponse: c.json(
         {
           error: "Payment Required",
-          message: "x402 payment required: 10000 atomic units ($0.01 USDC) on Base Mainnet",
+          message: `x402 payment required: ${amountAtomic} atomic units ($${priceUsd} USDC) on Base Mainnet`,
           x402Version: 2,
           scheme: "exact",
           network: "eip155:8453",
-          amount: "10000",
+          amount: amountAtomic,
           payTo: NULLCLEAR_TREASURY_ADDRESS,
           resource: {
             url: `https://api.nullclear.dev${resourcePath}`,
@@ -841,7 +843,7 @@ async function handleBazaarPayment(
             {
               scheme: "exact",
               network: "eip155:8453",
-              amount: "10000",
+              amount: amountAtomic,
               asset: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
               payTo: NULLCLEAR_TREASURY_ADDRESS,
               maxTimeoutSeconds: 300,
@@ -879,7 +881,7 @@ async function handleBazaarPayment(
       resourcePath,
       description,
       bazaarExtension,
-      "10000"
+      amountAtomic
     );
     c.header("PAYMENT-REQUIRED", paymentReqHeader);
     c.header("X-Payment-Required", paymentReqHeader);
@@ -892,7 +894,7 @@ async function handleBazaarPayment(
           x402Version: 2,
           scheme: "exact",
           network: "eip155:8453",
-          amount: "10000",
+          amount: amountAtomic,
           payTo: NULLCLEAR_TREASURY_ADDRESS
         },
         402
@@ -903,7 +905,7 @@ async function handleBazaarPayment(
   const accepted: X402PaymentOption = parsedAuth.accepted || {
     scheme: "exact",
     network: "eip155:8453",
-    amount: "10000",
+    amount: amountAtomic,
     asset: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
     payTo: NULLCLEAR_TREASURY_ADDRESS,
     maxTimeoutSeconds: 300,
@@ -957,7 +959,7 @@ async function handleBazaarPayment(
     signature,
     accepted: {
       ...accepted,
-      amount: "10000",
+      amount: amountAtomic,
       payTo: NULLCLEAR_TREASURY_ADDRESS,
       asset: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
       extra: accepted.extra || { name: "USD Coin", version: "2" }
@@ -980,7 +982,7 @@ async function handleBazaarPayment(
       resourcePath,
       description,
       bazaarExtension,
-      "10000"
+      amountAtomic
     );
     c.header("PAYMENT-REQUIRED", paymentReqHeader);
     c.header("X-Payment-Required", paymentReqHeader);
@@ -993,7 +995,7 @@ async function handleBazaarPayment(
           x402Version: 2,
           scheme: "exact",
           network: "eip155:8453",
-          amount: "10000",
+          amount: amountAtomic,
           payTo: NULLCLEAR_TREASURY_ADDRESS,
           details: settlement.errorReason
         },
@@ -1005,19 +1007,19 @@ async function handleBazaarPayment(
   // Settlement succeeded on-chain! Record in D1 clearings table
   const store = getArbiterStore(c.env);
   const clearingId = `bazaar_${Date.now()}_${settlement.transaction.slice(2, 10)}`;
-  const feeAtomic = "50"; // 0.50%
+  const feeAtomic = String(Math.max(1, Math.floor((Number(amountAtomic) * 50) / 10000)));
 
   await store.recordPassedClearing(
     c.env?.ERC8004_AGENT_ID || "124595",
     authorization.from,
-    "10000",
+    amountAtomic,
     feeAtomic,
     {
       id: clearingId,
       network: "eip155:8453",
       buyerAddress: authorization.from,
       sellerAgentId: c.env?.ERC8004_AGENT_ID || "124595",
-      amount: "10000",
+      amount: amountAtomic,
       fee: feeAtomic,
       targetUrl: `https://api.nullclear.dev${resourcePath}`,
       status: "PASSED",
@@ -1125,13 +1127,14 @@ bazaarRouter.all("/market-oracle", async (c) => {
   });
 });
 
-// 2. GET & POST /v1/bazaar/token-security ($0.01 USDC / 10000 atomic)
+// 2. GET & POST /v1/bazaar/token-security ($0.005 USDC / 5000 atomic)
 bazaarRouter.all("/token-security", async (c) => {
   const result = await handleBazaarPayment(
     c,
     "/v1/bazaar/token-security",
     "Live Base Mainnet (eip155:8453) ERC-20 token security, contract bytecode verification, liquidity & honeypot risk scanner for AI trading agents.",
-    BAZAAR_TOKEN_SECURITY_EXTENSION
+    BAZAAR_TOKEN_SECURITY_EXTENSION,
+    "5000"
   );
   if (!result.settled) {
     return result.errorResponse!;
@@ -1256,13 +1259,14 @@ bazaarRouter.all("/token-security", async (c) => {
   });
 });
 
-// 3. GET & POST /v1/bazaar/wallet-risk ($0.01 USDC / 10000 atomic)
+// 3. GET & POST /v1/bazaar/wallet-risk ($0.005 USDC / 5000 atomic)
 bazaarRouter.all("/wallet-risk", async (c) => {
   const result = await handleBazaarPayment(
     c,
     "/v1/bazaar/wallet-risk",
     "Live Base Mainnet wallet counterparty risk profiler: checks EOA vs smart contract status, nonce history, ETH/USDC balances, and ERC-8004 Sybil risk.",
-    BAZAAR_WALLET_RISK_EXTENSION
+    BAZAAR_WALLET_RISK_EXTENSION,
+    "5000"
   );
   if (!result.settled) {
     return result.errorResponse!;
@@ -1376,13 +1380,14 @@ bazaarRouter.all("/wallet-risk", async (c) => {
   });
 });
 
-// 4. POST & GET /v1/bazaar/verified-fetch ($0.01 USDC / 10000 atomic)
+// 4. POST & GET /v1/bazaar/verified-fetch ($0.005 USDC / 5000 atomic)
 bazaarRouter.all("/verified-fetch", async (c) => {
   const result = await handleBazaarPayment(
     c,
     "/v1/bazaar/verified-fetch",
     "Schema-verified HTTP fetch & anti-hallucination proxy: fetches any public JSON/web URL, enforces numeric invariants and LLM-refusal guards, and returns attested data.",
-    BAZAAR_VERIFIED_FETCH_EXTENSION
+    BAZAAR_VERIFIED_FETCH_EXTENSION,
+    "5000"
   );
   if (!result.settled) {
     return result.errorResponse!;
@@ -1680,8 +1685,8 @@ bazaarRouter.get("/", async (c) => {
       path: "/v1/bazaar/token-security",
       url: "https://api.nullclear.dev/v1/bazaar/token-security",
       method: "GET",
-      priceAtomic: "10000",
-      priceUsdc: "0.01",
+      priceAtomic: "5000",
+      priceUsdc: "0.005",
       sellerAddress: NULLCLEAR_TREASURY_ADDRESS,
       category: "security",
       description: BAZAAR_TOKEN_SECURITY_EXTENSION.description
@@ -1692,8 +1697,8 @@ bazaarRouter.get("/", async (c) => {
       path: "/v1/bazaar/wallet-risk",
       url: "https://api.nullclear.dev/v1/bazaar/wallet-risk",
       method: "GET",
-      priceAtomic: "10000",
-      priceUsdc: "0.01",
+      priceAtomic: "5000",
+      priceUsdc: "0.005",
       sellerAddress: NULLCLEAR_TREASURY_ADDRESS,
       category: "security",
       description: BAZAAR_WALLET_RISK_EXTENSION.description
@@ -1704,8 +1709,8 @@ bazaarRouter.get("/", async (c) => {
       path: "/v1/bazaar/verified-fetch",
       url: "https://api.nullclear.dev/v1/bazaar/verified-fetch",
       method: "GET",
-      priceAtomic: "10000",
-      priceUsdc: "0.01",
+      priceAtomic: "5000",
+      priceUsdc: "0.005",
       sellerAddress: NULLCLEAR_TREASURY_ADDRESS,
       category: "data",
       description: BAZAAR_VERIFIED_FETCH_EXTENSION.description

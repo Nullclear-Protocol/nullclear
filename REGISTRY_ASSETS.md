@@ -22,7 +22,7 @@ NullClear Protocol (`https://nullclear.com` / `https://nullclear.dev`)
 `https://github.com/Nullclear-Protocol/nullclear`
 
 ### npm Package
-`@nullclear/mcp` (`1.4.0`)
+`@nullclear/mcp` (`1.5.0`)
 
 ### Remote HTTP Endpoint
 `https://api.nullclear.dev/mcp`

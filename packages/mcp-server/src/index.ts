@@ -19,7 +19,7 @@ const client = new NullClearClient({ arbiterUrl: ARBITER_URL });
 const server = new Server(
   {
     name: "nullclear-mcp-server",
-    version: "1.4.0"
+    version: "1.5.0"
   },
   {
     capabilities: {
@@ -303,9 +303,9 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       {
         name: "nullclear_token_security_audit",
         description:
-          "Run NullClear's x402 Bazaar paid oracle for Base Mainnet (8453) ERC-20 tokens returning a cryptographically signed clearing receipt (10 free trial calls/day, then $0.01 USDC). Use this ONLY when you specifically require a Base Bazaar EIP-712/keccak256 settlement receipt alongside token LP and bytecode verification. For free (100/day) multi-chain Base/ETH/Solana token & proxy scanning, use scan_token_forensics instead.",
+          "Run NullClear's x402 Bazaar paid oracle for Base Mainnet (8453) ERC-20 tokens returning a cryptographically signed clearing receipt (10 free trial calls/day, then $0.005 USDC). Use this ONLY when you specifically require a Base Bazaar EIP-712/keccak256 settlement receipt alongside token LP and bytecode verification. For free (100/day) multi-chain Base/ETH/Solana token & proxy scanning, use scan_token_forensics instead.",
         annotations: {
-          title: "Base Token x402 Bazaar Attested Audit ($0.01)",
+          title: "Base Token x402 Bazaar Attested Audit ($0.005)",
           readOnlyHint: true,
           destructiveHint: false,
           idempotentHint: true,
@@ -326,9 +326,9 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       {
         name: "nullclear_wallet_risk_score",
         description:
-          "Profile a raw 0x EVM wallet address on Base Mainnet (8453) for OFAC sanctions exposure, on-chain counterparty wash-trade concentration, ETH/USDC balances, transaction count, and ERC-8004 ownership (10 free trials/day, then $0.01 USDC). Returns riskScore (0-100), riskLevel, and ERC-8004 registration status. Do NOT pass a numeric ERC-8004 agent ID here — use nullclear_check_reputation for numeric agentId trust audits.",
+          "Profile a raw 0x EVM wallet address on Base Mainnet (8453) for OFAC sanctions exposure, on-chain counterparty wash-trade concentration, ETH/USDC balances, transaction count, and ERC-8004 ownership (10 free trials/day, then $0.005 USDC). Returns riskScore (0-100), riskLevel, and ERC-8004 registration status. Do NOT pass a numeric ERC-8004 agent ID here — use nullclear_check_reputation for numeric agentId trust audits.",
         annotations: {
-          title: "0x Wallet Address Sanctions & Sybil Profiler ($0.01)",
+          title: "0x Wallet Address Sanctions & Sybil Profiler ($0.005)",
           readOnlyHint: true,
           destructiveHint: false,
           idempotentHint: true,
@@ -376,9 +376,9 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       {
         name: "nullclear_safe_fetch",
         description:
-          "Execute a zero-schema Auto-Guarded HTTP GET/POST request through NullClear's firewall against HTTP 5xx crashes, empty JSON bodies, Cloudflare/soft-paywall traps, and LLM refusal strings (10 free trials/day, then $0.01 USDC via Bazaar). Returns verified payload and executionReceipt, or voids settlement on failure. Do NOT use for plain HTML docs-to-Markdown conversion (use read_url_clean_markdown) or when custom JSON Schema/invariants/failover are needed (use nullclear_escrow_x402_call).",
+          "Execute a zero-schema Auto-Guarded HTTP GET/POST request through NullClear's firewall against HTTP 5xx crashes, empty JSON bodies, Cloudflare/soft-paywall traps, and LLM refusal strings (10 free trials/day, then $0.005 USDC via Bazaar). Returns verified payload and executionReceipt, or voids settlement on failure. Do NOT use for plain HTML docs-to-Markdown conversion (use read_url_clean_markdown) or when custom JSON Schema/invariants/failover are needed (use nullclear_escrow_x402_call).",
         annotations: {
-          title: "Auto-Guarded JSON/API Safe HTTP Fetch ($0.01)",
+          title: "Auto-Guarded JSON/API Safe HTTP Fetch ($0.005)",
           readOnlyHint: true,
           destructiveHint: false,
           idempotentHint: true,

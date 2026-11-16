@@ -16,6 +16,24 @@ export interface ChainConfig {
 }
 export const NULLCLEAR_TREASURY_ADDRESS = "0xB586eFcCa41dF27ad3873BEcA54da0c30bf04d5c" as const;
 export const NULLCLEAR_ARBITER_ADDRESS = "0xfd74fF802EA0E735514C070AF04E0D6528deD145" as const;
+export const NULLCLEAR_ERC8004_AGENT_ID = "124595" as const;
+export const NULLCLEAR_API_BASE_URL = "https://api.nullclear.dev" as const;
+
+export const DEFAULT_BASE_MAINNET_RPCS = [
+  "https://base-rpc.publicnode.com",
+  "https://1rpc.io/base",
+  "https://mainnet.base.org"
+] as const;
+
+export const NULLCLEAR_BAZAAR_PRICES = {
+  tokenSecurity: "5000",
+  walletRisk: "5000",
+  verifiedFetch: "5000",
+  marketOracle: "10000",
+  audit: "10000",
+  verify: "10000",
+  forensics: "5000"
+} as const;
 
 export const BASE_MAINNET: ChainConfig = {
   name: "Base Mainnet",

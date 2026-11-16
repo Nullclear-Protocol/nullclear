@@ -149,4 +149,105 @@ export class NullClearClient {
     const data = (await res.json()) as any;
     return data.data;
   }
+
+  /**
+   * Discover live verified x402 & ERC-8004 APIs from the NullClear Ecosystem Directory.
+   */
+  async discoverEndpoints(params?: {
+    query?: string;
+    category?: "data" | "security" | "oracle" | "ai";
+    minUptime?: number;
+    maxLatencyMs?: number;
+    verifiedOnly?: boolean;
+  }): Promise<any> {
+    const qs = new URLSearchParams();
+    if (params?.query) qs.set("query", params.query);
+    if (params?.category) qs.set("category", params.category);
+    if (params?.minUptime !== undefined) qs.set("minUptime", String(params.minUptime));
+    if (params?.maxLatencyMs !== undefined) qs.set("maxLatencyMs", String(params.maxLatencyMs));
+    if (params?.verifiedOnly) qs.set("verifiedOnly", "true");
+    const suffix = qs.toString() ? `?${qs.toString()}` : "";
+    const res = await this.customFetch(`${this.arbiterUrl}/v1/bazaar/directory${suffix}`);
+    if (!res.ok) {
+      throw new Error(`Failed to query x402 directory: ${res.status}`);
+    }
+    return res.json();
+  }
+
+  /**
+   * Zero-key token audit across Base, Ethereum, or Solana (optional X-Payment header for >100/day calls).
+   */
+  async scanToken(
+    chain: "base" | "eth" | "solana",
+    address: string,
+    paymentSignatureHeader?: string
+  ): Promise<any> {
+    const headers: Record<string, string> = {};
+    if (paymentSignatureHeader) headers["PAYMENT-SIGNATURE"] = paymentSignatureHeader;
+    const res = await this.customFetch(`${this.arbiterUrl}/v1/scan/${chain}/${address}`, {
+      headers
+    });
+    return res.json();
+  }
+
+  /**
+   * Zero-key EIP-1967/1822 proxy resolution and bytecode selector extraction.
+   */
+  async inspectContract(
+    chain: "base" | "eth",
+    address: string,
+    paymentSignatureHeader?: string
+  ): Promise<any> {
+    const headers: Record<string, string> = {};
+    if (paymentSignatureHeader) headers["PAYMENT-SIGNATURE"] = paymentSignatureHeader;
+    const res = await this.customFetch(`${this.arbiterUrl}/v1/inspect/${chain}/${address}`, {
+      headers
+    });
+    return res.json();
+  }
+
+  /**
+   * Decode calldata, revert reasons, or flag unlimited drainer approvals before signing.
+   */
+  async decodeCalldata(
+    input: string,
+    chain: "base" | "eth" = "base",
+    paymentSignatureHeader?: string
+  ): Promise<any> {
+    const headers: Record<string, string> = { "Content-Type": "application/json" };
+    if (paymentSignatureHeader) headers["PAYMENT-SIGNATURE"] = paymentSignatureHeader;
+    const res = await this.customFetch(`${this.arbiterUrl}/v1/decode`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ input, chain })
+    });
+    return res.json();
+  }
+
+  /**
+   * Pre-flight eth_call simulation & revert decoding on Base or Ethereum.
+   */
+  async simulateTx(params: {
+    to: string;
+    data?: string;
+    from?: string;
+    value?: string;
+    chain?: "base" | "eth";
+    paymentSignatureHeader?: string;
+  }): Promise<any> {
+    const headers: Record<string, string> = { "Content-Type": "application/json" };
+    if (params.paymentSignatureHeader) headers["PAYMENT-SIGNATURE"] = params.paymentSignatureHeader;
+    const res = await this.customFetch(`${this.arbiterUrl}/v1/simulate`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        to: params.to,
+        data: params.data,
+        from: params.from,
+        value: params.value,
+        chain: params.chain || "base"
+      })
+    });
+    return res.json();
+  }
 }

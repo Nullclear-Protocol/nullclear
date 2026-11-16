@@ -37,6 +37,8 @@ export class NullClearEscrowAbortedError extends Error {
     this.score = details.score;
     this.upstreamStatus = details.upstreamStatus;
     this.reason = details.reason;
+    this.failoverAttempts = details.failoverAttempts;
+    this.failedCandidates = details.failedCandidates;
   }
 }
 

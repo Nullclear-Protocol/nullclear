@@ -315,4 +315,41 @@ describe("@nullclear/x402-arbiter SDK Test Suite", () => {
       expect(err.buyerCharged).toBe("0");
     }
   });
+
+  it("NullClearClient supports discovery and zero-key decoding and preserves failover error metadata", async () => {
+    const customFetch: typeof fetch = async (input, init) => {
+      const urlStr = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+      const path = urlStr.replace("https://mock-arbiter", "");
+      return arbiterApp.fetch(
+        new Request(`http://localhost${path}`, {
+          method: init?.method,
+          headers: init?.headers,
+          body: init?.body as any
+        }),
+        { ARBITER_PRIVATE_KEY: arbiterKey }
+      );
+    };
+
+    const client = new NullClearClient({
+      arbiterUrl: "https://mock-arbiter",
+      fetch: customFetch
+    });
+
+    const directory = await client.discoverEndpoints({ category: "security" });
+    expect(Array.isArray(directory.endpoints)).toBe(true);
+
+    const decoded = await client.decodeCalldata(
+      "0x095ea7b3000000000000000000000000b586efcca41df27ad3873beca54da0c30bf04d5cffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+      "base"
+    );
+    expect(decoded.recommendedAgentAction).toBe("ABORT_DRAINER_APPROVAL");
+
+    const aborted = new NullClearEscrowAbortedError("aborted", {
+      stage: "FAILOVER_EXHAUSTED",
+      failoverAttempts: 2,
+      failedCandidates: [{ targetUrl: "https://x", stage: "HTTP_ERROR", reason: "500" }]
+    });
+    expect(aborted.failoverAttempts).toBe(2);
+    expect(aborted.failedCandidates).toHaveLength(1);
+  });
 });

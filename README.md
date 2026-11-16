@@ -70,6 +70,10 @@ NullClear eliminates payment risk in Agent-to-Agent (A2A) commerce. In standard 
 
 ---
 
+## What's New in v1.5.0
+- **`\$0.005` Micro-Tier Pricing & Standard `/.well-known/x402` Resources:** Aligned high-frequency Bazaar intelligence routes (`/v1/bazaar/token-security`, `/v1/bazaar/wallet-risk`, `/v1/bazaar/verified-fetch`) to `\$0.005 USDC` (`5000` atomic), added KV-cached top-level `"resources": [...]` + machine-readable `"guarantee"` blocks on `/.well-known/x402` and `/.well-known/agent.json`, served RFC 9728 `/.well-known/oauth-protected-resource*` and `/.well-known/agent-registration.json`, and prevented `/llms.txt` documentation false-positives in the Canary Auditor.
+- **SDK & Shared v1.5.0 (`@nullclear/shared`, `@nullclear/x402-arbiter`):** Added `NullClearClient` methods for x402 directory discovery (`discoverEndpoints`) and zero-key forensics (`scanToken`, `inspectContract`, `decodeCalldata`, `simulateTx`), Bazaar/Guarantee TypeScript schemas, and Base RPC failover constants.
+
 ## What's New in v1.4.0
 - **13-Tool MCP Server & Streamable HTTP Endpoint (`https://api.nullclear.dev/mcp`):** Disambiguated tool descriptions/schemas (`scan_token_forensics`, `inspect_contract_abi_and_proxy`, `decode_calldata_or_failed_tx`, `simulate_transaction_preflight`, `read_url_clean_markdown`, `nullclear_discover_verified_x402_apis`, `nullclear_token_security_audit`, `nullclear_wallet_risk_score`, `nullclear_crypto_market_oracle`, `nullclear_safe_fetch`, `nullclear_escrow_x402_call`, `nullclear_check_reputation`, `nullclear_verify_kya_mandate`) plus live `/.well-known/glama.json`, `/.well-known/mcp.json`, and `/.well-known/mcp/server-card.json` metadata.
 - **PayAI `settlement_pending` & On-Chain EIP-3009 Recovery:** Polls PayAI `/settle` pending settlements and verifies `AuthorizationUsed` / transaction receipts on Base Mainnet so confirmed payments return `HTTP 200` and record clearings deterministically.

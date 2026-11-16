@@ -11,7 +11,7 @@ discoveryRouter.get("/health", (c) => {
   return c.json({
     status: "ok",
     protocol: "NullClear",
-    version: "1.4.0",
+    version: "1.5.0",
     timestamp: Date.now()
   });
 });
@@ -160,7 +160,7 @@ discoveryRouter.get("/", (c) => {
 <body>
   <div class="container">
     <header>
-      <div class="badge">PROTOCOL SPECIFICATION v1.4.0 &bull; ZERO-KEY FORENSICS + x402 ESCROW</div>
+      <div class="badge">PROTOCOL SPECIFICATION v1.5.0 &bull; ZERO-KEY FORENSICS + x402 ESCROW</div>
       <h1>NullClear Arbiter</h1>
       <p class="subtitle">Autonomous Non-Custodial Clearing, Deep Invariant Verification, URL-Prefix Auto-Guard & 1-Click Seller Gateways for x402 AI Agents on Base</p>
       <div class="quick-copy">
@@ -601,12 +601,46 @@ Available at \`/openapi.json\` with 100% schema definitions for all routes.
 });
 
 // GET /.well-known/x402 & /.well-known/x402.json
+const X402_GATEWAY_CACHE_KEY = "discovery:x402_gateways:v1";
+
+const X402_GUARANTEE = {
+  zeroLossEscrow: true,
+  settlementMode: "non-custodial-eip3009",
+  onValidationFailure: "void_authorization_zero_charge",
+  onUpstreamError: "void_authorization_zero_charge",
+  refundMechanism:
+    "EIP-3009 authorizations are held un-settled until response validation passes; any HTTP error, LLM refusal, or schema/invariant violation voids settlement with $0.00 charged."
+};
+
 const getX402Manifest = async (c: any) => {
   const treasuryAddress = c.env?.TREASURY_WALLET_ADDRESS || "0xB586eFcCa41dF27ad3873BEcA54da0c30bf04d5c";
   const arbiterAddress = c.env?.ARBITER_WALLET_ADDRESS || "0xfd74fF802EA0E735514C070AF04E0D6528deD145";
   const agentId = c.env?.ERC8004_AGENT_ID || "124595";
   const store = getArbiterStore(c.env);
-  const gateways = await store.listSellerGateways();
+  const kv = c.env?.KV || c.env?.NULLCLEAR_CACHE;
+
+  let gateways: any[] | null = null;
+  if (kv) {
+    try {
+      const cached = await kv.get(X402_GATEWAY_CACHE_KEY);
+      if (cached) {
+        gateways = JSON.parse(cached);
+      }
+    } catch {
+      gateways = null;
+    }
+  }
+  if (!gateways) {
+    gateways = await store.listSellerGateways();
+    if (kv) {
+      try {
+        await kv.put(X402_GATEWAY_CACHE_KEY, JSON.stringify(gateways), { expirationTtl: 60 });
+      } catch {
+        // Ignore KV write failures in discovery path
+      }
+    }
+  }
+
   const dynamicGatewayEndpoints: Record<string, any> = {};
   for (const gw of gateways) {
     dynamicGatewayEndpoints[`gateway_${gw.slug}`] = {
@@ -623,9 +657,24 @@ const getX402Manifest = async (c: any) => {
     };
   }
 
+  const resources = [
+    "https://api.nullclear.dev/v1/bazaar/token-security",
+    "https://api.nullclear.dev/v1/bazaar/wallet-risk",
+    "https://api.nullclear.dev/v1/bazaar/verified-fetch",
+    "https://api.nullclear.dev/v1/bazaar/market-oracle",
+    "https://api.nullclear.dev/v1/bazaar/audit",
+    "https://api.nullclear.dev/v1/bazaar/verify",
+    "https://api.nullclear.dev/v1/scan/base/0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+    "https://api.nullclear.dev/v1/inspect/base/0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+    "https://api.nullclear.dev/v1/decode",
+    "https://api.nullclear.dev/v1/simulate",
+    ...gateways.map((gw) => `https://api.nullclear.dev/g/${gw.slug}`)
+  ];
+
   return {
+    version: 1,
     x402Version: 2,
-    protocolVersion: "1.4.0",
+    protocolVersion: "1.5.0",
     service: "NullClear Arbiter",
     description: "Autonomous non-custodial schema escrow, deep value invariant verification, and reputation clearinghouse on Base Mainnet",
     erc8004AgentId: agentId,
@@ -633,6 +682,8 @@ const getX402Manifest = async (c: any) => {
     arbiterAddress,
     feeBps: 50,
     networks: ["eip155:8453", "eip155:84532"],
+    resources,
+    guarantee: X402_GUARANTEE,
     features: [
       "deferred_schema_escrow",
       "deep_value_invariants",
@@ -762,7 +813,7 @@ const getX402Manifest = async (c: any) => {
         path: "/v1/bazaar/token-security",
         method: "GET",
         payable: true,
-        amountAtomic: "10000",
+        amountAtomic: "5000",
         extensions: {
           bazaar: {
             discoverable: true,
@@ -836,7 +887,7 @@ const getX402Manifest = async (c: any) => {
         path: "/v1/bazaar/wallet-risk",
         method: "GET",
         payable: true,
-        amountAtomic: "10000",
+        amountAtomic: "5000",
         extensions: {
           bazaar: {
             discoverable: true,
@@ -900,7 +951,7 @@ const getX402Manifest = async (c: any) => {
         path: "/v1/bazaar/verified-fetch",
         method: "GET",
         payable: true,
-        amountAtomic: "10000",
+        amountAtomic: "5000",
         extensions: {
           bazaar: {
             discoverable: true,
@@ -1144,7 +1195,7 @@ const getAgentCard = (c: any) => {
   return {
     type: "https://eips.ethereum.org/EIPS/eip-8004#registration-v1",
     name: "NullClear Arbiter",
-    version: "1.4.0",
+    version: "1.5.0",
     protocolVersion: "0.2.1",
     description: "Autonomous non-custodial clearing, reputation scoring, and KYA arbiter for AI commerce on Base Mainnet",
     url: "https://api.nullclear.dev/a2a",
@@ -1152,6 +1203,7 @@ const getAgentCard = (c: any) => {
     image: "https://nullclear.dev/logo.png",
     active: true,
     x402Support: true,
+    guarantee: X402_GUARANTEE,
     agentWallet,
     treasuryWallet,
     supportedTrust: ["reputation", "validation", "x402-escrow", "crypto-economic"],
@@ -1241,16 +1293,29 @@ const getErc8004Verification = (c: any) => {
   };
 };
 
-// GET /.well-known/erc-8004.json & GET /_aixyz/erc-8004.json
+// GET /.well-known/erc-8004.json, /.well-known/agent-registration.json & GET /_aixyz/erc-8004.json
 discoveryRouter.get("/.well-known/erc-8004.json", (c) => c.json(getErc8004Verification(c)));
+discoveryRouter.get("/.well-known/agent-registration.json", (c) => c.json(getAgentCard(c)));
 discoveryRouter.get("/_aixyz/erc-8004.json", (c) => c.json(getErc8004Verification(c)));
+
+// GET /.well-known/oauth-protected-resource & /.well-known/oauth-protected-resource/mcp (RFC 9728 metadata)
+const getOAuthProtectedResource = () => ({
+  resource: "https://api.nullclear.dev/mcp",
+  resource_name: "NullClear MCP Server",
+  resource_documentation: "https://api.nullclear.dev/agents.md",
+  bearer_methods_supported: [],
+  authentication_required: false,
+  x402_optional_for_paid_tools: true
+});
+discoveryRouter.get("/.well-known/oauth-protected-resource", (c) => c.json(getOAuthProtectedResource()));
+discoveryRouter.get("/.well-known/oauth-protected-resource/mcp", (c) => c.json(getOAuthProtectedResource()));
 
 // GET /.well-known/mcp.json (full 13-tool manifest matching /mcp)
 const getMcpDiscoveryPayload = () => ({
   name: "NullClear MCP Server",
   package: "@nullclear/mcp",
   mcpName: "io.github.Nullclear-Protocol/nullclear",
-  version: "1.4.0",
+  version: "1.5.0",
   transport: "streamable-http",
   url: "https://api.nullclear.dev/mcp",
   repository: "https://github.com/Nullclear-Protocol/nullclear",
@@ -1306,11 +1371,21 @@ const FIXED_PAYMENT_INFO = {
   protocols: [{ x402: {} }]
 };
 
+const MICRO_PAYMENT_INFO = {
+  price: {
+    mode: "fixed",
+    currency: "USD",
+    amount: "0.005"
+  },
+  protocols: [{ x402: {} }]
+};
+
 const getOpenApiSpec = () => ({
   openapi: "3.1.0",
   info: {
     title: "NullClear",
-    version: "1.4.0",
+    version: "1.5.0",
+    "x-guarantee": X402_GUARANTEE,
     description:
       "Non-custodial x402 payment clearinghouse, schema & LLM-refusal escrow firewall, and ERC-8004 Sybil reputation & DeFi intelligence oracle on Base Mainnet (Agent #124595).",
     "x-guidance":
@@ -1459,7 +1534,7 @@ const getOpenApiSpec = () => ({
         summary:
           "Token Security - Live Base Mainnet ERC-20 contract bytecode, decimals, supply, DexScreener liquidity, and honeypot scanner",
         tags: ["Bazaar Oracles"],
-        "x-payment-info": FIXED_PAYMENT_INFO,
+        "x-payment-info": MICRO_PAYMENT_INFO,
         parameters: [
           {
             name: "address",
@@ -1520,7 +1595,7 @@ const getOpenApiSpec = () => ({
         operationId: "bazaarTokenSecurityPost",
         summary: "Token Security (POST) - Live Base Mainnet ERC-20 security & liquidity scanner",
         tags: ["Bazaar Oracles"],
-        "x-payment-info": FIXED_PAYMENT_INFO,
+        "x-payment-info": MICRO_PAYMENT_INFO,
         requestBody: {
           required: false,
           content: {
@@ -1581,7 +1656,7 @@ const getOpenApiSpec = () => ({
         summary:
           "Wallet Risk - Live Base Mainnet wallet counterparty risk profiler (EOA vs contract, ETH/USDC balances, nonce, ERC-8004 Sybil risk)",
         tags: ["Bazaar Oracles"],
-        "x-payment-info": FIXED_PAYMENT_INFO,
+        "x-payment-info": MICRO_PAYMENT_INFO,
         parameters: [
           {
             name: "address",
@@ -1637,7 +1712,7 @@ const getOpenApiSpec = () => ({
         operationId: "bazaarWalletRiskPost",
         summary: "Wallet Risk (POST) - Live Base Mainnet wallet counterparty risk profiler",
         tags: ["Bazaar Oracles"],
-        "x-payment-info": FIXED_PAYMENT_INFO,
+        "x-payment-info": MICRO_PAYMENT_INFO,
         requestBody: {
           required: false,
           content: {
@@ -1689,7 +1764,7 @@ const getOpenApiSpec = () => ({
         summary:
           "Verified Fetch - Schema-verified HTTP fetch & anti-hallucination proxy with LLM-refusal and invariant guards",
         tags: ["Bazaar Oracles"],
-        "x-payment-info": FIXED_PAYMENT_INFO,
+        "x-payment-info": MICRO_PAYMENT_INFO,
         parameters: [
           {
             name: "url",
@@ -1743,7 +1818,7 @@ const getOpenApiSpec = () => ({
         operationId: "bazaarVerifiedFetchPost",
         summary: "Verified Fetch (POST) - Schema-verified HTTP fetch & anti-hallucination proxy with custom invariants",
         tags: ["Bazaar Oracles"],
-        "x-payment-info": FIXED_PAYMENT_INFO,
+        "x-payment-info": MICRO_PAYMENT_INFO,
         requestBody: {
           required: false,
           content: {

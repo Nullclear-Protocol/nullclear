@@ -320,7 +320,15 @@ export async function canaryProbeEndpoint(
   }
 
   const parsedMeta = parseX402ChallengeMetadata(status, resHeaders, rawText, parsedJson);
-  const refusalMatch = parsedJson ? findLlmRefusal(parsedJson) : findLlmRefusal(rawText);
+  const isDocumentationEndpoint =
+    /^https:\/\/(?:api\.)?nullclear\.(?:dev|com)\/(?:llms\.txt|agents\.md|openapi\.json|\.well-known\/)/i.test(
+      endpointUrl
+    );
+  const refusalMatch = isDocumentationEndpoint
+    ? null
+    : parsedJson
+      ? findLlmRefusal(parsedJson)
+      : findLlmRefusal(rawText);
   const hasRefusal = Boolean(refusalMatch);
 
   // Endpoint is considered healthy/online if it responds with 402 Payment Required or 2xx without 5xx/timeout/refusal

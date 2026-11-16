@@ -16,9 +16,52 @@ export interface X402PaymentOption {
 
 export interface X402PaymentRequired {
   x402Version: 2;
+  scheme?: "exact";
+  network?: "eip155:8453" | "eip155:84532";
+  amount?: string;
+  payTo?: `0x${string}`;
+  maxTimeoutSeconds?: number;
   error?: string;
   resource: { url: string; description?: string; mimeType?: string };
   accepts: X402PaymentOption[];
+  extensions?: Record<string, unknown>;
+}
+
+export interface X402BazaarExtension {
+  discoverable: boolean;
+  description: string;
+  info?: {
+    input?: Record<string, unknown>;
+    output?: Record<string, unknown>;
+  };
+  schema?: Record<string, unknown>;
+}
+
+export interface X402ServiceGuarantee {
+  zeroLossEscrow: boolean;
+  settlementMode: "non-custodial-eip3009";
+  onValidationFailure: "void_authorization_zero_charge";
+  onUpstreamError: "void_authorization_zero_charge";
+  refundMechanism: string;
+}
+
+export interface X402DiscoveryManifest {
+  version: number;
+  x402Version: 2;
+  protocolVersion: string;
+  service: string;
+  description: string;
+  erc8004AgentId: string;
+  treasuryAddress: string;
+  arbiterAddress: string;
+  feeBps: number;
+  networks: string[];
+  resources: string[];
+  guarantee: X402ServiceGuarantee;
+  features: string[];
+  assets: Array<{ symbol: string; network: string; address: string }>;
+  endpoints: Record<string, unknown>;
+  gateways: Array<Record<string, unknown>>;
 }
 
 export interface EIP3009Authorization {

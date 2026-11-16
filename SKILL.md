@@ -84,7 +84,7 @@ Developers and autonomous agents can test NullClear immediately without setting 
 Run NullClear directly as a Model Context Protocol tool server (13 tools across zero-key forensics, bytecode/revert decoding, pre-flight simulation, and x402 escrow) for Claude, Cursor, Antigravity, and autonomous agent frameworks:
 
 ```bash
-npx -y @nullclear/mcp@1.4.0
+npx -y @nullclear/mcp@1.5.0
 ```
 
 Or connect remotely via Streamable HTTP (`https://api.nullclear.dev/mcp`):

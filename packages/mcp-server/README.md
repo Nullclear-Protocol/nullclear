@@ -6,7 +6,7 @@
 [![NullClear Arbiter MCP server – quality and maintenance score on Glama](https://glama.ai/mcp/servers/Nullclear-Protocol/nullclear/badges/score.svg)](https://glama.ai/mcp/servers/Nullclear-Protocol/nullclear)
 [![NullClear Arbiter MCP server – quality and maintenance score on Glama](https://glama.ai/mcp/servers/Nullclear-Protocol/nullclear/badges/card.svg)](https://glama.ai/mcp/servers/Nullclear-Protocol/nullclear)
 
-Model Context Protocol (MCP) server v1.4.0 enabling autonomous AI agents (Claude Code, Claude Desktop, Cursor, Gemini, OpenAI Agents) to run zero-key EVM/Solana forensics, bytecode/revert inspection, pre-flight simulation, and deferred HTTP 402 escrow clearing.
+Model Context Protocol (MCP) server v1.5.0 enabling autonomous AI agents (Claude Code, Claude Desktop, Cursor, Gemini, OpenAI Agents) to run zero-key EVM/Solana forensics, bytecode/revert inspection, pre-flight simulation, and deferred HTTP 402 escrow clearing.
 
 ## Remote Endpoint (Zero-Install Streamable HTTP)
 
