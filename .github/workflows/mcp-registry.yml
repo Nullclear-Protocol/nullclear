@@ -1,0 +1,40 @@
+name: Publish to Official MCP Registry
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "server.json"
+      - "packages/mcp-server/package.json"
+      - ".github/workflows/mcp-registry.yml"
+  workflow_dispatch:
+
+jobs:
+  publish:
+    name: Publish io.github.Nullclear-Protocol/nullclear via OIDC
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install official mcp-publisher
+        run: |
+          set -euo pipefail
+          os="$(uname -s | tr '[:upper:]' '[:lower:]')"
+          arch="$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/')"
+          curl --fail --location --silent --show-error \
+            "https://github.com/modelcontextprotocol/registry/releases/latest/download/mcp-publisher_${os}_${arch}.tar.gz" \
+            | tar xz mcp-publisher
+
+      - name: Validate server.json
+        run: ./mcp-publisher validate server.json
+
+      - name: Authenticate via GitHub OIDC
+        run: ./mcp-publisher login github-oidc
+
+      - name: Publish server.json to Official MCP Registry
+        run: ./mcp-publisher publish server.json
