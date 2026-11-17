@@ -39,11 +39,7 @@ const BAZAAR_MARKET_ORACLE_EXTENSION = {
       type: "http",
       method: "GET",
       queryParams: {
-        symbol: {
-          type: "string",
-          example: "ETH",
-          description: "Crypto asset ticker symbol (e.g. ETH, BTC, SOL)"
-        }
+        symbol: "ETH"
       }
     },
     output: {
@@ -67,28 +63,15 @@ const BAZAAR_MARKET_ORACLE_EXTENSION = {
       input: {
         type: "object",
         required: ["type", "method"],
+        additionalProperties: false,
         properties: {
           type: { type: "string", const: "http" },
-          method: { type: "string", enum: ["GET", "POST"] },
-          symbol: { type: "string", default: "ETH", example: "ETH" },
+          method: { type: "string", enum: ["GET", "HEAD", "DELETE"] },
           queryParams: {
             type: "object",
             properties: {
               symbol: {
                 type: "string",
-                default: "ETH",
-                example: "ETH",
-                description: "Crypto asset ticker symbol (e.g. ETH, BTC, SOL)"
-              }
-            }
-          },
-          body: {
-            type: "object",
-            properties: {
-              symbol: {
-                type: "string",
-                default: "ETH",
-                example: "ETH",
                 description: "Crypto asset ticker symbol (e.g. ETH, BTC, SOL)"
               }
             }
@@ -97,17 +80,9 @@ const BAZAAR_MARKET_ORACLE_EXTENSION = {
       },
       output: {
         type: "object",
-        required: ["type", "example"],
+        required: ["type"],
         properties: {
           type: { type: "string", const: "json" },
-          symbol: { type: "string" },
-          pair: { type: "string" },
-          priceUsd: { type: "number" },
-          source: { type: "string" },
-          sourcesChecked: { type: "array", items: { type: "string" } },
-          verified: { type: "boolean" },
-          invariantCheck: { type: "string" },
-          timestamp: { type: "integer" },
           example: {
             type: "object",
             required: ["symbol", "priceUsd", "verified", "invariantCheck"],
@@ -138,11 +113,7 @@ const BAZAAR_TOKEN_SECURITY_EXTENSION = {
       type: "http",
       method: "GET",
       queryParams: {
-        address: {
-          type: "string",
-          example: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
-          description: "Base ERC-20 token contract address"
-        }
+        address: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
       }
     },
     output: {
@@ -173,36 +144,16 @@ const BAZAAR_TOKEN_SECURITY_EXTENSION = {
       input: {
         type: "object",
         required: ["type", "method"],
+        additionalProperties: false,
         properties: {
           type: { type: "string", const: "http" },
-          method: { type: "string", enum: ["GET", "POST"] },
-          address: {
-            type: "string",
-            default: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
-            example: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
-          },
-          tokenAddress: {
-            type: "string",
-            default: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
-          },
+          method: { type: "string", enum: ["GET", "HEAD", "DELETE"] },
           queryParams: {
             type: "object",
             properties: {
               address: {
                 type: "string",
-                default: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
-                example: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
                 description: "Base ERC-20 token contract address"
-              }
-            }
-          },
-          body: {
-            type: "object",
-            properties: {
-              address: {
-                type: "string",
-                default: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
-                example: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
               }
             }
           }
@@ -210,24 +161,9 @@ const BAZAAR_TOKEN_SECURITY_EXTENSION = {
       },
       output: {
         type: "object",
-        required: ["type", "example"],
+        required: ["type"],
         properties: {
           type: { type: "string", const: "json" },
-          tokenAddress: { type: "string" },
-          symbol: { type: "string" },
-          name: { type: "string" },
-          decimals: { type: "integer" },
-          totalSupply: { type: "string" },
-          isContract: { type: "boolean" },
-          verified: { type: "boolean" },
-          isHoneypot: { type: "boolean" },
-          buyTaxBps: { type: "integer" },
-          sellTaxBps: { type: "integer" },
-          liquidityUsd: { type: "number" },
-          x402Compatible: { type: "boolean" },
-          securityScore: { type: "integer", minimum: 0, maximum: 100 },
-          riskLevel: { type: "string", enum: ["low", "medium", "high"] },
-          timestamp: { type: "integer" },
           example: {
             type: "object",
             required: [
@@ -271,11 +207,7 @@ const BAZAAR_WALLET_RISK_EXTENSION = {
       type: "http",
       method: "GET",
       queryParams: {
-        address: {
-          type: "string",
-          example: "0xfd74fF802EA0E735514C070AF04E0D6528deD145",
-          description: "Base Mainnet wallet address to profile"
-        }
+        address: "0xfd74fF802EA0E735514C070AF04E0D6528deD145"
       }
     },
     output: {
@@ -301,32 +233,16 @@ const BAZAAR_WALLET_RISK_EXTENSION = {
       input: {
         type: "object",
         required: ["type", "method"],
+        additionalProperties: false,
         properties: {
           type: { type: "string", const: "http" },
-          method: { type: "string", enum: ["GET", "POST"] },
-          address: {
-            type: "string",
-            default: "0xfd74fF802EA0E735514C070AF04E0D6528deD145",
-            example: "0xfd74fF802EA0E735514C070AF04E0D6528deD145"
-          },
+          method: { type: "string", enum: ["GET", "HEAD", "DELETE"] },
           queryParams: {
             type: "object",
             properties: {
               address: {
                 type: "string",
-                default: "0xfd74fF802EA0E735514C070AF04E0D6528deD145",
-                example: "0xfd74fF802EA0E735514C070AF04E0D6528deD145",
                 description: "Base Mainnet wallet address to profile"
-              }
-            }
-          },
-          body: {
-            type: "object",
-            properties: {
-              address: {
-                type: "string",
-                default: "0xfd74fF802EA0E735514C070AF04E0D6528deD145",
-                example: "0xfd74fF802EA0E735514C070AF04E0D6528deD145"
               }
             }
           }
@@ -334,18 +250,9 @@ const BAZAAR_WALLET_RISK_EXTENSION = {
       },
       output: {
         type: "object",
-        required: ["type", "example"],
+        required: ["type"],
         properties: {
           type: { type: "string", const: "json" },
-          address: { type: "string" },
-          isContract: { type: "boolean" },
-          ethBalance: { type: "string" },
-          usdcBalance: { type: "string" },
-          transactionCount: { type: "integer" },
-          erc8004Registered: { type: "boolean" },
-          riskScore: { type: "integer", minimum: 0, maximum: 100 },
-          riskLevel: { type: "string", enum: ["low", "medium", "high"] },
-          timestamp: { type: "integer" },
           example: {
             type: "object",
             required: ["address", "isContract", "transactionCount", "riskScore", "riskLevel"],
@@ -377,11 +284,7 @@ const BAZAAR_VERIFIED_FETCH_EXTENSION = {
       type: "http",
       method: "GET",
       queryParams: {
-        url: {
-          type: "string",
-          example: "https://api.coinbase.com/v2/prices/BTC-USD/spot",
-          description: "Target public HTTPS URL to fetch with schema & refusal validation"
-        }
+        url: "https://api.coinbase.com/v2/prices/BTC-USD/spot"
       }
     },
     output: {
@@ -405,53 +308,26 @@ const BAZAAR_VERIFIED_FETCH_EXTENSION = {
       input: {
         type: "object",
         required: ["type", "method"],
+        additionalProperties: false,
         properties: {
           type: { type: "string", const: "http" },
-          method: { type: "string", enum: ["GET", "POST"] },
-          url: {
-            type: "string",
-            default: "https://api.coinbase.com/v2/prices/BTC-USD/spot",
-            example: "https://api.coinbase.com/v2/prices/BTC-USD/spot"
-          },
+          method: { type: "string", enum: ["GET", "HEAD", "DELETE"] },
           queryParams: {
             type: "object",
             properties: {
               url: {
                 type: "string",
-                default: "https://api.coinbase.com/v2/prices/BTC-USD/spot",
-                example: "https://api.coinbase.com/v2/prices/BTC-USD/spot",
                 description: "Target public HTTPS URL to fetch with schema & refusal validation"
               }
-            }
-          },
-          body: {
-            type: "object",
-            properties: {
-              url: {
-                type: "string",
-                default: "https://api.coinbase.com/v2/prices/BTC-USD/spot",
-                example: "https://api.coinbase.com/v2/prices/BTC-USD/spot"
-              },
-              jsonSchema: { type: "object" },
-              invariants: { type: "array", items: { type: "object" } },
-              rejectRefusals: { type: "boolean", default: true }
             }
           }
         }
       },
       output: {
         type: "object",
-        required: ["type", "example"],
+        required: ["type"],
         properties: {
           type: { type: "string", const: "json" },
-          targetUrl: { type: "string" },
-          upstreamStatus: { type: "integer" },
-          verified: { type: "boolean" },
-          data: {},
-          refusalDetected: { type: "boolean" },
-          invariantsPassed: { type: "boolean" },
-          attestation: { type: "string" },
-          timestamp: { type: "integer" },
           example: {
             type: "object",
             required: [
@@ -489,11 +365,7 @@ const BAZAAR_AUDIT_EXTENSION = {
       type: "http",
       method: "GET",
       queryParams: {
-        agentId: {
-          type: "string",
-          example: "124595",
-          description: "ERC-8004 Agent Token ID on Base Mainnet"
-        }
+        agentId: "124595"
       }
     },
     output: {
@@ -516,28 +388,16 @@ const BAZAAR_AUDIT_EXTENSION = {
       input: {
         type: "object",
         required: ["type", "method"],
+        additionalProperties: false,
         properties: {
           type: { type: "string", const: "http" },
-          method: { type: "string", enum: ["GET", "POST"] },
-          agentId: { type: "string", default: "124595", example: "124595" },
+          method: { type: "string", enum: ["GET", "HEAD", "DELETE"] },
           queryParams: {
             type: "object",
             properties: {
               agentId: {
                 type: "string",
-                default: "124595",
-                example: "124595",
                 description: "ERC-8004 Agent Token ID on Base Mainnet"
-              }
-            }
-          },
-          body: {
-            type: "object",
-            properties: {
-              agentId: {
-                type: "string",
-                default: "124595",
-                example: "124595"
               }
             }
           }
@@ -545,15 +405,9 @@ const BAZAAR_AUDIT_EXTENSION = {
       },
       output: {
         type: "object",
-        required: ["type", "example"],
+        required: ["type"],
         properties: {
           type: { type: "string", const: "json" },
-          agentId: { type: "string" },
-          trustScore: { type: "integer", minimum: 0, maximum: 100 },
-          grade: { type: "string", enum: ["A", "B", "C", "D", "F"] },
-          sybilRisk: { type: "string", enum: ["low", "medium", "high"] },
-          escrowReady: { type: "boolean" },
-          timestamp: { type: "integer" },
           example: {
             type: "object",
             required: ["agentId", "trustScore", "grade", "escrowReady"],
@@ -581,12 +435,10 @@ const BAZAAR_VERIFY_EXTENSION = {
     input: {
       type: "http",
       method: "POST",
+      bodyType: "json",
       body: {
-        type: "json",
-        example: {
-          agentId: "124595",
-          schema: { type: "object", required: ["price"] }
-        }
+        agentId: "124595",
+        schema: { type: "object", required: ["price"] }
       }
     },
     output: {
@@ -606,39 +458,26 @@ const BAZAAR_VERIFY_EXTENSION = {
     properties: {
       input: {
         type: "object",
-        required: ["type", "method"],
+        required: ["type", "method", "bodyType", "body"],
+        additionalProperties: false,
         properties: {
           type: { type: "string", const: "http" },
-          method: { type: "string", enum: ["GET", "POST"] },
-          agentId: { type: "string", default: "124595", example: "124595" },
-          schema: { type: "object" },
-          queryParams: {
-            type: "object",
-            properties: {
-              agentId: { type: "string", default: "124595", example: "124595" }
-            }
-          },
+          method: { type: "string", enum: ["POST", "PUT", "PATCH"] },
+          bodyType: { type: "string", enum: ["json", "form-data", "text"] },
           body: {
             type: "object",
             properties: {
-              agentId: { type: "string", default: "124595", example: "124595" },
-              schema: {
-                type: "object",
-                example: { type: "object", required: ["price"] }
-              }
+              agentId: { type: "string" },
+              schema: { type: "object" }
             }
           }
         }
       },
       output: {
         type: "object",
-        required: ["type", "example"],
+        required: ["type"],
         properties: {
           type: { type: "string", const: "json" },
-          verified: { type: "boolean" },
-          agentId: { type: "string" },
-          escrowSupported: { type: "boolean" },
-          timestamp: { type: "integer" },
           example: {
             type: "object",
             required: ["verified", "agentId", "escrowSupported"],
