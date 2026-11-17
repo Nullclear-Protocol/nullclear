@@ -13,7 +13,7 @@ export const ERC20_TRANSFER_TOPIC0 =
   "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef";
 
 export const INDEXER_STATE_KEY = "base_usdc_eip3009";
-export const MAX_BLOCK_CHUNK = 1000;
+export const MAX_BLOCK_CHUNK = 5000;
 
 export interface RawEthLog {
   address?: string;
@@ -365,7 +365,8 @@ export async function syncBaseEip3009Logs(
         ])
       );
   let activeRpcUrl = primaryRpc;
-  const SAFE_LIVE_CHUNK = 250;
+  // Base Flashblocks produce ~5 blocks/sec (~4,500 blocks per 15-min cron), so scan up to 5,000 blocks per sync
+  const SAFE_LIVE_CHUNK = 5000;
 
   const existingState = await store.getIndexerState(INDEXER_STATE_KEY);
   let fromBlock = options?.fromBlock ?? (existingState ? existingState.last_indexed_block + 1 : 0);
@@ -398,7 +399,7 @@ export async function syncBaseEip3009Logs(
 
         let chunkFrom = options?.fromBlock ?? (existingState ? existingState.last_indexed_block + 1 : 0);
         // If stale cursor is far behind chain tip without explicit range, snap near tip so radar sees live flows
-        if (!options?.fromBlock && (!chunkFrom || chunkFrom <= 0 || latestBlock - chunkFrom > 25_000)) {
+        if (!options?.fromBlock && (!chunkFrom || chunkFrom <= 0 || latestBlock - chunkFrom > 100_000)) {
           chunkFrom = Math.max(1, latestBlock - SAFE_LIVE_CHUNK + 1);
         }
 

@@ -531,13 +531,13 @@ describe("NullClear Worker Arbiter Test Suite", () => {
     expect(postRes.status).toBe(200);
     const postData = (await postRes.json()) as any;
     expect(postData.result.tools.length).toBe(13);
-    expect(postData.result.tools[0].name).toBe("scan_token_forensics");
-    expect(postData.result.tools[1].name).toBe("inspect_contract_abi_and_proxy");
-    expect(postData.result.tools[2].name).toBe("decode_calldata_or_failed_tx");
-    expect(postData.result.tools[3].name).toBe("simulate_transaction_preflight");
-    expect(postData.result.tools[4].name).toBe("read_url_clean_markdown");
-    expect(postData.result.tools.some((t: any) => t.name === "nullclear_token_security_audit")).toBe(true);
-    expect(postData.result.tools.some((t: any) => t.name === "nullclear_discover_verified_x402_apis")).toBe(true);
+    expect(postData.result.tools[0].name).toBe("nullclear_scan_token");
+    expect(postData.result.tools[1].name).toBe("nullclear_inspect_contract");
+    expect(postData.result.tools[2].name).toBe("nullclear_decode_calldata");
+    expect(postData.result.tools[3].name).toBe("nullclear_simulate_transaction");
+    expect(postData.result.tools[4].name).toBe("nullclear_read_markdown");
+    expect(postData.result.tools.some((t: any) => t.name === "nullclear_audit_paid_token")).toBe(true);
+    expect(postData.result.tools.some((t: any) => t.name === "nullclear_discover_apis")).toBe(true);
   });
 
   // 15. Anti-Abuse Guard A: Self-Clearing Prohibited (from === to)
@@ -813,13 +813,13 @@ describe("NullClear Worker Arbiter Test Suite", () => {
   });
 
   // 21. Health Check Endpoint
-  it("GET /health returns 200 with status ok and version 1.5.0", async () => {
+  it("GET /health returns 200 with status ok and version 1.5.1", async () => {
     const res = await app.fetch(new Request("http://localhost/health"), testEnv);
     expect(res.status).toBe(200);
     const json = (await res.json()) as any;
     expect(json.status).toBe("ok");
     expect(json.protocol).toBe("NullClear");
-    expect(json.version).toBe("1.5.0");
+    expect(json.version).toBe("1.5.1");
   });
 
   // 22. Live Sandbox 402 Seller Endpoints & Public Stats
@@ -1574,11 +1574,11 @@ describe("NullClear Worker Arbiter Test Suite", () => {
     expect(listRes.status).toBe(200);
     const listJson = (await listRes.json()) as any;
     const toolNames = listJson.result.tools.map((t: any) => t.name);
-    expect(toolNames).toContain("nullclear_token_security_audit");
-    expect(toolNames).toContain("nullclear_wallet_risk_score");
-    expect(toolNames).toContain("nullclear_crypto_market_oracle");
-    expect(toolNames).toContain("nullclear_safe_fetch");
-    expect(toolNames).toContain("nullclear_discover_verified_x402_apis");
+    expect(toolNames).toContain("nullclear_audit_paid_token");
+    expect(toolNames).toContain("nullclear_score_wallet");
+    expect(toolNames).toContain("nullclear_fetch_spot_price");
+    expect(toolNames).toContain("nullclear_fetch_guarded");
+    expect(toolNames).toContain("nullclear_discover_apis");
 
     // 2. Calls 1 through 10 from the same session succeed with HTTP 200, returning x-nullclear-tier: free-trial
     const sessionHeader = "audit2-zero-config-session";
@@ -2468,13 +2468,31 @@ describe("NullClear Worker Arbiter Test Suite", () => {
       const res = await app.fetch(new Request(`https://api.nullclear.dev${path}`), testEnv);
       expect(res.status).toBe(200);
       const manifest = (await res.json()) as any;
-      expect(manifest.version).toBe("1.5.0");
+      expect(manifest.version).toBe("1.5.1");
       expect(manifest.transport).toBe("streamable-http");
       expect(manifest.tools).toHaveLength(13);
-      const scanTool = manifest.tools.find((t: any) => t.name === "scan_token_forensics");
-      const paidAuditTool = manifest.tools.find((t: any) => t.name === "nullclear_token_security_audit");
+      const scanTool = manifest.tools.find((t: any) => t.name === "nullclear_scan_token");
+      const paidAuditTool = manifest.tools.find((t: any) => t.name === "nullclear_audit_paid_token");
       expect(scanTool?.description).toContain("Do NOT use");
       expect(paidAuditTool?.description).toContain("$0.005");
+    }
+
+    const a2aCardRes = await app.fetch(new Request("https://api.nullclear.dev/a2a"), testEnv);
+    expect(a2aCardRes.status).toBe(200);
+    const a2aCard = (await a2aCardRes.json()) as any;
+    expect(a2aCard.name).toBe("NullClear Arbiter");
+    expect(Array.isArray(a2aCard.skills)).toBe(true);
+
+    for (const p of [
+      "/.well-known/ai-catalog.json",
+      "/.well-known/ard.json",
+      "/.well-known/security.txt",
+      "/privacy",
+      "/terms",
+      "/pricing"
+    ]) {
+      const dr = await app.fetch(new Request(`https://api.nullclear.dev${p}`), testEnv);
+      expect(dr.status).toBe(200);
     }
   });
 
@@ -2579,7 +2597,7 @@ describe("NullClear Worker Arbiter Test Suite", () => {
     expect(x402Res.status).toBe(200);
     const x402Json = (await x402Res.json()) as any;
     expect(x402Json.version).toBe(1);
-    expect(x402Json.protocolVersion).toBe("1.5.0");
+    expect(x402Json.protocolVersion).toBe("1.5.1");
     expect(Array.isArray(x402Json.resources)).toBe(true);
     expect(x402Json.resources).toContain("https://api.nullclear.dev/v1/bazaar/token-security");
     expect(x402Json.resources).toContain("https://api.nullclear.dev/v1/decode");

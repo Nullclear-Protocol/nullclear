@@ -327,7 +327,12 @@ export async function settleViaFacilitator(options: SettlementOptions): Promise<
         ...(bazaarExtension ? { extensions: { bazaar: bazaarExtension } } : {})
       },
       paymentRequirements,
-      ...(bazaarExtension ? { serverExtensions: { bazaar: bazaarExtension } } : {})
+      ...(bazaarExtension
+        ? {
+            extensions: { bazaar: bazaarExtension },
+            serverExtensions: { bazaar: bazaarExtension }
+          }
+        : {})
     };
 
     let candidateTxHash: string | undefined;

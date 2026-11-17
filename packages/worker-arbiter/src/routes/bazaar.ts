@@ -62,9 +62,11 @@ const BAZAAR_MARKET_ORACLE_EXTENSION = {
   schema: {
     $schema: "https://json-schema.org/draft/2020-12/schema",
     type: "object",
+    required: ["input"],
     properties: {
       input: {
         type: "object",
+        required: ["type", "method"],
         properties: {
           type: { type: "string", const: "http" },
           method: { type: "string", enum: ["GET", "POST"] },
@@ -95,7 +97,7 @@ const BAZAAR_MARKET_ORACLE_EXTENSION = {
       },
       output: {
         type: "object",
-        required: ["symbol", "priceUsd", "verified", "invariantCheck"],
+        required: ["type", "example"],
         properties: {
           type: { type: "string", const: "json" },
           symbol: { type: "string" },
@@ -166,9 +168,11 @@ const BAZAAR_TOKEN_SECURITY_EXTENSION = {
   schema: {
     $schema: "https://json-schema.org/draft/2020-12/schema",
     type: "object",
+    required: ["input"],
     properties: {
       input: {
         type: "object",
+        required: ["type", "method"],
         properties: {
           type: { type: "string", const: "http" },
           method: { type: "string", enum: ["GET", "POST"] },
@@ -206,14 +210,7 @@ const BAZAAR_TOKEN_SECURITY_EXTENSION = {
       },
       output: {
         type: "object",
-        required: [
-          "tokenAddress",
-          "symbol",
-          "isContract",
-          "verified",
-          "securityScore",
-          "x402Compatible"
-        ],
+        required: ["type", "example"],
         properties: {
           type: { type: "string", const: "json" },
           tokenAddress: { type: "string" },
@@ -299,9 +296,11 @@ const BAZAAR_WALLET_RISK_EXTENSION = {
   schema: {
     $schema: "https://json-schema.org/draft/2020-12/schema",
     type: "object",
+    required: ["input"],
     properties: {
       input: {
         type: "object",
+        required: ["type", "method"],
         properties: {
           type: { type: "string", const: "http" },
           method: { type: "string", enum: ["GET", "POST"] },
@@ -335,7 +334,7 @@ const BAZAAR_WALLET_RISK_EXTENSION = {
       },
       output: {
         type: "object",
-        required: ["address", "isContract", "transactionCount", "riskScore", "riskLevel"],
+        required: ["type", "example"],
         properties: {
           type: { type: "string", const: "json" },
           address: { type: "string" },
@@ -401,9 +400,11 @@ const BAZAAR_VERIFIED_FETCH_EXTENSION = {
   schema: {
     $schema: "https://json-schema.org/draft/2020-12/schema",
     type: "object",
+    required: ["input"],
     properties: {
       input: {
         type: "object",
+        required: ["type", "method"],
         properties: {
           type: { type: "string", const: "http" },
           method: { type: "string", enum: ["GET", "POST"] },
@@ -440,14 +441,7 @@ const BAZAAR_VERIFIED_FETCH_EXTENSION = {
       },
       output: {
         type: "object",
-        required: [
-          "targetUrl",
-          "upstreamStatus",
-          "verified",
-          "refusalDetected",
-          "invariantsPassed",
-          "attestation"
-        ],
+        required: ["type", "example"],
         properties: {
           type: { type: "string", const: "json" },
           targetUrl: { type: "string" },
@@ -517,9 +511,11 @@ const BAZAAR_AUDIT_EXTENSION = {
   schema: {
     $schema: "https://json-schema.org/draft/2020-12/schema",
     type: "object",
+    required: ["input"],
     properties: {
       input: {
         type: "object",
+        required: ["type", "method"],
         properties: {
           type: { type: "string", const: "http" },
           method: { type: "string", enum: ["GET", "POST"] },
@@ -549,7 +545,7 @@ const BAZAAR_AUDIT_EXTENSION = {
       },
       output: {
         type: "object",
-        required: ["agentId", "trustScore", "grade", "escrowReady"],
+        required: ["type", "example"],
         properties: {
           type: { type: "string", const: "json" },
           agentId: { type: "string" },
@@ -606,9 +602,11 @@ const BAZAAR_VERIFY_EXTENSION = {
   schema: {
     $schema: "https://json-schema.org/draft/2020-12/schema",
     type: "object",
+    required: ["input"],
     properties: {
       input: {
         type: "object",
+        required: ["type", "method"],
         properties: {
           type: { type: "string", const: "http" },
           method: { type: "string", enum: ["GET", "POST"] },
@@ -634,7 +632,7 @@ const BAZAAR_VERIFY_EXTENSION = {
       },
       output: {
         type: "object",
-        required: ["verified", "agentId", "escrowSupported"],
+        required: ["type", "example"],
         properties: {
           type: { type: "string", const: "json" },
           verified: { type: "boolean" },

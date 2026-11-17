@@ -12,10 +12,17 @@ function getExtendedCard(c: any) {
 
   return {
     name: "NullClear Arbiter",
-    version: "1.5.0",
+    version: "1.5.1",
     protocolVersion: "0.2.1",
+    description:
+      "Autonomous non-custodial clearing, reputation scoring, and KYA arbiter for AI commerce on Base Mainnet",
     url: "https://api.nullclear.dev/a2a",
     documentationUrl: "https://api.nullclear.dev/agents.md",
+    iconUrl: "https://nullclear.dev/logo.png",
+    provider: {
+      organization: "NullClear Protocol",
+      url: "https://nullclear.dev"
+    },
     openApiUrl: "https://api.nullclear.dev/openapi.json",
     mcpEndpoint: "https://api.nullclear.dev/mcp",
     erc8004: {
@@ -54,11 +61,11 @@ function getExtendedCard(c: any) {
       },
       {
         id: "nullclear-bazaar-suite",
-        name: "x402 Payable Intelligence Oracles ($0.01 USDC / Free Trial)",
+        name: "x402 Payable Intelligence Oracles ($0.005-$0.01 USDC / Free Trial)",
         description:
-          "5 live Base Mainnet x402 endpoints with 10 free daily trial calls: market-oracle, token-security, wallet-risk, verified-fetch, and audit.",
+          "6 live Base Mainnet Bazaar endpoints ($0.005-$0.01 USDC with 10 free daily calls) plus 4 zero-key forensic endpoints (100 free daily calls, then $0.005 USDC): token-security, wallet-risk, verified-fetch, market-oracle, audit, verify, scan, inspect, decode, simulate.",
         endpoint: "https://api.nullclear.dev/openapi.json",
-        tags: ["x402", "bazaar", "oracle", "defi", "security"]
+        tags: ["x402", "bazaar", "defi", "oracle", "security"]
       },
       {
         id: "nullclear-kya-verification",
@@ -72,12 +79,14 @@ function getExtendedCard(c: any) {
   };
 }
 
-// GET /a2a - Discovery & Status for A2A crawlers
+// GET /a2a - Valid A2A AgentCard at root + status metadata for crawlers & 8004scan
 a2aRouter.get("/", (c) => {
+  const card = getExtendedCard(c);
   return c.json({
+    ...card,
     status: "active",
     protocol: "A2A-JSON-RPC-2.0",
-    agent: getExtendedCard(c),
+    agent: card,
     supportedMethods: [
       "message/send",
       "tasks/send",

@@ -11,7 +11,7 @@ discoveryRouter.get("/health", (c) => {
   return c.json({
     status: "ok",
     protocol: "NullClear",
-    version: "1.5.0",
+    version: "1.5.1",
     timestamp: Date.now()
   });
 });
@@ -160,7 +160,7 @@ discoveryRouter.get("/", (c) => {
 <body>
   <div class="container">
     <header>
-      <div class="badge">PROTOCOL SPECIFICATION v1.5.0 &bull; ZERO-KEY FORENSICS + x402 ESCROW</div>
+      <div class="badge">PROTOCOL SPECIFICATION v1.5.1 &bull; ZERO-KEY FORENSICS + x402 ESCROW</div>
       <h1>NullClear Arbiter</h1>
       <p class="subtitle">Autonomous Non-Custodial Clearing, Deep Invariant Verification, URL-Prefix Auto-Guard & 1-Click Seller Gateways for x402 AI Agents on Base</p>
       <div class="quick-copy">
@@ -674,7 +674,7 @@ const getX402Manifest = async (c: any) => {
   return {
     version: 1,
     x402Version: 2,
-    protocolVersion: "1.5.0",
+    protocolVersion: "1.5.1",
     service: "NullClear Arbiter",
     description: "Autonomous non-custodial schema escrow, deep value invariant verification, and reputation clearinghouse on Base Mainnet",
     erc8004AgentId: agentId,
@@ -1195,12 +1195,21 @@ const getAgentCard = (c: any) => {
   return {
     type: "https://eips.ethereum.org/EIPS/eip-8004#registration-v1",
     name: "NullClear Arbiter",
-    version: "1.5.0",
+    version: "1.5.1",
     protocolVersion: "0.2.1",
-    description: "Autonomous non-custodial clearing, reputation scoring, and KYA arbiter for AI commerce on Base Mainnet",
+    description:
+      "Autonomous non-custodial clearing, reputation scoring, and KYA arbiter for AI commerce on Base Mainnet",
     url: "https://api.nullclear.dev/a2a",
     documentationUrl: "https://api.nullclear.dev/agents.md",
     image: "https://nullclear.dev/logo.png",
+    iconUrl: "https://nullclear.dev/logo.png",
+    provider: {
+      organization: "NullClear Protocol",
+      url: "https://nullclear.dev"
+    },
+    tags: ["x402", "escrow", "forensics", "security", "defi", "erc8004", "reputation", "mcp", "a2a"],
+    categories: ["security", "defi", "infrastructure"],
+    updatedAt: "2026-11-17T14:00:00Z",
     active: true,
     x402Support: true,
     guarantee: X402_GUARANTEE,
@@ -1233,14 +1242,16 @@ const getAgentCard = (c: any) => {
       {
         id: "nullclear-x402-escrow",
         name: "nullclear-x402-escrow",
-        description: "Deferred schema-escrow clearing for x402 payments with deep invariant verification and autonomous multi-seller failover.",
+        description:
+          "Deferred schema-escrow clearing for x402 payments with deep invariant verification and autonomous multi-seller failover.",
         endpoint: "https://api.nullclear.dev/v1/clear",
         tags: ["x402", "escrow", "invariants", "reputation", "erc8004"]
       },
       {
         id: "nullclear-reputation-oracle",
         name: "nullclear-reputation-oracle",
-        description: "ERC-8004 on-chain trust score, Sybil wash-trade audit, and corporate KYA verification on Base.",
+        description:
+          "ERC-8004 on-chain trust score, Sybil wash-trade audit, and corporate KYA verification on Base.",
         endpoint: "https://api.nullclear.dev/v1/score/8453/{agentId}",
         tags: ["erc8004", "reputation", "sybil", "oracle"]
       },
@@ -1248,7 +1259,7 @@ const getAgentCard = (c: any) => {
         id: "nullclear-bazaar-oracles",
         name: "nullclear-bazaar-oracles",
         description:
-          "6 live x402 payable Base Mainnet intelligence endpoints ($0.01 USDC): market-oracle, token-security, wallet-risk, verified-fetch, audit, and verify (plus $0.005 USDC forensic upgrades on scan/inspect/decode/simulate).",
+          "6 live x402 Bazaar intelligence endpoints ($0.005-$0.01 USDC) plus 4 zero-key forensic endpoints ($0.005 USDC after 100 free daily calls).",
         endpoint: "https://api.nullclear.dev/openapi.json",
         tags: ["x402", "bazaar", "defi", "oracle", "security"]
       }
@@ -1268,9 +1279,11 @@ const getAgentCard = (c: any) => {
   };
 };
 
-// GET /.well-known/agent-card.json & GET /.well-known/agent.json
+// GET/POST /.well-known/agent-card.json & /.well-known/agent.json
 discoveryRouter.get("/.well-known/agent-card.json", (c) => c.json(getAgentCard(c)));
+discoveryRouter.post("/.well-known/agent-card.json", (c) => c.json(getAgentCard(c)));
 discoveryRouter.get("/.well-known/agent.json", (c) => c.json(getAgentCard(c)));
+discoveryRouter.post("/.well-known/agent.json", (c) => c.json(getAgentCard(c)));
 
 // Canonical ERC-8004 Domain Verification JSON
 const getErc8004Verification = (c: any) => {
@@ -1315,7 +1328,7 @@ const getMcpDiscoveryPayload = () => ({
   name: "NullClear MCP Server",
   package: "@nullclear/mcp",
   mcpName: "io.github.Nullclear-Protocol/nullclear",
-  version: "1.5.0",
+  version: "1.5.1",
   transport: "streamable-http",
   url: "https://api.nullclear.dev/mcp",
   repository: "https://github.com/Nullclear-Protocol/nullclear",
@@ -1358,9 +1371,135 @@ discoveryRouter.get("/.well-known/ai-plugin.json", (c) => {
     },
     logo_url: "https://nullclear.dev/logo.png",
     contact_email: "contact@nullclear.dev",
-    legal_info_url: "https://nullclear.dev"
+    legal_info_url: "https://nullclear.dev/terms"
   });
 });
+
+// GET /.well-known/ai-catalog.json, /.well-known/ard.json, /.well-known/security.txt, and crawler docs/legal routes
+discoveryRouter.get("/.well-known/ai-catalog.json", (c) => {
+  return c.json({
+    version: "1.5.1",
+    name: "NullClear Protocol",
+    description:
+      "Zero-key on-chain token/contract/calldata/simulation forensics (100 free calls/day/IP) and non-custodial x402 deferred schema-escrow & Bazaar oracles ($0.005-$0.01 USDC on Base).",
+    homepage: "https://nullclear.dev",
+    apiBase: "https://api.nullclear.dev",
+    auth: "none",
+    protocols: ["mcp", "a2a", "x402", "erc-8004", "openapi-3.1"],
+    manifests: {
+      mcp: "https://api.nullclear.dev/mcp",
+      mcpCard: "https://api.nullclear.dev/.well-known/mcp.json",
+      a2a: "https://api.nullclear.dev/a2a",
+      agentCard: "https://api.nullclear.dev/.well-known/agent-card.json",
+      x402: "https://api.nullclear.dev/.well-known/x402",
+      erc8004: "https://api.nullclear.dev/.well-known/erc-8004.json",
+      openapi: "https://api.nullclear.dev/openapi.json",
+      llms: "https://api.nullclear.dev/llms.txt",
+      agentsMd: "https://api.nullclear.dev/agents.md"
+    },
+    services: [
+      { id: "scan", method: "GET", url: "https://api.nullclear.dev/v1/scan/base/{address}", pricing: "100 free/day then $0.005 USDC" },
+      { id: "inspect", method: "GET", url: "https://api.nullclear.dev/v1/inspect/base/{address}", pricing: "100 free/day then $0.005 USDC" },
+      { id: "decode", method: "POST", url: "https://api.nullclear.dev/v1/decode", pricing: "100 free/day then $0.005 USDC" },
+      { id: "simulate", method: "POST", url: "https://api.nullclear.dev/v1/simulate", pricing: "100 free/day then $0.005 USDC" },
+      { id: "bazaar-token-security", method: "GET", url: "https://api.nullclear.dev/v1/bazaar/token-security", pricing: "$0.005 USDC" },
+      { id: "bazaar-wallet-risk", method: "GET", url: "https://api.nullclear.dev/v1/bazaar/wallet-risk", pricing: "$0.005 USDC" },
+      { id: "bazaar-verified-fetch", method: "GET", url: "https://api.nullclear.dev/v1/bazaar/verified-fetch", pricing: "$0.005 USDC" },
+      { id: "bazaar-market-oracle", method: "GET", url: "https://api.nullclear.dev/v1/bazaar/market-oracle", pricing: "$0.01 USDC" },
+      { id: "bazaar-audit", method: "GET", url: "https://api.nullclear.dev/v1/bazaar/audit", pricing: "$0.01 USDC" },
+      { id: "bazaar-verify", method: "POST", url: "https://api.nullclear.dev/v1/bazaar/verify", pricing: "$0.01 USDC" }
+    ]
+  });
+});
+
+discoveryRouter.get("/.well-known/ard.json", (c) => {
+  return c.json({
+    schema: "agent-registry-discovery-v1",
+    name: "NullClear Arbiter",
+    version: "1.5.1",
+    erc8004: {
+      chainId: 8453,
+      agentId: 124595,
+      registry: "0x8004A169FB4a3325136EB29fA0ceB6D2e539a432"
+    },
+    endpoints: {
+      mcp: "https://api.nullclear.dev/mcp",
+      a2a: "https://api.nullclear.dev/a2a",
+      x402: "https://api.nullclear.dev/.well-known/x402",
+      openapi: "https://api.nullclear.dev/openapi.json",
+      llms: "https://api.nullclear.dev/llms.txt"
+    },
+    github: "https://github.com/Nullclear-Protocol/nullclear",
+    npm: "https://www.npmjs.com/package/@nullclear/mcp"
+  });
+});
+
+const serveSecurityTxt = (c: any) =>
+  c.text(
+    [
+      "Contact: mailto:contact@nullclear.dev",
+      "Contact: https://github.com/Nullclear-Protocol/nullclear/security",
+      "Canonical: https://api.nullclear.dev/.well-known/security.txt",
+      "Preferred-Languages: en",
+      "Policy: https://nullclear.dev/terms",
+      "Expires: 2027-12-31T23:59:59Z"
+    ].join("\n") + "\n"
+  );
+discoveryRouter.get("/.well-known/security.txt", serveSecurityTxt);
+discoveryRouter.get("/security.txt", serveSecurityTxt);
+
+discoveryRouter.get("/.well-known/payment", async (c) => c.json(await getX402Manifest(c)));
+discoveryRouter.get("/.well-known/payments", async (c) => c.json(await getX402Manifest(c)));
+discoveryRouter.get("/.well-known/pricing", async (c) => c.json(await getX402Manifest(c)));
+
+discoveryRouter.get("/pricing", (c) =>
+  c.json({
+    protocol: "NullClear",
+    version: "1.5.1",
+    freeTier: { forensicsDailyLimitPerIp: 100, bazaarDailyTrialCalls: 10, registrationRequired: false },
+    paidTier: {
+      currency: "USDC",
+      network: "eip155:8453",
+      microForensicsAndOraclesUsd: "0.005",
+      fullAttestedOraclesUsd: "0.01",
+      deferredEscrowClearingFeeBps: 50
+    },
+    x402Manifest: "https://api.nullclear.dev/.well-known/x402"
+  })
+);
+
+discoveryRouter.get("/privacy", (c) =>
+  c.text(
+    "NullClear Privacy Policy\n\nNullClear is a zero-registration, non-custodial protocol. We never require user accounts, API keys, passwords, cookies, or custodial deposits. Public request telemetry logs (path, HTTP status, country/ASN, and optional audited target URLs) are retained solely for protocol reliability, x402 indexing, and anti-abuse rate limiting. Contact: contact@nullclear.dev\n"
+  )
+);
+discoveryRouter.get("/privacy-policy", (c) => c.redirect("/privacy", 301));
+discoveryRouter.get("/legal/privacy", (c) => c.redirect("/privacy", 301));
+
+discoveryRouter.get("/terms", (c) =>
+  c.text(
+    "NullClear Terms of Service\n\nNullClear provides non-custodial on-chain forensics, MCP tools, and EIP-3009 x402 clearinghouse verification on an as-is basis. Callers retain full custody of wallets and signed authorizations until upstream invariants pass. Contact: contact@nullclear.dev\n"
+  )
+);
+discoveryRouter.get("/terms-of-service", (c) => c.redirect("/terms", 301));
+discoveryRouter.get("/legal/terms", (c) => c.redirect("/terms", 301));
+discoveryRouter.get("/legal", (c) => c.redirect("/terms", 301));
+
+discoveryRouter.get("/docs", (c) => c.redirect("/agents.md", 302));
+discoveryRouter.get("/documentation", (c) => c.redirect("/agents.md", 302));
+discoveryRouter.get("/features", (c) => c.redirect("/llms.txt", 302));
+discoveryRouter.get("/help", (c) => c.redirect("/agents.md", 302));
+discoveryRouter.get("/faq", (c) => c.redirect("/llms-full.txt", 302));
+discoveryRouter.get("/about", (c) => c.redirect("/", 302));
+discoveryRouter.get("/contact", (c) =>
+  c.json({
+    protocol: "NullClear Protocol",
+    email: "contact@nullclear.dev",
+    github: "https://github.com/Nullclear-Protocol/nullclear",
+    mcp: "https://api.nullclear.dev/mcp",
+    erc8004AgentId: 124595
+  })
+);
 
 const FIXED_PAYMENT_INFO = {
   price: {
@@ -1384,7 +1523,7 @@ const getOpenApiSpec = () => ({
   openapi: "3.1.0",
   info: {
     title: "NullClear",
-    version: "1.5.0",
+    version: "1.5.1",
     "x-guarantee": X402_GUARANTEE,
     description:
       "Non-custodial x402 payment clearinghouse, schema & LLM-refusal escrow firewall, and ERC-8004 Sybil reputation & DeFi intelligence oracle on Base Mainnet (Agent #124595).",

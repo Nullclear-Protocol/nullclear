@@ -19,7 +19,7 @@ const client = new NullClearClient({ arbiterUrl: ARBITER_URL });
 const server = new Server(
   {
     name: "nullclear-mcp-server",
-    version: "1.5.0"
+    version: "1.5.1"
   },
   {
     capabilities: {
@@ -29,6 +29,22 @@ const server = new Server(
     }
   }
 );
+
+const TOOL_DISPATCH_ALIASES: Record<string, string> = {
+  nullclear_scan_token: "scan_token_forensics",
+  nullclear_inspect_contract: "inspect_contract_abi_and_proxy",
+  nullclear_decode_calldata: "decode_calldata_or_failed_tx",
+  nullclear_simulate_transaction: "simulate_transaction_preflight",
+  nullclear_read_markdown: "read_url_clean_markdown",
+  nullclear_discover_apis: "nullclear_discover_verified_x402_apis",
+  nullclear_audit_paid_token: "nullclear_token_security_audit",
+  nullclear_score_wallet: "nullclear_wallet_risk_score",
+  nullclear_fetch_spot_price: "nullclear_crypto_market_oracle",
+  nullclear_fetch_guarded: "nullclear_safe_fetch",
+  nullclear_execute_escrow: "nullclear_escrow_x402_call",
+  nullclear_check_reputation: "nullclear_check_reputation",
+  nullclear_verify_mandate: "nullclear_verify_kya_mandate"
+};
 
 async function callBazaarOrProxyWithFreeTrialFirst(
   endpointUrl: string,
@@ -111,9 +127,9 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
   return {
     tools: [
       {
-        name: "scan_token_forensics",
+        name: "nullclear_scan_token",
         description:
-          "Perform a free multi-chain (Base, Ethereum, Solana) token security, EIP-1967 proxy resolution, honeypot, and buy/sell tax audit. Use this as the primary pre-trade check for any token or contract (100 free calls/day/IP, zero API key; then $0.005 USDC). Returns score, verdict, recommendedAgentAction, proxy implementation, tax percentages, LP USD, and provenance block number (<400 tokens). Do NOT use for low-level 4-byte selector disassembly on non-token contracts (use inspect_contract_abi_and_proxy) or when an EIP-712 Bazaar payment receipt is explicitly required on Base ERC-20 tokens (use nullclear_token_security_audit).",
+          "Perform a free multi-chain (Base, Ethereum, Solana) token security, EIP-1967 proxy resolution, honeypot, and buy/sell tax audit. Use this as the primary pre-trade check for any token or contract (100 free calls/day/IP, zero API key; then $0.005 USDC). Returns score, verdict, recommendedAgentAction, proxy implementation, tax percentages, LP USD, and provenance block number (<400 tokens). Do NOT use for low-level 4-byte selector disassembly on non-token contracts (use nullclear_inspect_contract) or when an EIP-712 Bazaar payment receipt is explicitly required on Base ERC-20 tokens (use nullclear_audit_paid_token).",
         annotations: {
           title: "Multi-Chain Token Security & Proxy Scanner (Free)",
           readOnlyHint: true,
@@ -140,9 +156,9 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
         }
       },
       {
-        name: "inspect_contract_abi_and_proxy",
+        name: "nullclear_inspect_contract",
         description:
-          "Disassemble deployed EVM bytecode on Base or Ethereum to resolve EIP-1967/1822/1167 proxies and extract decoded 4-byte PUSH4 function selectors without an Etherscan key. Use this for arbitrary smart contracts (vaults, routers, pools) to inspect proxy admin/implementation slots and SELFDESTRUCT/DELEGATECALL opcodes (100 free calls/day/IP). Returns isProxy, proxyType, implementationAddress, decodedFunctions, and dangerousSelectorsFound. Do NOT use for token market liquidity/honeypot tax audits (use scan_token_forensics).",
+          "Disassemble deployed EVM bytecode on Base or Ethereum to resolve EIP-1967/1822/1167 proxies and extract decoded 4-byte PUSH4 function selectors without an Etherscan key. Use this for arbitrary smart contracts (vaults, routers, pools) to inspect proxy admin/implementation slots and SELFDESTRUCT/DELEGATECALL opcodes (100 free calls/day/IP). Returns isProxy, proxyType, implementationAddress, decodedFunctions, and dangerousSelectorsFound. Do NOT use for token market liquidity/honeypot tax audits (use nullclear_scan_token).",
         annotations: {
           title: "EVM Proxy Slot & Bytecode Selector Disassembler (Free)",
           readOnlyHint: true,
@@ -169,9 +185,9 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
         }
       },
       {
-        name: "decode_calldata_or_failed_tx",
+        name: "nullclear_decode_calldata",
         description:
-          "Decode existing hex calldata, custom Solidity revert bytes, or a mined transaction hash to explain historical failures and flag malicious approvals. Use this AFTER a transaction failed or when auditing opaque 0x calldata bytes before signing (100 free calls/day/IP). Returns decoded 4-byte function signature, argument breakdown, revert reason, and approval-drainer warnings. Do NOT use to dry-run an unsigned transaction against live chain state (use simulate_transaction_preflight instead).",
+          "Decode existing hex calldata, custom Solidity revert bytes, or a mined transaction hash to explain historical failures and flag malicious approvals. Use this AFTER a transaction failed or when auditing opaque 0x calldata bytes before signing (100 free calls/day/IP). Returns decoded 4-byte function signature, argument breakdown, revert reason, and approval-drainer warnings. Do NOT use to dry-run an unsigned transaction against live chain state (use nullclear_simulate_transaction instead).",
         annotations: {
           title: "Historical Calldata, Revert & Failed Tx Decoder (Free)",
           readOnlyHint: true,
@@ -197,9 +213,9 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
         }
       },
       {
-        name: "simulate_transaction_preflight",
+        name: "nullclear_simulate_transaction",
         description:
-          "Execute a live eth_call and eth_estimateGas dry-run on Base or Ethereum BEFORE signing or broadcasting an unsigned transaction. Use this immediately before wallet execution when you have target `to` + `data` and need to confirm whether the call will succeed, estimate gas, and verify allowance safety (100 free calls/day/IP). Returns simulation success, gas estimate, decoded revert reason if any, and recommendedAgentAction. Do NOT use for standalone hex bytes without `to` or past mined tx hashes (use decode_calldata_or_failed_tx).",
+          "Execute a live eth_call and eth_estimateGas dry-run on Base or Ethereum BEFORE signing or broadcasting an unsigned transaction. Use this immediately before wallet execution when you have target `to` + `data` and need to confirm whether the call will succeed, estimate gas, and verify allowance safety (100 free calls/day/IP). Returns simulation success, gas estimate, decoded revert reason if any, and recommendedAgentAction. Do NOT use for standalone hex bytes without `to` or past mined tx hashes (use nullclear_decode_calldata).",
         annotations: {
           title: "Pre-Flight EVM eth_call Transaction Simulator (Free)",
           readOnlyHint: true,
@@ -239,9 +255,9 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
         }
       },
       {
-        name: "read_url_clean_markdown",
+        name: "nullclear_read_markdown",
         description:
-          "Fetch and convert any public web documentation URL or HTML article into clean, stripped Markdown (<400 tokens) with a SHA-256 content hash. Use this when reading documentation, blog posts, or web pages while minimizing context-window noise (100 free calls/day/IP). Returns markdown body and provenance hash. Do NOT use for JSON REST APIs or schema-enforced x402 data endpoints needing LLM-refusal/5xx protection (use nullclear_safe_fetch or nullclear_escrow_x402_call).",
+          "Fetch and convert any public web documentation URL or HTML article into clean, stripped Markdown (<400 tokens) with a SHA-256 content hash. Use this when reading documentation, blog posts, or web pages while minimizing context-window noise (100 free calls/day/IP). Returns markdown body and provenance hash. Do NOT use for JSON REST APIs or schema-enforced x402 data endpoints needing LLM-refusal/5xx protection (use nullclear_fetch_guarded or nullclear_execute_escrow).",
         annotations: {
           title: "HTML Documentation to Clean Markdown Reader (Free)",
           readOnlyHint: true,
@@ -261,9 +277,9 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
         }
       },
       {
-        name: "nullclear_discover_verified_x402_apis",
+        name: "nullclear_discover_apis",
         description:
-          "Search NullClear's audited x402 and ERC-8004 endpoint directory by keyword, category, minimum uptime, and maximum latency. Use this before paying external x402 sellers to find reliable APIs and retrieve their NullClear Zero-Loss Proxy URL (`https://api.nullclear.dev/https://...`). Returns matched endpoints with priceAtomic, uptimeScore, latencyMs, and proxy URL. Do NOT use to execute a call (pass the returned URL to nullclear_escrow_x402_call).",
+          "Search NullClear's audited x402 and ERC-8004 endpoint directory by keyword, category, minimum uptime, and maximum latency. Use this before paying external x402 sellers to find reliable APIs and retrieve their NullClear Zero-Loss Proxy URL (`https://api.nullclear.dev/https://...`). Returns matched endpoints with priceAtomic, uptimeScore, latencyMs, and proxy URL. Do NOT use to execute a call (pass the returned URL to nullclear_execute_escrow).",
         annotations: {
           title: "Search Audited x402 & ERC-8004 API Directory",
           readOnlyHint: true,
@@ -301,9 +317,9 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
         }
       },
       {
-        name: "nullclear_token_security_audit",
+        name: "nullclear_audit_paid_token",
         description:
-          "Run NullClear's x402 Bazaar paid oracle for Base Mainnet (8453) ERC-20 tokens returning a cryptographically signed clearing receipt (10 free trial calls/day, then $0.005 USDC). Use this ONLY when you specifically require a Base Bazaar EIP-712/keccak256 settlement receipt alongside token LP and bytecode verification. For free (100/day) multi-chain Base/ETH/Solana token & proxy scanning, use scan_token_forensics instead.",
+          "Run NullClear's x402 Bazaar paid oracle for Base Mainnet (8453) ERC-20 tokens returning a cryptographically signed clearing receipt (10 free trial calls/day, then $0.005 USDC). Use this ONLY when you specifically require a Base Bazaar EIP-712/keccak256 settlement receipt alongside token LP and bytecode verification. For free (100/day) multi-chain Base/ETH/Solana token & proxy scanning, use nullclear_scan_token instead.",
         annotations: {
           title: "Base Token x402 Bazaar Attested Audit ($0.005)",
           readOnlyHint: true,
@@ -324,7 +340,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
         }
       },
       {
-        name: "nullclear_wallet_risk_score",
+        name: "nullclear_score_wallet",
         description:
           "Profile a raw 0x EVM wallet address on Base Mainnet (8453) for OFAC sanctions exposure, on-chain counterparty wash-trade concentration, ETH/USDC balances, transaction count, and ERC-8004 ownership (10 free trials/day, then $0.005 USDC). Returns riskScore (0-100), riskLevel, and ERC-8004 registration status. Do NOT pass a numeric ERC-8004 agent ID here — use nullclear_check_reputation for numeric agentId trust audits.",
         annotations: {
@@ -351,7 +367,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
         }
       },
       {
-        name: "nullclear_crypto_market_oracle",
+        name: "nullclear_fetch_spot_price",
         description:
           "Query cross-exchange spot prices (Coinbase + Binance) for major crypto pairs with deterministic positive-price invariant verification and signed attestation (10 free trials/day, then $0.01 USDC). Returns priceUsd, source, invariantCheck ('PASSED'), and execution receipt. Use this whenever a verified non-hallucinated crypto spot price feed is needed.",
         annotations: {
@@ -374,9 +390,9 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
         }
       },
       {
-        name: "nullclear_safe_fetch",
+        name: "nullclear_fetch_guarded",
         description:
-          "Execute a zero-schema Auto-Guarded HTTP GET/POST request through NullClear's firewall against HTTP 5xx crashes, empty JSON bodies, Cloudflare/soft-paywall traps, and LLM refusal strings (10 free trials/day, then $0.005 USDC via Bazaar). Returns verified payload and executionReceipt, or voids settlement on failure. Do NOT use for plain HTML docs-to-Markdown conversion (use read_url_clean_markdown) or when custom JSON Schema/invariants/failover are needed (use nullclear_escrow_x402_call).",
+          "Execute a zero-schema Auto-Guarded HTTP GET/POST request through NullClear's firewall against HTTP 5xx crashes, empty JSON bodies, Cloudflare/soft-paywall traps, and LLM refusal strings (10 free trials/day, then $0.005 USDC via Bazaar). Returns verified payload and executionReceipt, or voids settlement on failure. Do NOT use for plain HTML docs-to-Markdown conversion (use nullclear_read_markdown) or when custom JSON Schema/invariants/failover are needed (use nullclear_execute_escrow).",
         annotations: {
           title: "Auto-Guarded JSON/API Safe HTTP Fetch ($0.005)",
           readOnlyHint: true,
@@ -406,9 +422,9 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
         }
       },
       {
-        name: "nullclear_escrow_x402_call",
+        name: "nullclear_execute_escrow",
         description:
-          "Execute a paid x402 API request protected by NullClear deferred non-custodial EIP-3009 escrow, custom JSON Schema/value invariants, multi-seller failover routing, and outbound spend caps (10 free trials/day, then requires configured wallet key). Settles upstream payment ONLY when all schema, numeric, staleness, and refusal checks pass; otherwise voids authorization ($0 lost). Use this instead of nullclear_safe_fetch whenever calling third-party x402 paid APIs with strict output contracts or fallback sellers.",
+          "Execute a paid x402 API request protected by NullClear deferred non-custodial EIP-3009 escrow, custom JSON Schema/value invariants, multi-seller failover routing, and outbound spend caps (10 free trials/day, then requires configured wallet key). Settles upstream payment ONLY when all schema, numeric, staleness, and refusal checks pass; otherwise voids authorization ($0 lost). Use this instead of nullclear_fetch_guarded whenever calling third-party x402 paid APIs with strict output contracts or fallback sellers.",
         annotations: {
           title: "Deferred x402 Escrow Call with Schema & Failover",
           readOnlyHint: false,
@@ -507,7 +523,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       {
         name: "nullclear_check_reputation",
         description:
-          "Retrieve an ERC-8004 registered agent's composite trust score (0-100), letter grade (A-F), historical clearing count, and Sybil wash-trading penalty flags by numeric agentId. Returns arbiter-signed reputation metrics and sybilFlags. Use this ONLY for registered ERC-8004 agent IDs (e.g. '124595'); for raw 0x wallet address OFAC/balance profiling use nullclear_wallet_risk_score, and for legal corporate liability limits use nullclear_verify_kya_mandate.",
+          "Retrieve an ERC-8004 registered agent's composite trust score (0-100), letter grade (A-F), historical clearing count, and Sybil wash-trading penalty flags by numeric agentId. Returns arbiter-signed reputation metrics and sybilFlags. Use this ONLY for registered ERC-8004 agent IDs (e.g. '124595'); for raw 0x wallet address OFAC/balance profiling use nullclear_score_wallet, and for legal corporate liability limits use nullclear_verify_mandate.",
         annotations: {
           title: "Check ERC-8004 AgentId Trust & Sybil Score",
           readOnlyHint: true,
@@ -532,7 +548,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
         }
       },
       {
-        name: "nullclear_verify_kya_mandate",
+        name: "nullclear_verify_mandate",
         description:
           "Verify an autonomous agent's Know Your Agent (KYA) EIP-712 corporate liability mandate, jurisdiction, expiration status, and whether a proposed USD transaction amount complies with corporate per-transaction caps. Returns approved boolean, corporateEntity, liabilityCoverageUsd, maxTxLimitUsd, and expiration/limit flags. Use this specifically for corporate authorization checks — not for on-chain Sybil scoring (use nullclear_check_reputation).",
         annotations: {
@@ -726,7 +742,8 @@ server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
 
 // 4. Tool Execution
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
-  const { name, arguments: args } = request.params;
+  const { name: rawName, arguments: args } = request.params;
+  const name = TOOL_DISPATCH_ALIASES[rawName] ?? rawName;
 
   try {
     if (name === "scan_token_forensics") {
