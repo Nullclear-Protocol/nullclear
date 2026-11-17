@@ -3,7 +3,7 @@
   "name": "io.github.Nullclear-Protocol/nullclear",
   "title": "NullClear Arbiter",
   "description": "Zero-key EVM/Solana token forensics, tx simulator, calldata decoder & x402 escrow arbiter",
-  "version": "1.5.0",
+  "version": "1.5.1",
   "websiteUrl": "https://nullclear.dev",
   "repository": {
     "url": "https://github.com/Nullclear-Protocol/nullclear",
@@ -14,7 +14,7 @@
     {
       "registryType": "npm",
       "identifier": "@nullclear/mcp",
-      "version": "1.5.0",
+      "version": "1.5.1",
       "transport": {
         "type": "stdio"
       }
