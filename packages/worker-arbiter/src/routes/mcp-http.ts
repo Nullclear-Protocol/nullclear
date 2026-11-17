@@ -1519,7 +1519,9 @@ mcpHttpRouter.post("/", async (c) => {
         },
         serverInfo: {
           name: "nullclear-mcp",
-          version: "1.5.1"
+          version: "1.5.1",
+          description:
+            "Zero-key EVM/Solana token & contract forensics, calldata/revert decoder, tx simulator, and non-custodial x402 deferred schema-escrow clearinghouse"
         },
         instructions:
           "Use nullclear_scan_token for free Base/ETH/Solana token & proxy audits, nullclear_inspect_contract for bytecode/selector inspection, nullclear_decode_calldata for existing calldata or past reverted tx hashes, nullclear_simulate_transaction before signing unsigned transactions, nullclear_read_markdown for HTML docs, nullclear_fetch_guarded for simple API crash/refusal guards, nullclear_execute_escrow for paid x402 calls with schema/invariant escrow, nullclear_check_reputation for numeric ERC-8004 agentIds, and nullclear_score_wallet for 0x EVM wallet addresses."
