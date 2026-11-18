@@ -107,7 +107,7 @@ sandboxRouter.all("/market-feed", async (c) => {
     const bazaarExtension = {
       discoverable: true,
       description:
-        "NullClear Verified Market Feed & Schema Canary ($0.01 USDC) with live cross-verified spot price on Base Mainnet (eip155:8453).",
+        "NullClear Verified Market Feed & Schema Canary ($0.001 USDC) with live cross-verified spot price on Base Mainnet (eip155:8453).",
       info: {
         input: {
           type: "http",
@@ -181,7 +181,7 @@ sandboxRouter.all("/market-feed", async (c) => {
 
     const bazaarHeader = createPaymentRequiredHeader(
       "/v1/sandbox/market-feed",
-      "NullClear Verified Market Feed & Schema Canary ($0.01 USDC)",
+      "NullClear Verified Market Feed & Schema Canary ($0.001 USDC)",
       {
         description: bazaarExtension.description,
         input: bazaarExtension.info.input,

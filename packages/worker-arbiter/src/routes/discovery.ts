@@ -1470,7 +1470,7 @@ discoveryRouter.get("/.well-known/ai-catalog.json", (c) => {
     version: "1.5.1",
     name: "NullClear Protocol",
     description:
-      "Zero-key on-chain token/contract/calldata/simulation forensics (100 free calls/day/IP) and non-custodial x402 deferred schema-escrow & Bazaar oracles ($0.005-$0.01 USDC on Base).",
+      "Zero-key on-chain token/contract/calldata/simulation forensics (100 free calls/day/IP) and non-custodial x402 deferred schema-escrow & Bazaar oracles ($0.005-$0.025 USDC on Base).",
     homepage: "https://nullclear.dev",
     apiBase: "https://api.nullclear.dev",
     auth: "none",
@@ -1500,6 +1500,10 @@ discoveryRouter.get("/.well-known/ai-catalog.json", (c) => {
       { id: "bazaar-scan-batch", method: "POST", url: "https://api.nullclear.dev/v1/bazaar/scan-batch", pricing: "$0.025 USDC" }
     ]
   });
+});
+
+discoveryRouter.get("/.well-known/402index-verify.txt", (c) => {
+  return c.text("7875aac458492aadf5d1d7c761fac3978f162a577cdaa4137ce5cd5dcae6dced");
 });
 
 discoveryRouter.get("/.well-known/ard.json", (c) => {

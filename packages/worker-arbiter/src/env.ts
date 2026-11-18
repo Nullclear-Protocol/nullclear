@@ -22,6 +22,10 @@ export interface Env {
     ARBITER_WALLET_ADDRESS?: string;
     ERC8004_AGENT_ID?: string;
     FACILITATOR_URL?: string;
+    CDP_FACILITATOR_URL?: string;
+    CDP_API_KEY_ID?: string;
+    CDP_API_KEY_SECRET?: string;
+    FACILITATOR_PREFERENCE?: "payai" | "cdp";
     BASE_RPC_URL?: string;
     BASE_MAINNET_RPC_URL?: string;
     BASE_SEPOLIA_RPC_URL?: string;

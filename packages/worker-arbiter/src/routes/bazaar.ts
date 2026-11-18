@@ -1135,8 +1135,20 @@ async function handleBazaarPayment(
     return { settled: true, transaction: simulatedTx, payer: authorization.from };
   }
 
-  // Real on-chain settlement via PayAI Facilitator (with on-chain fallback if PayAI returns 5xx)
-  const facilitatorUrl = c.env?.FACILITATOR_URL || "https://facilitator.payai.network";
+  // Real on-chain settlement via PayAI or Coinbase CDP Facilitator (with on-chain fallback if 5xx)
+  const requestedFacilitator = (
+    c.req.query("facilitator") ||
+    c.req.header("x-nullclear-facilitator") ||
+    c.env?.FACILITATOR_PREFERENCE ||
+    ""
+  )
+    .trim()
+    .toLowerCase();
+  const hasCdpCreds = Boolean(c.env?.CDP_API_KEY_ID && c.env?.CDP_API_KEY_SECRET);
+  const useCdp = requestedFacilitator === "cdp" && hasCdpCreds;
+  const facilitatorUrl = useCdp
+    ? c.env?.CDP_FACILITATOR_URL || "https://api.cdp.coinbase.com/platform/v2/x402"
+    : c.env?.FACILITATOR_URL || "https://facilitator.payai.network";
   const rpcUrl = c.env?.BASE_MAINNET_RPC_URL || c.env?.BASE_RPC_URL || "https://mainnet.base.org";
 
   const resourceUrl = `https://api.nullclear.dev${resourcePath}`;
@@ -1158,6 +1170,8 @@ async function handleBazaarPayment(
       extra: accepted.extra || { name: "USD Coin", version: "2" }
     },
     facilitatorUrl,
+    cdpApiKeyId: c.env?.CDP_API_KEY_ID,
+    cdpApiKeySecret: c.env?.CDP_API_KEY_SECRET,
     settlementMode: "facilitator",
     arbiterPrivateKey: c.env?.ARBITER_PRIVATE_KEY,
     rpcUrl,

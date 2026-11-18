@@ -2920,6 +2920,42 @@ describe("NullClear Worker Arbiter Test Suite", () => {
     const firewallHtml = await firewallRes.text();
     expect(firewallHtml).toContain("@nullclear/agentkit");
     expect(firewallHtml).toContain("@nullclear/plugin-eliza");
+
+    const verify402Res = await app.fetch(
+      new Request("https://api.nullclear.dev/.well-known/402index-verify.txt"),
+      testEnv
+    );
+    expect(verify402Res.status).toBe(200);
+    expect(await verify402Res.text()).toBe(
+      "7875aac458492aadf5d1d7c761fac3978f162a577cdaa4137ce5cd5dcae6dced"
+    );
+  });
+
+  it("signs Coinbase CDP JWT tokens cleanly via Web Crypto (ES256 & EdDSA)", async () => {
+    const { generateCdpJwt } = await import("../src/services/cdp-auth.js");
+    // Generate ephemeral P-256 ECDSA keypair in PKCS8 PEM
+    const kp = await crypto.subtle.generateKey({ name: "ECDSA", namedCurve: "P-256" }, true, [
+      "sign",
+      "verify"
+    ]);
+    const pkcs8 = new Uint8Array(await crypto.subtle.exportKey("pkcs8", kp.privateKey));
+    const pemB64 = Buffer.from(pkcs8).toString("base64");
+    const pem = `-----BEGIN PRIVATE KEY-----\n${pemB64}\n-----END PRIVATE KEY-----`;
+    const jwt = await generateCdpJwt({
+      apiKeyId: "organizations/test/apiKeys/k1",
+      apiKeySecret: pem,
+      requestMethod: "POST",
+      requestHost: "api.cdp.coinbase.com",
+      requestPath: "/platform/v2/x402/settle"
+    });
+    const parts = jwt.split(".");
+    expect(parts).toHaveLength(3);
+    const header = JSON.parse(Buffer.from(parts[0], "base64url").toString("utf8"));
+    const payload = JSON.parse(Buffer.from(parts[1], "base64url").toString("utf8"));
+    expect(header.alg).toBe("ES256");
+    expect(header.kid).toBe("organizations/test/apiKeys/k1");
+    expect(payload.iss).toBe("cdp");
+    expect(payload.uris).toEqual(["POST api.cdp.coinbase.com/platform/v2/x402/settle"]);
   });
 });
 

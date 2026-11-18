@@ -16,6 +16,7 @@ import {
   type X402PaymentOption,
   type X402PaymentResponse
 } from "@nullclear/shared";
+import { generateCdpJwt } from "./cdp-auth.js";
 
 export interface VerificationResult {
   valid: boolean;
@@ -27,6 +28,8 @@ export interface SettlementOptions {
   signature: `0x${string}`;
   accepted: X402PaymentOption;
   facilitatorUrl?: string;
+  cdpApiKeyId?: string;
+  cdpApiKeySecret?: string;
   settlementMode?: "onchain" | "facilitator" | "simulated";
   arbiterPrivateKey?: string;
   rpcUrl?: string;
@@ -342,10 +345,27 @@ export async function settleViaFacilitator(options: SettlementOptions): Promise<
         ? facilitatorUrl
         : `${facilitatorUrl.replace(/\/$/, "")}/settle`;
 
+      const postHeaders: Record<string, string> = { "Content-Type": "application/json" };
+      const parsedEndpoint = new URL(endpoint);
+      if (
+        parsedEndpoint.hostname.includes("cdp.coinbase.com") &&
+        options.cdpApiKeyId &&
+        options.cdpApiKeySecret
+      ) {
+        const jwt = await generateCdpJwt({
+          apiKeyId: options.cdpApiKeyId,
+          apiKeySecret: options.cdpApiKeySecret,
+          requestMethod: "POST",
+          requestHost: parsedEndpoint.host,
+          requestPath: parsedEndpoint.pathname
+        });
+        postHeaders.Authorization = `Bearer ${jwt}`;
+      }
+
       const postSettle = async () =>
         fetch(endpoint, {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: postHeaders,
           body: JSON.stringify(requestBody)
         });
 
