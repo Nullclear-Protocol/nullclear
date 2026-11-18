@@ -422,7 +422,7 @@ describe("Next-Gen Protocol Upgrades: x402 V1/V2 Headers, Soft-Paywall Guard & P
       expect(json.x402Version).toBe(2);
       expect(Array.isArray(json.accepts)).toBe(true);
       expect(json.accepts[0].scheme).toBe("exact");
-      expect(json.accepts[0].amount).toBe("10000");
+      expect(json.accepts[0].amount).toBe("5000");
     });
 
     it("URL-prefix proxy returns 403 Publisher Opt-Out for blacklisted domain x402-trust.com", async () => {

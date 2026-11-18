@@ -878,13 +878,14 @@ async function handleBazaarPayment(
   return { settled: true, transaction: settlement.transaction, payer: authorization.from };
 }
 
-// 1. GET & POST /v1/bazaar/market-oracle ($0.01 USDC / 10000 atomic)
+// 1. GET & POST /v1/bazaar/market-oracle ($0.005 USDC / 5000 atomic)
 bazaarRouter.all("/market-oracle", async (c) => {
   const result = await handleBazaarPayment(
     c,
     "/v1/bazaar/market-oracle",
     "Live cross-verified crypto price oracle (BTC, ETH, SOL, BASE tokens) with deterministic spread invariant check and cryptographic attestation.",
-    BAZAAR_MARKET_ORACLE_EXTENSION
+    BAZAAR_MARKET_ORACLE_EXTENSION,
+    "5000"
   );
   if (!result.settled) {
     return result.errorResponse!;
@@ -1330,13 +1331,14 @@ bazaarRouter.all("/verified-fetch", async (c) => {
   });
 });
 
-// 5. GET & POST /v1/bazaar/audit ($0.01 USDC / 10000 atomic)
+// 5. GET & POST /v1/bazaar/audit ($0.005 USDC / 5000 atomic)
 bazaarRouter.all("/audit", async (c) => {
   const result = await handleBazaarPayment(
     c,
     "/v1/bazaar/audit",
     "Verify ERC-8004 agent Sybil reputation score, wash-trading cluster risk, and x402 schema-escrow readiness on Base Mainnet (eip155:8453).",
-    BAZAAR_AUDIT_EXTENSION
+    BAZAAR_AUDIT_EXTENSION,
+    "5000"
   );
   if (!result.settled) {
     return result.errorResponse!;
@@ -1510,8 +1512,8 @@ bazaarRouter.get("/", async (c) => {
       path: "/v1/bazaar/market-oracle",
       url: "https://api.nullclear.dev/v1/bazaar/market-oracle",
       method: "GET",
-      priceAtomic: "10000",
-      priceUsdc: "0.01",
+      priceAtomic: "5000",
+      priceUsdc: "0.005",
       sellerAddress: NULLCLEAR_TREASURY_ADDRESS,
       category: "oracle",
       description: BAZAAR_MARKET_ORACLE_EXTENSION.description
@@ -1558,8 +1560,8 @@ bazaarRouter.get("/", async (c) => {
       path: "/v1/bazaar/audit",
       url: "https://api.nullclear.dev/v1/bazaar/audit",
       method: "GET",
-      priceAtomic: "10000",
-      priceUsdc: "0.01",
+      priceAtomic: "5000",
+      priceUsdc: "0.005",
       sellerAddress: NULLCLEAR_TREASURY_ADDRESS,
       category: "security",
       description: BAZAAR_AUDIT_EXTENSION.description

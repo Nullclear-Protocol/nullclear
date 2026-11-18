@@ -756,7 +756,7 @@ const getX402Manifest = async (c: any) => {
         path: "/v1/bazaar/market-oracle",
         method: "GET",
         payable: true,
-        amountAtomic: "10000",
+        amountAtomic: "5000",
         extensions: {
           bazaar: {
             discoverable: true,
@@ -1012,7 +1012,7 @@ const getX402Manifest = async (c: any) => {
         path: "/v1/bazaar/audit",
         method: "GET",
         payable: true,
-        amountAtomic: "10000",
+        amountAtomic: "5000",
         extensions: {
           bazaar: {
             discoverable: true,
@@ -1167,7 +1167,7 @@ curl -s -H "Accept: text/markdown" https://nullclear.com/scan/base/0x833589fCD6e
 curl -s -X POST https://api.nullclear.dev/v1/decode -H "Content-Type: application/json" -d '{"input":"0x095ea7b3000000000000000000000000b586efcca41df27ad3873beca54da0c30bf04d5cffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff","chain":"base"}'
 \`\`\`
 
-## 2. Native x402 Payable Intelligence Suite (\`$0.01 USDC\` / \`10000\` atomic units on Base)
+## 2. Native x402 Payable Intelligence Suite (\`$0.005–$0.01 USDC\` / \`5000–10000\` atomic units on Base)
 Any \`AgentCash\`, \`x402-fetch\`, or \`Coinbase AgentKit\` buyer agent can call these endpoints directly using standard HTTP 402 \`PAYMENT-SIGNATURE\` headers:
 1. \`GET https://api.nullclear.dev/v1/bazaar/market-oracle?symbol=ETH\` — Live cross-verified crypto spot price (Coinbase + Binance) with deterministic spread invariant verification and cryptographic attestation.
 2. \`GET https://api.nullclear.dev/v1/bazaar/token-security?address=0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913\` — Live Base Mainnet ERC-20 contract bytecode, decimals, supply, DexScreener liquidity, and honeypot scanner.
@@ -1212,10 +1212,12 @@ const getAgentCard = (c: any) => {
     updatedAt: "2026-11-17T14:00:00Z",
     active: true,
     x402Support: true,
+    x402support: true,
     guarantee: X402_GUARANTEE,
     agentWallet,
     treasuryWallet,
-    supportedTrust: ["reputation", "validation", "x402-escrow", "crypto-economic"],
+    supportedTrust: ["reputation", "crypto-economic", "validation", "x402-escrow"],
+    supportedTrusts: ["reputation", "crypto-economic"],
     mcpEndpoint: "https://api.nullclear.dev/mcp",
     a2aEndpoint: "https://api.nullclear.dev/a2a",
     defaultInputModes: ["application/json", "text/plain"],
@@ -1223,8 +1225,8 @@ const getAgentCard = (c: any) => {
     services: [
       { name: "web", endpoint: "https://nullclear.dev" },
       { name: "api", endpoint: "https://api.nullclear.dev" },
-      { name: "mcp", endpoint: "https://api.nullclear.dev/mcp" },
-      { name: "a2a", endpoint: "https://api.nullclear.dev/a2a" },
+      { name: "MCP", endpoint: "https://api.nullclear.dev/mcp", version: "2025-06-18" },
+      { name: "A2A", endpoint: "https://api.nullclear.dev/a2a", version: "0.3.0" },
       { name: "agentCard", endpoint: "https://api.nullclear.dev/.well-known/agent-card.json" },
       { name: "x402", endpoint: "https://api.nullclear.dev/.well-known/x402.json" },
       { name: "erc8004", endpoint: "https://api.nullclear.dev/.well-known/erc-8004.json" },
@@ -1405,8 +1407,8 @@ discoveryRouter.get("/.well-known/ai-catalog.json", (c) => {
       { id: "bazaar-token-security", method: "GET", url: "https://api.nullclear.dev/v1/bazaar/token-security", pricing: "$0.005 USDC" },
       { id: "bazaar-wallet-risk", method: "GET", url: "https://api.nullclear.dev/v1/bazaar/wallet-risk", pricing: "$0.005 USDC" },
       { id: "bazaar-verified-fetch", method: "GET", url: "https://api.nullclear.dev/v1/bazaar/verified-fetch", pricing: "$0.005 USDC" },
-      { id: "bazaar-market-oracle", method: "GET", url: "https://api.nullclear.dev/v1/bazaar/market-oracle", pricing: "$0.01 USDC" },
-      { id: "bazaar-audit", method: "GET", url: "https://api.nullclear.dev/v1/bazaar/audit", pricing: "$0.01 USDC" },
+      { id: "bazaar-market-oracle", method: "GET", url: "https://api.nullclear.dev/v1/bazaar/market-oracle", pricing: "$0.005 USDC" },
+      { id: "bazaar-audit", method: "GET", url: "https://api.nullclear.dev/v1/bazaar/audit", pricing: "$0.005 USDC" },
       { id: "bazaar-verify", method: "POST", url: "https://api.nullclear.dev/v1/bazaar/verify", pricing: "$0.01 USDC" }
     ]
   });
@@ -1528,7 +1530,7 @@ const getOpenApiSpec = () => ({
     description:
       "Non-custodial x402 payment clearinghouse, schema & LLM-refusal escrow firewall, and ERC-8004 Sybil reputation & DeFi intelligence oracle on Base Mainnet (Agent #124595).",
     "x-guidance":
-      "NullClear provides two modes for autonomous AI agents on Base Mainnet (eip155:8453): (1) Direct x402 Payable Intelligence Oracles ($0.01 USDC / 10000 atomic units per call via PayAI Facilitator): call GET /v1/bazaar/market-oracle?symbol=ETH for cross-verified crypto spot prices, GET /v1/bazaar/token-security?address=0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913 for Base ERC-20 contract & liquidity scanning, GET /v1/bazaar/wallet-risk?address=0xfd74fF802EA0E735514C070AF04E0D6528deD145 for wallet counterparty & Sybil profiling, GET/POST /v1/bazaar/verified-fetch?url=https://api.coinbase.com/v2/prices/BTC-USD/spot for schema-verified anti-hallucination HTTP fetching, GET/POST /v1/bazaar/audit?agentId=124595 for ERC-8004 reputation audits, or POST /v1/bazaar/verify for x402 schema readiness verification (plus $0.005 USDC paid access on /v1/scan, /v1/inspect, /v1/decode, /v1/simulate). All paid endpoints return HTTP 402 with a PAYMENT-REQUIRED header first before any parameter rejection. (2) Non-Custodial Schema-Escrow Proxy: use POST /v1/clear (free to call; holds your signed EIP-3009 header in memory and only settles if the upstream response satisfies your JSON schema, numeric invariants, and LLM-refusal checks; voids with $0.00 charged on upstream failure).",
+      "NullClear provides two modes for autonomous AI agents on Base Mainnet (eip155:8453): (1) Direct x402 Payable Intelligence Oracles ($0.005-$0.01 USDC / 5000-10000 atomic units per call via PayAI Facilitator): call GET /v1/bazaar/market-oracle?symbol=ETH ($0.005) for cross-verified crypto spot prices, GET /v1/bazaar/token-security?address=0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913 ($0.005) for Base ERC-20 contract & liquidity scanning, GET /v1/bazaar/wallet-risk?address=0xfd74fF802EA0E735514C070AF04E0D6528deD145 ($0.005) for wallet counterparty & Sybil profiling, GET/POST /v1/bazaar/verified-fetch?url=https://api.coinbase.com/v2/prices/BTC-USD/spot ($0.005) for schema-verified anti-hallucination HTTP fetching, GET/POST /v1/bazaar/audit?agentId=124595 ($0.005) for ERC-8004 reputation audits, or POST /v1/bazaar/verify ($0.01) for x402 schema readiness verification (plus $0.005 USDC paid access on /v1/scan, /v1/inspect, /v1/decode, /v1/simulate). All paid endpoints return HTTP 402 with a PAYMENT-REQUIRED header first before any parameter rejection. (2) Non-Custodial Schema-Escrow Proxy: use POST /v1/clear (free to call; holds your signed EIP-3009 header in memory and only settles if the upstream response satisfies your JSON schema, numeric invariants, and LLM-refusal checks; voids with $0.00 charged on upstream failure).",
     contact: {
       name: "NullClear Protocol",
       email: "contact@nullclear.dev",
@@ -1567,7 +1569,7 @@ const getOpenApiSpec = () => ({
         summary:
           "Market Oracle - Live cross-verified crypto spot price (BTC, ETH, SOL, BASE tokens) with spread invariant check and attestation",
         tags: ["Bazaar Oracles"],
-        "x-payment-info": FIXED_PAYMENT_INFO,
+        "x-payment-info": MICRO_PAYMENT_INFO,
         parameters: [
           {
             name: "symbol",
@@ -1618,7 +1620,7 @@ const getOpenApiSpec = () => ({
         operationId: "bazaarMarketOraclePost",
         summary: "Market Oracle (POST) - Live cross-verified crypto spot price with attestation",
         tags: ["Bazaar Oracles"],
-        "x-payment-info": FIXED_PAYMENT_INFO,
+        "x-payment-info": MICRO_PAYMENT_INFO,
         requestBody: {
           required: false,
           content: {
@@ -2021,7 +2023,7 @@ const getOpenApiSpec = () => ({
         summary:
           "Agent Reputation Audit - Verify ERC-8004 agent Sybil reputation score, wash-trading risk, and x402 escrow readiness",
         tags: ["Bazaar Oracles"],
-        "x-payment-info": FIXED_PAYMENT_INFO,
+        "x-payment-info": MICRO_PAYMENT_INFO,
         parameters: [
           {
             name: "agentId",
@@ -2063,7 +2065,7 @@ const getOpenApiSpec = () => ({
         operationId: "bazaarAuditPost",
         summary: "Agent Reputation Audit (POST) - Verify ERC-8004 agent Sybil reputation score",
         tags: ["Bazaar Oracles"],
-        "x-payment-info": FIXED_PAYMENT_INFO,
+        "x-payment-info": MICRO_PAYMENT_INFO,
         requestBody: {
           required: false,
           content: {

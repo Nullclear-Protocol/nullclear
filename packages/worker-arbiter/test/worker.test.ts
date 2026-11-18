@@ -176,6 +176,10 @@ describe("NullClear Worker Arbiter Test Suite", () => {
     expect(data2.agentWallet).toBe("0xfd74fF802EA0E735514C070AF04E0D6528deD145");
     expect(data2.treasuryWallet).toBe("0xB586eFcCa41dF27ad3873BEcA54da0c30bf04d5c");
     expect(data2.supportedTrust).toContain("crypto-economic");
+    expect(data2.supportedTrusts).toEqual(["reputation", "crypto-economic"]);
+    expect(data2.x402support).toBe(true);
+    expect(data2.services.find((s: any) => s.name === "MCP")?.version).toBe("2025-06-18");
+    expect(data2.services.find((s: any) => s.name === "A2A")?.version).toBe("0.3.0");
     expect(data2.registrations[0].agentRegistry).toBe("eip155:8453:0x8004A169FB4a3325136EB29fA0ceB6D2e539a432");
   });
 
@@ -946,9 +950,9 @@ describe("NullClear Worker Arbiter Test Suite", () => {
     expect(res402.status).toBe(402);
     expect(res402.headers.get("PAYMENT-REQUIRED")).toBeTruthy();
     const json402 = (await res402.json()) as any;
-    expect(json402.amount).toBe("10000");
+    expect(json402.amount).toBe("5000");
 
-    const testSig = await createValidPaymentSignature(sellerAccount.address, "10000");
+    const testSig = await createValidPaymentSignature(sellerAccount.address, "5000");
     const res200 = await app.fetch(
       new Request("http://localhost/v1/bazaar/audit?agentId=124595", {
         headers: { "PAYMENT-SIGNATURE": testSig }
@@ -1002,8 +1006,8 @@ describe("NullClear Worker Arbiter Test Suite", () => {
       expect(probeJson.extensions?.bazaar?.schema?.properties?.output?.properties?.example).toBeDefined();
     }
 
-    // 2. Paid GET /v1/bazaar/market-oracle
-    const sigOracle = await createValidPaymentSignature(sellerAccount.address, "10000");
+    // 2. Paid GET /v1/bazaar/market-oracle ($0.005 USDC)
+    const sigOracle = await createValidPaymentSignature(sellerAccount.address, "5000");
     const resOracle = await app.fetch(
       new Request("http://localhost/v1/bazaar/market-oracle?symbol=ETH", {
         headers: { "PAYMENT-SIGNATURE": sigOracle }
@@ -1079,7 +1083,7 @@ describe("NullClear Worker Arbiter Test Suite", () => {
 
       const oracleGet = spec.paths["/v1/bazaar/market-oracle"]?.get;
       expect(oracleGet?.["x-payment-info"]).toEqual({
-        price: { mode: "fixed", currency: "USD", amount: "0.01" },
+        price: { mode: "fixed", currency: "USD", amount: "0.005" },
         protocols: [{ x402: {} }]
       });
     }
