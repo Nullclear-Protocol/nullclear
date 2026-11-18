@@ -1,4 +1,4 @@
-import { Hono } from "hono";
+import { Hono, type Context } from "hono";
 import { keccak256, stringToHex, formatEther, formatUnits } from "viem";
 import {
   encodeBase64Json,
@@ -11,6 +11,14 @@ import { getArbiterStore, type Env } from "../env.js";
 import { computeTrustScore } from "../services/reputation.js";
 import { settleTransfer } from "../services/facilitator.js";
 import { validateTargetUrl } from "../services/ssrf-guard.js";
+import {
+  scanTokenForensics,
+  normalizeChain,
+  isEvmAddress,
+  isSolanaAddress,
+  type SupportedForensicChain,
+  type ForensicScanPayload
+} from "../services/forensics-engine.js";
 import {
   findLlmRefusal,
   evaluateInvariants,
@@ -28,6 +36,248 @@ import {
 } from "../utils/x402-headers.js";
 
 export const bazaarRouter = new Hono<Env>();
+
+export const MAX_BATCH_TOKENS = 15;
+const BATCH_CHUNK_SIZE = 5;
+const FORENSIC_CACHE_TTL_MS = 5 * 60 * 1000;
+
+function sanitizeParamString(val: unknown, maxLen = 256): string | undefined {
+  if (typeof val !== "string") return undefined;
+  const cleaned = val.replace(/[\u0000-\u001f\u007f]/g, "").trim();
+  return cleaned ? cleaned.slice(0, maxLen) : undefined;
+}
+
+async function parseJsonBodySafe(c: Context<Env>): Promise<Record<string, any>> {
+  const method = c.req.method.toUpperCase();
+  if (method !== "POST" && method !== "PUT" && method !== "PATCH") {
+    return {};
+  }
+  try {
+    const raw = await c.req.raw.clone().json();
+    if (Array.isArray(raw)) {
+      return { tokens: raw };
+    }
+    if (raw && typeof raw === "object") {
+      return raw as Record<string, any>;
+    }
+  } catch {}
+  return {};
+}
+
+interface NormalizedBatchTarget {
+  chain: SupportedForensicChain;
+  address: string;
+}
+
+function normalizeBatchTokenEntry(
+  entry: unknown,
+  defaultChain?: string
+): { target?: NormalizedBatchTarget; error?: string } {
+  let rawAddr: string | undefined;
+  let rawChain: string | undefined = defaultChain;
+
+  if (typeof entry === "string") {
+    rawAddr = sanitizeParamString(entry, 128);
+  } else if (entry && typeof entry === "object") {
+    const obj = entry as Record<string, unknown>;
+    rawAddr = sanitizeParamString(obj.address ?? obj.token ?? obj.tokenAddress ?? obj.mint, 128);
+    rawChain = sanitizeParamString(obj.chain ?? obj.network, 32) || rawChain;
+  }
+
+  if (!rawAddr) {
+    return { error: "empty_or_non_string_token" };
+  }
+
+  const requestedChain = normalizeChain(rawChain);
+  if (isEvmAddress(rawAddr)) {
+    const chain: SupportedForensicChain = requestedChain === "eth" ? "eth" : "base";
+    return { target: { chain, address: rawAddr.toLowerCase() } };
+  }
+  if (isSolanaAddress(rawAddr)) {
+    return { target: { chain: "solana", address: rawAddr } };
+  }
+  return { error: rawAddr };
+}
+
+function parseBatchTargets(
+  body: Record<string, any>,
+  qChain?: string,
+  qTokens?: string
+): {
+  targets: NormalizedBatchTarget[];
+  totalRequested: number;
+  invalidEntries: string[];
+  errorReason?: string;
+} {
+  const defaultChain = sanitizeParamString(body.chain ?? body.network ?? qChain, 32);
+  let rawEntries: unknown[] | null = null;
+
+  if (Array.isArray(body.tokens)) rawEntries = body.tokens;
+  else if (Array.isArray(body.addresses)) rawEntries = body.addresses;
+  else if (Array.isArray(body.items)) rawEntries = body.items;
+  else if (typeof qTokens === "string" && qTokens.trim()) {
+    rawEntries = qTokens
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean);
+  }
+
+  if (!rawEntries || rawEntries.length === 0) {
+    return {
+      targets: [],
+      totalRequested: 0,
+      invalidEntries: [],
+      errorReason: "Provide a non-empty 'tokens' (or 'addresses') array of 1 to 15 token addresses or { chain, address } descriptors."
+    };
+  }
+
+  const deduped = new Map<string, NormalizedBatchTarget>();
+  const invalidEntries: string[] = [];
+
+  for (const item of rawEntries) {
+    const parsed = normalizeBatchTokenEntry(item, defaultChain);
+    if (parsed.target) {
+      const key = `${parsed.target.chain}:${parsed.target.address}`;
+      if (!deduped.has(key)) {
+        deduped.set(key, parsed.target);
+      }
+    } else {
+      invalidEntries.push(parsed.error || "invalid_entry");
+    }
+  }
+
+  const targets = Array.from(deduped.values());
+  if (invalidEntries.length > 0) {
+    return {
+      targets,
+      totalRequested: rawEntries.length,
+      invalidEntries,
+      errorReason: `Invalid token address entries: ${invalidEntries.slice(0, 5).join(", ")}`
+    };
+  }
+  if (targets.length === 0) {
+    return {
+      targets: [],
+      totalRequested: rawEntries.length,
+      invalidEntries,
+      errorReason: "No valid EVM or Solana token addresses provided."
+    };
+  }
+  if (targets.length > MAX_BATCH_TOKENS) {
+    return {
+      targets,
+      totalRequested: rawEntries.length,
+      invalidEntries,
+      errorReason: `Batch limit exceeded: received ${targets.length} unique tokens, maximum is ${MAX_BATCH_TOKENS} per call.`
+    };
+  }
+
+  return {
+    targets,
+    totalRequested: rawEntries.length,
+    invalidEntries
+  };
+}
+
+async function extractBazaarClearingParams(
+  c: Context<Env>,
+  resourcePath: string
+): Promise<{ targetAddress?: string; targetChain?: string; queryType: string }> {
+  const body = await parseJsonBodySafe(c);
+
+  if (resourcePath === "/v1/bazaar/token-security") {
+    const rawAddr = sanitizeParamString(
+      c.req.query("address") ||
+        c.req.query("tokenAddress") ||
+        c.req.query("token") ||
+        body.address ||
+        body.tokenAddress ||
+        body.token,
+      128
+    );
+    const rawChain = sanitizeParamString(
+      c.req.query("chain") || c.req.query("network") || body.chain || body.network,
+      32
+    );
+    const addr = rawAddr || "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913";
+    const normAddr = isEvmAddress(addr) ? addr.toLowerCase() : addr;
+    const chain: SupportedForensicChain =
+      isSolanaAddress(addr) && !isEvmAddress(addr) ? "solana" : normalizeChain(rawChain);
+    return {
+      targetAddress: normAddr,
+      targetChain: chain,
+      queryType: rawAddr ? "token-security:explicit" : "token-security:default"
+    };
+  }
+
+  if (resourcePath === "/v1/bazaar/scan-batch") {
+    const qChain = c.req.query("chain") || c.req.query("network");
+    const qTokens = c.req.query("tokens") || c.req.query("addresses");
+    const parsed = parseBatchTargets(body, qChain, qTokens);
+    const uniqueChains = Array.from(new Set(parsed.targets.map((t) => t.chain)));
+    return {
+      targetAddress:
+        parsed.targets.length > 0
+          ? parsed.targets
+              .slice(0, 3)
+              .map((t) => t.address)
+              .join(",")
+              .slice(0, 256)
+          : "batch:empty",
+      targetChain: uniqueChains.length > 0 ? uniqueChains.join(",") : normalizeChain(qChain || body.chain),
+      queryType: parsed.targets.length > 0 ? `scan-batch:${Math.min(parsed.targets.length, MAX_BATCH_TOKENS)}` : "scan-batch:empty"
+    };
+  }
+
+  if (resourcePath === "/v1/bazaar/wallet-risk") {
+    const rawAddr = sanitizeParamString(
+      c.req.query("address") || c.req.query("wallet") || body.address || body.wallet,
+      128
+    );
+    const addr = rawAddr || "0xfd74fF802EA0E735514C070AF04E0D6528deD145";
+    return {
+      targetAddress: isEvmAddress(addr) ? addr.toLowerCase() : addr,
+      targetChain: "base",
+      queryType: rawAddr ? "wallet-risk:explicit" : "wallet-risk:default"
+    };
+  }
+
+  if (resourcePath === "/v1/bazaar/market-oracle") {
+    const rawSymbol = sanitizeParamString(
+      c.req.query("symbol") || c.req.query("pair") || body.symbol || body.pair,
+      64
+    );
+    const rawChain = sanitizeParamString(c.req.query("chain") || body.chain, 32);
+    return {
+      targetAddress: (rawSymbol || "ETH").toUpperCase(),
+      targetChain: rawChain || "multi",
+      queryType: rawSymbol ? "market-oracle:explicit" : "market-oracle:default"
+    };
+  }
+
+  if (resourcePath === "/v1/bazaar/verified-fetch") {
+    const rawUrl = sanitizeParamString(c.req.query("url") || body.url, 256);
+    return {
+      targetAddress: rawUrl || "https://api.coinbase.com/v2/exchange-rates?currency=ETH",
+      targetChain: "http",
+      queryType: rawUrl ? "verified-fetch:explicit" : "verified-fetch:default"
+    };
+  }
+
+  if (resourcePath === "/v1/bazaar/audit" || resourcePath === "/v1/bazaar/verify") {
+    const rawId = sanitizeParamString(c.req.query("agentId") || body.agentId, 64);
+    const slug = resourcePath.endsWith("/audit") ? "audit" : "verify";
+    return {
+      targetAddress: rawId || "124595",
+      targetChain: "base",
+      queryType: rawId ? `${slug}:explicit` : `${slug}:default`
+    };
+  }
+
+  return {
+    queryType: resourcePath.replace(/^\/v1\/bazaar\//, "") || "unknown"
+  };
+}
 
 // 1. Market Oracle Extension Schema
 const BAZAAR_MARKET_ORACLE_EXTENSION = {
@@ -426,6 +676,109 @@ const BAZAAR_AUDIT_EXTENSION = {
   }
 };
 
+// 7. Batch Token Security Extension Schema ($0.025 USDC / 25000 atomic)
+const BAZAAR_SCAN_BATCH_EXTENSION = {
+  discoverable: true,
+  description:
+    "Multi-chain batch token pre-flight security firewall (Base, Ethereum, Solana; up to 15 unique tokens per $0.025 call). Checks D1 cache first, disassembles EVM bytecode, detects honeypots/taxes/rugs, and returns an aggregated EXECUTE_SAFE or ABORT_CRITICAL_TRAP verdict.",
+  info: {
+    input: {
+      type: "http",
+      method: "POST",
+      bodyType: "json",
+      body: {
+        chain: "base",
+        tokens: [
+          { chain: "base", address: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913" },
+          { chain: "base", address: "0x4200000000000000000000000000000000000006" }
+        ]
+      }
+    },
+    output: {
+      type: "json",
+      example: {
+        recommendedAgentAction: "EXECUTE_SAFE",
+        batchVerdict: "ALL_CLEAR",
+        summary: {
+          totalRequested: 2,
+          uniqueEvaluated: 2,
+          cacheHits: 1,
+          freshScans: 1,
+          safeCount: 2,
+          cautionCount: 0,
+          criticalTrapCount: 0,
+          lowestScore: 98
+        },
+        results: [
+          {
+            address: "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913",
+            chain: "base",
+            symbol: "USDC",
+            score: 100,
+            verdict: "VERIFIED CLEAR",
+            recommendedAgentAction: "EXECUTE_SAFE",
+            isHoneypot: false
+          }
+        ],
+        attestation: "0xabc123",
+        timestamp: 1729045678901
+      }
+    }
+  },
+  schema: {
+    $schema: "https://json-schema.org/draft/2020-12/schema",
+    type: "object",
+    required: ["input"],
+    properties: {
+      input: {
+        type: "object",
+        required: ["type", "method", "bodyType", "body"],
+        additionalProperties: false,
+        properties: {
+          type: { type: "string", const: "http" },
+          method: { type: "string", enum: ["POST", "PUT", "PATCH"] },
+          bodyType: { type: "string", enum: ["json", "form-data", "text"] },
+          body: {
+            type: "object",
+            required: ["tokens"],
+            properties: {
+              chain: {
+                type: "string",
+                description: "Default chain for string addresses ('base', 'eth', or 'solana')"
+              },
+              tokens: {
+                type: "array",
+                minItems: 1,
+                maxItems: 15,
+                description: "Up to 15 unique token addresses or { chain, address } objects"
+              }
+            }
+          }
+        }
+      },
+      output: {
+        type: "object",
+        required: ["type"],
+        properties: {
+          type: { type: "string", const: "json" },
+          example: {
+            type: "object",
+            required: ["recommendedAgentAction", "batchVerdict", "summary", "results"],
+            properties: {
+              recommendedAgentAction: { type: "string" },
+              batchVerdict: { type: "string" },
+              summary: { type: "object" },
+              results: { type: "array" },
+              attestation: { type: "string" },
+              timestamp: { type: "integer" }
+            }
+          }
+        }
+      }
+    }
+  }
+};
+
 // 6. Verify Extension Schema
 const BAZAAR_VERIFY_EXTENSION = {
   discoverable: true,
@@ -546,9 +899,12 @@ async function handleBazaarPayment(
   resourcePath: string,
   description: string,
   bazaarExtension: any,
-  amountAtomic = "10000"
+  amountAtomic = "10000",
+  options?: { allowFreeTier?: boolean }
 ): Promise<SettlementResult> {
-  const priceUsd = (Number(amountAtomic) / 1_000_000).toFixed(Number(amountAtomic) < 10000 ? 3 : 2);
+  const numericAmount = Number(amountAtomic);
+  const priceUsd = (numericAmount / 1_000_000).toFixed(numericAmount % 10000 === 0 ? 2 : 3);
+  const allowFreeTier = options?.allowFreeTier ?? true;
   const rawPaymentHeader =
     c.req.header("payment-signature") ||
     c.req.header("x-payment") ||
@@ -573,7 +929,7 @@ async function handleBazaarPayment(
   c.header("Pay-To", NULLCLEAR_TREASURY_ADDRESS);
 
   // Sponsored Free Tier: up to 10 free calls per day per client IP / MCP session without requiring X-Payment
-  if (!paymentHeader && !isEscrowPassThrough && shouldUseFreeTierForBazaar(c)) {
+  if (allowFreeTier && !paymentHeader && !isEscrowPassThrough && shouldUseFreeTierForBazaar(c)) {
     const freeTier = await consumeSponsoredFreeCall(c);
     if (freeTier.allowed) {
       const clearingId = `free_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
@@ -841,10 +1197,11 @@ async function handleBazaarPayment(
     };
   }
 
-  // Settlement succeeded on-chain! Record in D1 clearings table
+  // Settlement succeeded on-chain! Record in D1 clearings table (with sanitized target params)
   const store = getArbiterStore(c.env);
   const clearingId = `bazaar_${Date.now()}_${settlement.transaction.slice(2, 10)}`;
   const feeAtomic = String(Math.max(1, Math.floor((Number(amountAtomic) * 50) / 10000)));
+  const clearingParams = await extractBazaarClearingParams(c, resourcePath);
 
   await store.recordPassedClearing(
     c.env?.ERC8004_AGENT_ID || "124595",
@@ -863,6 +1220,9 @@ async function handleBazaarPayment(
       responseHash: settlement.transaction,
       attestationSignature: settlement.transaction,
       eip3009Nonce: authorization.nonce,
+      targetAddress: clearingParams.targetAddress,
+      targetChain: clearingParams.targetChain,
+      queryType: clearingParams.queryType,
       createdAt: Date.now()
     }
   );
@@ -978,114 +1338,278 @@ bazaarRouter.all("/token-security", async (c) => {
     return result.errorResponse!;
   }
 
-  let bodyAddr: string | undefined;
-  if (c.req.method === "POST") {
-    try {
-      const b: any = await c.req.json();
-      bodyAddr = b?.address || b?.tokenAddress;
-    } catch {}
-  }
-
-  const targetAddress = (
+  const body = await parseJsonBodySafe(c);
+  const rawAddr = sanitizeParamString(
     c.req.query("address") ||
-    c.req.query("tokenAddress") ||
-    bodyAddr ||
-    "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
-  ).toLowerCase();
-
-  const rpcUrl = c.env?.BASE_MAINNET_RPC_URL || c.env?.BASE_RPC_URL || "https://mainnet.base.org";
-  let isContract = false;
-  let decimals = 6;
-  let totalSupplyRaw = "0";
-
-  try {
-    const rpcRes = await fetch(rpcUrl, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify([
-        {
-          jsonrpc: "2.0",
-          id: 1,
-          method: "eth_getCode",
-          params: [targetAddress, "latest"]
-        },
-        {
-          jsonrpc: "2.0",
-          id: 2,
-          method: "eth_call",
-          params: [{ to: targetAddress, data: "0x313ce567" }, "latest"]
-        },
-        {
-          jsonrpc: "2.0",
-          id: 3,
-          method: "eth_call",
-          params: [{ to: targetAddress, data: "0x18160ddd" }, "latest"]
-        }
-      ])
-    });
-    if (rpcRes.ok) {
-      const rpcResults: any = await rpcRes.json();
-      if (Array.isArray(rpcResults)) {
-        const codeHex = rpcResults.find((r) => r.id === 1)?.result;
-        const decHex = rpcResults.find((r) => r.id === 2)?.result;
-        const supHex = rpcResults.find((r) => r.id === 3)?.result;
-        isContract = Boolean(codeHex && codeHex !== "0x");
-        if (decHex && decHex !== "0x") {
-          const parsedDec = parseInt(decHex, 16);
-          if (!Number.isNaN(parsedDec) && parsedDec >= 0 && parsedDec <= 36) {
-            decimals = parsedDec;
-          }
-        }
-        if (supHex && supHex !== "0x") {
-          try {
-            totalSupplyRaw = formatUnits(BigInt(supHex), decimals);
-          } catch {}
-        }
-      } else if (rpcResults?.result) {
-        isContract = Boolean(rpcResults.result && rpcResults.result !== "0x");
-      }
-    }
-  } catch {}
-
-  let pairData: any = null;
-  try {
-    const dexRes = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${targetAddress}`);
-    if (dexRes.ok) {
-      const dexJson: any = await dexRes.json();
-      pairData = dexJson.pairs?.[0];
-    }
-  } catch {}
-
-  const isUsdc = targetAddress === "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913";
-  if (isUsdc && !isContract) {
-    isContract = true;
-  }
-  const timestamp = Date.now();
-  const attestation = keccak256(
-    stringToHex(`nullclear:token_sec:${targetAddress}:${isContract}:${timestamp}`)
+      c.req.query("tokenAddress") ||
+      c.req.query("token") ||
+      body.address ||
+      body.tokenAddress ||
+      body.token,
+    128
+  );
+  const rawChain = sanitizeParamString(
+    c.req.query("chain") || c.req.query("network") || body.chain || body.network,
+    32
   );
 
+  if (rawAddr && !isEvmAddress(rawAddr) && !isSolanaAddress(rawAddr)) {
+    return c.json(
+      {
+        error: "Invalid token address",
+        message: "Provide a valid EVM (0x...) or Solana base58 token mint address."
+      },
+      400
+    );
+  }
+
+  const targetAddress = rawAddr || "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913";
+  const scan = await scanTokenForensics(rawChain || "base", targetAddress, c.env);
+
+  const timestamp = Date.now();
+  const isBaseUsdc =
+    scan.chain === "base" && scan.address === "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913";
+  const isEthUsdc =
+    scan.chain === "eth" && scan.address === "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48";
+  const decimals = scan.chain === "solana" ? 9 : isBaseUsdc || isEthUsdc ? 6 : 18;
+  const networkId =
+    scan.chain === "solana"
+      ? "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp"
+      : scan.chain === "eth"
+        ? "eip155:1"
+        : "eip155:8453";
+  const riskLevel =
+    scan.verdict === "VERIFIED CLEAR"
+      ? "low"
+      : scan.verdict === "CAUTION"
+        ? "medium"
+        : "high";
+
+  const attestation = scan.provenance.attestationSha256;
   c.header("X-NullClear-Attestation", attestation);
 
   return c.json({
-    tokenAddress: targetAddress,
-    symbol: pairData?.baseToken?.symbol || (isUsdc ? "USDC" : "BASE_TOKEN"),
-    name: pairData?.baseToken?.name || (isUsdc ? "USD Coin" : "Base Ecosystem Verified Token"),
+    tokenAddress: scan.address,
+    chain: scan.chain,
+    symbol: scan.symbol,
+    name: scan.name,
     decimals,
-    totalSupply: totalSupplyRaw,
-    isContract,
-    verified: isContract,
-    isHoneypot: false,
-    buyTaxBps: 0,
-    sellTaxBps: 0,
-    liquidityUsd: pairData?.liquidity?.usd || (isUsdc ? 50000000 : 100000),
-    volume24hUsd: pairData?.volume?.h24 || (isUsdc ? 25000000 : 50000),
-    priceUsd: pairData?.priceUsd ? parseFloat(pairData.priceUsd) : isUsdc ? 1.0 : 0.0,
-    dexId: pairData?.dexId || "uniswap_v3",
-    x402Compatible: true,
-    securityScore: isContract ? 99 : 60,
-    riskLevel: isContract ? "low" : "medium",
-    network: "eip155:8453",
+    totalSupply: "0",
+    isContract: scan.evidence.isContract,
+    verified: scan.recommendedAgentAction === "EXECUTE_SAFE",
+    isHoneypot: scan.evidence.isHoneypot,
+    buyTaxBps: Math.round((scan.evidence.buyTaxPercent || 0) * 100),
+    sellTaxBps: Math.round((scan.evidence.sellTaxPercent || 0) * 100),
+    liquidityUsd: scan.evidence.liquidityUsd,
+    x402Compatible: !scan.evidence.isHoneypot && scan.score >= 50,
+    securityScore: scan.score,
+    riskLevel,
+    verdict: scan.verdict,
+    recommendedAgentAction: scan.recommendedAgentAction,
+    isProxy: scan.evidence.isProxy,
+    implementationAddress: scan.evidence.implementationAddress,
+    cached: Boolean(scan.cached),
+    llmDigest: scan.llmDigest,
+    provenance: scan.provenance,
+    evidence: scan.evidence,
+    links: scan.links,
+    network: networkId,
+    attestation,
+    settlementTransaction: result.transaction,
+    timestamp,
+    executionReceipt: result.executionReceipt,
+    _nullclear: buildNullClearMetadata({
+      verified: true,
+      freeTrialRemaining: result.freeTrialRemaining ?? 9
+    })
+  });
+});
+
+// 2b. POST & GET /v1/bazaar/scan-batch ($0.025 USDC / 25000 atomic, up to 15 tokens)
+bazaarRouter.all("/scan-batch", async (c) => {
+  const result = await handleBazaarPayment(
+    c,
+    "/v1/bazaar/scan-batch",
+    BAZAAR_SCAN_BATCH_EXTENSION.description,
+    BAZAAR_SCAN_BATCH_EXTENSION,
+    "25000",
+    { allowFreeTier: false }
+  );
+  if (!result.settled) {
+    return result.errorResponse!;
+  }
+
+  const body = await parseJsonBodySafe(c);
+  const parsed = parseBatchTargets(
+    body,
+    c.req.query("chain") || c.req.query("network"),
+    c.req.query("tokens") || c.req.query("addresses")
+  );
+  if (parsed.errorReason || parsed.targets.length === 0) {
+    return c.json(
+      {
+        error: "Invalid batch input",
+        message: parsed.errorReason || "No valid token addresses provided.",
+        maxBatchSize: MAX_BATCH_TOKENS,
+        receivedCount: parsed.totalRequested,
+        uniqueCount: parsed.targets.length,
+        invalidEntries: parsed.invalidEntries
+      },
+      400
+    );
+  }
+
+  const store = getArbiterStore(c.env);
+  const d1CachedMap = await store.getForensicScansBatch(parsed.targets);
+  const now = Date.now();
+  const resolvedMap = new Map<
+    string,
+    { payload?: ForensicScanPayload; error?: string; fromCache: boolean }
+  >();
+  const misses: NormalizedBatchTarget[] = [];
+
+  for (const target of parsed.targets) {
+    const key = `${target.chain}:${target.address}`;
+    const d1Rec = d1CachedMap.get(key);
+    if (d1Rec && now - d1Rec.scannedAt <= FORENSIC_CACHE_TTL_MS) {
+      try {
+        const parsedPayload = JSON.parse(d1Rec.payloadJson) as ForensicScanPayload;
+        resolvedMap.set(key, {
+          payload: { ...parsedPayload, cached: true },
+          fromCache: true
+        });
+        continue;
+      } catch {}
+    }
+    misses.push(target);
+  }
+
+  // Bounded chunk concurrency (5 concurrent scans = max ~25 external subrequests/wave)
+  for (let i = 0; i < misses.length; i += BATCH_CHUNK_SIZE) {
+    const chunk = misses.slice(i, i + BATCH_CHUNK_SIZE);
+    const settledChunk = await Promise.allSettled(
+      chunk.map((item) => scanTokenForensics(item.chain, item.address, c.env))
+    );
+    settledChunk.forEach((outcome, idx) => {
+      const target = chunk[idx];
+      const key = `${target.chain}:${target.address}`;
+      if (outcome.status === "fulfilled") {
+        resolvedMap.set(key, {
+          payload: outcome.value,
+          fromCache: Boolean(outcome.value.cached)
+        });
+      } else {
+        resolvedMap.set(key, {
+          error: outcome.reason instanceof Error ? outcome.reason.message : "Scan failed",
+          fromCache: false
+        });
+      }
+    });
+  }
+
+  let cacheHits = 0;
+  let freshScans = 0;
+  let safeCount = 0;
+  let cautionCount = 0;
+  let criticalTrapCount = 0;
+  let lowestScore = 100;
+
+  const results = parsed.targets.map((target) => {
+    const key = `${target.chain}:${target.address}`;
+    const entry = resolvedMap.get(key);
+    if (!entry?.payload) {
+      freshScans++;
+      cautionCount++;
+      lowestScore = Math.min(lowestScore, 0);
+      return {
+        address: target.address,
+        chain: target.chain,
+        symbol: "UNKNOWN",
+        name: "Scan Error",
+        score: 0,
+        verdict: "CAUTION" as const,
+        recommendedAgentAction: "CAUTION_HIGH_RISK" as const,
+        isHoneypot: false,
+        buyTaxPercent: 0,
+        sellTaxPercent: 0,
+        liquidityUsd: 0,
+        isProxy: false,
+        implementationAddress: null,
+        cached: false,
+        error: entry?.error || "Scan failed"
+      };
+    }
+
+    const scan = entry.payload;
+    if (entry.fromCache || scan.cached) cacheHits++;
+    else freshScans++;
+
+    lowestScore = Math.min(lowestScore, scan.score);
+    if (scan.recommendedAgentAction === "ABORT_CRITICAL_TRAP" || scan.evidence.isHoneypot) {
+      criticalTrapCount++;
+    } else if (scan.recommendedAgentAction === "CAUTION_HIGH_RISK") {
+      cautionCount++;
+    } else {
+      safeCount++;
+    }
+
+    return {
+      address: scan.address,
+      chain: scan.chain,
+      symbol: scan.symbol,
+      name: scan.name,
+      score: scan.score,
+      verdict: scan.verdict,
+      recommendedAgentAction: scan.recommendedAgentAction,
+      isHoneypot: scan.evidence.isHoneypot,
+      buyTaxPercent: scan.evidence.buyTaxPercent,
+      sellTaxPercent: scan.evidence.sellTaxPercent,
+      liquidityUsd: scan.evidence.liquidityUsd,
+      isProxy: scan.evidence.isProxy,
+      implementationAddress: scan.evidence.implementationAddress,
+      cached: Boolean(entry.fromCache || scan.cached),
+      llmDigest: scan.llmDigest,
+      provenance: scan.provenance,
+      links: scan.links
+    };
+  });
+
+  const recommendedAgentAction =
+    criticalTrapCount > 0
+      ? "ABORT_CRITICAL_TRAP"
+      : cautionCount > 0
+        ? "CAUTION_HIGH_RISK"
+        : "EXECUTE_SAFE";
+  const batchVerdict =
+    criticalTrapCount > 0
+      ? "CRITICAL_TRAP_DETECTED"
+      : cautionCount > 0
+        ? "CAUTION"
+        : "ALL_CLEAR";
+
+  const timestamp = Date.now();
+  const attestation = keccak256(
+    stringToHex(
+      `nullclear:scan_batch:${recommendedAgentAction}:${parsed.targets.map((t) => `${t.chain}:${t.address}`).join(",")}:${timestamp}`
+    )
+  );
+  c.header("X-NullClear-Attestation", attestation);
+
+  return c.json({
+    recommendedAgentAction,
+    batchVerdict,
+    maxBatchSize: MAX_BATCH_TOKENS,
+    summary: {
+      totalRequested: parsed.totalRequested,
+      uniqueEvaluated: parsed.targets.length,
+      cacheHits,
+      freshScans,
+      safeCount,
+      cautionCount,
+      criticalTrapCount,
+      lowestScore
+    },
+    results,
     attestation,
     settlementTransaction: result.transaction,
     timestamp,
@@ -1577,6 +2101,18 @@ bazaarRouter.get("/", async (c) => {
       sellerAddress: NULLCLEAR_TREASURY_ADDRESS,
       category: "ai",
       description: BAZAAR_VERIFY_EXTENSION.description
+    },
+    {
+      id: "bazaar-scan-batch",
+      slug: "scan-batch",
+      path: "/v1/bazaar/scan-batch",
+      url: "https://api.nullclear.dev/v1/bazaar/scan-batch",
+      method: "POST",
+      priceAtomic: "25000",
+      priceUsdc: "0.025",
+      sellerAddress: NULLCLEAR_TREASURY_ADDRESS,
+      category: "security",
+      description: BAZAAR_SCAN_BATCH_EXTENSION.description
     }
   ];
 

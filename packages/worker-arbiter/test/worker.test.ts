@@ -2658,6 +2658,263 @@ describe("NullClear Worker Arbiter Test Suite", () => {
       globalThis.fetch = originalFetch;
     }
   });
+
+  it("Sprint 1: logs target_address, target_chain, query_type in clearings and upgrades /v1/bazaar/token-security multi-chain", async () => {
+    const store = getArbiterStore(testEnv);
+    const treasuryAddr = "0xB586eFcCa41dF27ad3873BEcA54da0c30bf04d5c" as Address;
+    const settledHash = ("0x" + "ab".repeat(32)) as `0x${string}`;
+
+    await withLocalServer(
+      async (req, res) => {
+        if (req.url === "/settle") {
+          res.writeHead(200, { "Content-Type": "application/json" });
+          res.end(
+            JSON.stringify({
+              success: true,
+              transaction: settledHash,
+              network: "eip155:8453"
+            })
+          );
+          return;
+        }
+        res.writeHead(404).end();
+      },
+      async (facUrl) => {
+        const prodEnv = {
+          ...testEnv,
+          ENVIRONMENT: "production",
+          FACILITATOR_URL: facUrl
+        };
+
+        // 1. Default probe (no query params) -> queryType: token-security:default
+        const defaultSig = await createValidPaymentSignature(treasuryAddr, "5000");
+        const defaultRes = await app.fetch(
+          new Request("https://api.nullclear.dev/v1/bazaar/token-security", {
+            headers: { "PAYMENT-SIGNATURE": defaultSig }
+          }),
+          prodEnv
+        );
+        expect(defaultRes.status).toBe(200);
+        const defaultJson = (await defaultRes.json()) as any;
+        expect(defaultJson.symbol).toBe("USDC");
+        expect(defaultJson.chain).toBe("base");
+        expect(defaultJson.recommendedAgentAction).toBe("EXECUTE_SAFE");
+
+        // 2. Explicit Solana mint query -> queryType: token-security:explicit, preserves Solana base58 case
+        const solMint = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
+        const explicitSig = await createValidPaymentSignature(treasuryAddr, "5000");
+        const explicitRes = await app.fetch(
+          new Request(
+            `https://api.nullclear.dev/v1/bazaar/token-security?chain=solana&address=${solMint}`,
+            {
+              headers: { "PAYMENT-SIGNATURE": explicitSig }
+            }
+          ),
+          prodEnv
+        );
+        expect(explicitRes.status).toBe(200);
+        const explicitJson = (await explicitRes.json()) as any;
+        expect(explicitJson.chain).toBe("solana");
+        expect(explicitJson.tokenAddress).toBe(solMint);
+        expect(explicitJson.symbol).toBe("USDC");
+        expect(explicitJson.recommendedAgentAction).toBe("EXECUTE_SAFE");
+
+        const recent = await store.listRecentClearings(10);
+        const defaultClearing = recent.find((r) => r.queryType === "token-security:default");
+        const explicitClearing = recent.find((r) => r.queryType === "token-security:explicit");
+        expect(defaultClearing?.targetChain).toBe("base");
+        expect(defaultClearing?.targetAddress).toBe("0x833589fcd6edb6e08f4c7c32d4f71b54bda02913");
+        expect(explicitClearing?.targetChain).toBe("solana");
+        expect(explicitClearing?.targetAddress).toBe(solMint);
+      }
+    );
+  });
+
+  it("Sprint 1: POST /v1/bazaar/scan-batch enforces $0.025 (402 Before 400), caps at 15 unique tokens, hits D1 cache, and aggregates ABORT_CRITICAL_TRAP", async () => {
+    const store = getArbiterStore(testEnv);
+    const treasuryAddr = "0xB586eFcCa41dF27ad3873BEcA54da0c30bf04d5c" as Address;
+    const settledHash = ("0x" + "cd".repeat(32)) as `0x${string}`;
+
+    // 1. 402 Before 400 (even with empty body or spoofed free-trial header)
+    const unpaidRes = await app.fetch(
+      new Request("https://api.nullclear.dev/v1/bazaar/scan-batch", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-nullclear-free-trial": "true"
+        },
+        body: JSON.stringify({ tokens: [] })
+      }),
+      testEnv
+    );
+    expect(unpaidRes.status).toBe(402);
+    expect(unpaidRes.headers.get("PAYMENT-REQUIRED")).toBeTruthy();
+    const unpaidJson = (await unpaidRes.json()) as any;
+    expect(unpaidJson.amount).toBe("25000");
+
+    // 2. Paid empty batch -> 400 Bad Request
+    const emptyPaidSig = await createValidPaymentSignature(sellerAccount.address, "25000");
+    const emptyPaidRes = await app.fetch(
+      new Request("https://api.nullclear.dev/v1/bazaar/scan-batch", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "PAYMENT-SIGNATURE": emptyPaidSig
+        },
+        body: JSON.stringify({ tokens: [] })
+      }),
+      testEnv
+    );
+    expect(emptyPaidRes.status).toBe(400);
+
+    // 3. Paid oversized (>15 unique tokens) -> 400 Bad Request
+    const sixteenTokens = Array.from({ length: 16 }, (_, i) => ({
+      chain: "base",
+      address: `0x000000000000000000000000000000000000${String(i + 1).padStart(4, "0")}`
+    }));
+    const overPaidSig = await createValidPaymentSignature(sellerAccount.address, "25000");
+    const overPaidRes = await app.fetch(
+      new Request("https://api.nullclear.dev/v1/bazaar/scan-batch", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "PAYMENT-SIGNATURE": overPaidSig
+        },
+        body: JSON.stringify({ tokens: sixteenTokens })
+      }),
+      testEnv
+    );
+    expect(overPaidRes.status).toBe(400);
+
+    // 4. Pre-seed a CRITICAL TRAP honeypot into forensic_scans cache + run mixed multi-chain batch under production settlement
+    const trapAddress = "0xdead00000000000000000000000000000000beef";
+    const trapPayload = {
+      address: trapAddress,
+      chain: "base" as const,
+      symbol: "TRAP",
+      name: "Rug Trap Token",
+      llmDigest: "CRITICAL TRAP: 100% sell tax honeypot.",
+      recommendedAgentAction: "ABORT_CRITICAL_TRAP" as const,
+      score: 5,
+      verdict: "CRITICAL TRAP" as const,
+      provenance: {
+        chainId: 8453,
+        blockNumber: 12345678,
+        timestampIso: new Date().toISOString(),
+        attestationSha256: "0x1111111111111111111111111111111111111111111111111111111111111111",
+        sourcesAgreed: ["RPC", "GoPlus"]
+      },
+      evidence: {
+        isContract: true,
+        isProxy: false,
+        proxyType: null,
+        implementationAddress: null,
+        isHoneypot: true,
+        buyTaxPercent: 0,
+        sellTaxPercent: 100,
+        liquidityUsd: 1200,
+        lpLockedPercent: 0,
+        topHoldersPercent: 95,
+        ownerStatus: "ACTIVE_OWNER" as const,
+        hasSelfDestruct: false,
+        hasDelegateCall: false,
+        functionSelectorsCount: 8,
+        dangerousSelectorsFound: []
+      },
+      links: {
+        webReportUrl: `https://nullclear.com/scan/base/${trapAddress}`,
+        markdownTwinUrl: `https://nullclear.com/scan/base/${trapAddress}.md`,
+        xShareIntentUrl: "https://x.com"
+      }
+    };
+    await store.saveForensicScan({
+      id: `base:${trapAddress}`,
+      chain: "base",
+      address: trapAddress,
+      symbol: "TRAP",
+      name: "Rug Trap Token",
+      score: 5,
+      verdict: "CRITICAL TRAP",
+      recommendedAction: "ABORT_CRITICAL_TRAP",
+      isProxy: false,
+      implementationAddress: null,
+      buyTaxPercent: 0,
+      sellTaxPercent: 100,
+      liquidityUsd: 1200,
+      blockNumber: 12345678,
+      attestationSha256: trapPayload.provenance.attestationSha256,
+      payloadJson: JSON.stringify(trapPayload),
+      scannedAt: Date.now()
+    });
+
+    await withLocalServer(
+      async (req, res) => {
+        if (req.url === "/settle") {
+          res.writeHead(200, { "Content-Type": "application/json" });
+          res.end(
+            JSON.stringify({
+              success: true,
+              transaction: settledHash,
+              network: "eip155:8453"
+            })
+          );
+          return;
+        }
+        res.writeHead(404).end();
+      },
+      async (facUrl) => {
+        const batchSig = await createValidPaymentSignature(treasuryAddr, "25000");
+        const batchRes = await app.fetch(
+          new Request("https://api.nullclear.dev/v1/bazaar/scan-batch", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "PAYMENT-SIGNATURE": batchSig
+            },
+            body: JSON.stringify({
+              chain: "base",
+              tokens: [
+                "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", // Base USDC
+                { chain: "base", address: "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913" }, // Duplicate USDC
+                { chain: "eth", address: "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48" }, // ETH USDC
+                "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v", // Solana auto-detected
+                { chain: "base", address: trapAddress } // Cached CRITICAL TRAP
+              ]
+            })
+          }),
+          {
+            ...testEnv,
+            ENVIRONMENT: "production",
+            FACILITATOR_URL: facUrl
+          }
+        );
+        expect(batchRes.status).toBe(200);
+        expect(batchRes.headers.get("X-NullClear-Attestation")).toBeTruthy();
+        const batchJson = (await batchRes.json()) as any;
+        expect(batchJson.maxBatchSize).toBe(15);
+        expect(batchJson.summary.totalRequested).toBe(5);
+        expect(batchJson.summary.uniqueEvaluated).toBe(4);
+        expect(batchJson.summary.cacheHits).toBeGreaterThanOrEqual(1);
+        expect(batchJson.summary.criticalTrapCount).toBe(1);
+        expect(batchJson.recommendedAgentAction).toBe("ABORT_CRITICAL_TRAP");
+        expect(batchJson.batchVerdict).toBe("CRITICAL_TRAP_DETECTED");
+        expect(batchJson.results).toHaveLength(4);
+
+        // 5. Verify clearings recorded scan-batch:4 + discovery parity
+        const recent = await store.listRecentClearings(5);
+        expect(recent.some((r) => r.queryType === "scan-batch:4")).toBe(true);
+      }
+    );
+
+    const x402Res = await app.fetch(new Request("https://api.nullclear.dev/.well-known/x402.json"), testEnv);
+    const x402Json = (await x402Res.json()) as any;
+    expect(x402Json.resources).toContain("https://api.nullclear.dev/v1/bazaar/scan-batch");
+    expect(x402Json.endpoints?.bazaarScanBatch?.amountAtomic).toBe("25000");
+
+    const openApiRes = await app.fetch(new Request("https://api.nullclear.dev/openapi.json"), testEnv);
+    const openApiJson = (await openApiRes.json()) as any;
+    expect(openApiJson.paths?.["/v1/bazaar/scan-batch"]?.post?.operationId).toBe("bazaarScanBatch");
+  });
 });
 
 

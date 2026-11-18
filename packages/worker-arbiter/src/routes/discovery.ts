@@ -249,7 +249,8 @@ discoveryRouter.get("/", (c) => {
           <tr><td><span class="method-post">POST</span></td><td><code>/v1/clear</code></td><td>Deferred schema escrow proxy, deep invariants &amp; failover routing (10 free/day)</td></tr>
           <tr><td><span class="method-get">GET</span></td><td><code>/v1/score/:chainId/:agentId</code></td><td>Sybil-resistant trust score &amp; cryptographic attestation</td></tr>
           <tr><td><span class="method-get">GET</span></td><td><a href="/v1/telemetry/dashboard"><code>/v1/telemetry/dashboard</code></a></td><td>Live D1 traffic attribution &amp; conversion funnel dashboard</td></tr>
-          <tr><td><span class="method-get">GET</span></td><td><code>/v1/bazaar/token-security</code></td><td>Base ERC-20 honeypot &amp; tax audit oracle (10 free/day)</td></tr>
+          <tr><td><span class="method-get">GET</span></td><td><code>/v1/bazaar/token-security</code></td><td>Multi-chain (Base, ETH, Solana) honeypot &amp; tax audit oracle (10 free/day)</td></tr>
+          <tr><td><span class="method-post">POST</span></td><td><code>/v1/bazaar/scan-batch</code></td><td>Batch pre-flight firewall for up to 15 tokens ($0.025 USDC)</td></tr>
           <tr><td><span class="method-get">GET</span></td><td><code>/v1/bazaar/wallet-risk</code></td><td>Wallet sanctions, Sybil concentration &amp; reputation oracle (10 free/day)</td></tr>
           <tr><td><span class="method-get">GET</span></td><td><code>/v1/bazaar/market-oracle</code></td><td>Multi-exchange spread-verified price feed (10 free/day)</td></tr>
           <tr><td><span class="method-get">GET</span></td><td><a href="/llms.txt"><code>/llms.txt</code></a></td><td>Agent-tailored integration instructions &amp; menu</td></tr>
@@ -664,6 +665,7 @@ const getX402Manifest = async (c: any) => {
     "https://api.nullclear.dev/v1/bazaar/market-oracle",
     "https://api.nullclear.dev/v1/bazaar/audit",
     "https://api.nullclear.dev/v1/bazaar/verify",
+    "https://api.nullclear.dev/v1/bazaar/scan-batch",
     "https://api.nullclear.dev/v1/scan/base/0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
     "https://api.nullclear.dev/v1/inspect/base/0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
     "https://api.nullclear.dev/v1/decode",
@@ -1109,6 +1111,89 @@ const getX402Manifest = async (c: any) => {
           }
         }
       },
+      bazaarScanBatch: {
+        path: "/v1/bazaar/scan-batch",
+        method: "POST",
+        payable: true,
+        amountAtomic: "25000",
+        extensions: {
+          bazaar: {
+            discoverable: true,
+            description:
+              "Multi-chain batch token pre-flight security firewall (Base, Ethereum, Solana; up to 15 unique tokens per $0.025 call) returning aggregated EXECUTE_SAFE or ABORT_CRITICAL_TRAP verdict.",
+            info: {
+              input: {
+                type: "http",
+                method: "POST",
+                bodyType: "json",
+                body: {
+                  chain: "base",
+                  tokens: [
+                    { chain: "base", address: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913" },
+                    { chain: "base", address: "0x4200000000000000000000000000000000000006" }
+                  ]
+                }
+              },
+              output: {
+                type: "json",
+                example: {
+                  recommendedAgentAction: "EXECUTE_SAFE",
+                  batchVerdict: "ALL_CLEAR",
+                  summary: {
+                    totalRequested: 2,
+                    uniqueEvaluated: 2,
+                    cacheHits: 1,
+                    freshScans: 1,
+                    safeCount: 2,
+                    cautionCount: 0,
+                    criticalTrapCount: 0,
+                    lowestScore: 98
+                  },
+                  results: [],
+                  attestation: "0xabc123",
+                  timestamp: 1729045678901
+                }
+              }
+            },
+            schema: {
+              $schema: "https://json-schema.org/draft/2020-12/schema",
+              type: "object",
+              required: ["input"],
+              properties: {
+                input: {
+                  type: "object",
+                  required: ["type", "method", "bodyType", "body"],
+                  additionalProperties: false,
+                  properties: {
+                    type: { type: "string", const: "http" },
+                    method: { type: "string", enum: ["POST", "PUT", "PATCH"] },
+                    bodyType: { type: "string", enum: ["json", "form-data", "text"] },
+                    body: {
+                      type: "object",
+                      required: ["tokens"],
+                      properties: {
+                        chain: { type: "string" },
+                        tokens: { type: "array", minItems: 1, maxItems: 15 }
+                      }
+                    }
+                  }
+                },
+                output: {
+                  type: "object",
+                  required: ["type"],
+                  properties: {
+                    type: { type: "string", const: "json" },
+                    example: {
+                      type: "object",
+                      required: ["recommendedAgentAction", "batchVerdict", "summary", "results"]
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
       ...dynamicGatewayEndpoints
     },
     gateways: Object.values(dynamicGatewayEndpoints)
@@ -1170,11 +1255,12 @@ curl -s -X POST https://api.nullclear.dev/v1/decode -H "Content-Type: applicatio
 ## 2. Native x402 Payable Intelligence Suite (\`$0.005–$0.01 USDC\` / \`5000–10000\` atomic units on Base)
 Any \`AgentCash\`, \`x402-fetch\`, or \`Coinbase AgentKit\` buyer agent can call these endpoints directly using standard HTTP 402 \`PAYMENT-SIGNATURE\` headers:
 1. \`GET https://api.nullclear.dev/v1/bazaar/market-oracle?symbol=ETH\` — Live cross-verified crypto spot price (Coinbase + Binance) with deterministic spread invariant verification and cryptographic attestation.
-2. \`GET https://api.nullclear.dev/v1/bazaar/token-security?address=0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913\` — Live Base Mainnet ERC-20 contract bytecode, decimals, supply, DexScreener liquidity, and honeypot scanner.
+2. \`GET https://api.nullclear.dev/v1/bazaar/token-security?chain=base&address=0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913\` — Multi-chain (Base, Ethereum, Solana) token security, contract bytecode disassembly, proxy resolution, liquidity, and honeypot scanner ($0.005 USDC).
 3. \`GET https://api.nullclear.dev/v1/bazaar/wallet-risk?address=0xfd74fF802EA0E735514C070AF04E0D6528deD145\` — Live Base Mainnet wallet counterparty & Sybil risk profiler (EOA vs contract, ETH/USDC balances, tx nonce count, ERC-8004 registration).
 4. \`GET / POST https://api.nullclear.dev/v1/bazaar/verified-fetch?url=https://api.coinbase.com/v2/prices/BTC-USD/spot\` — Anti-hallucination HTTP proxy that fetches any public HTTPS JSON endpoint, enforces LLM-refusal guards and numeric invariants, and returns signed attestations.
 5. \`GET / POST https://api.nullclear.dev/v1/bazaar/audit?agentId=124595\` — ERC-8004 agent Sybil reputation score, wash-trading cluster audit, and x402 escrow readiness check.
 6. \`POST https://api.nullclear.dev/v1/bazaar/verify\` — Verify an agent's JSON schema contract compatibility on Base Mainnet.
+7. \`POST https://api.nullclear.dev/v1/bazaar/scan-batch\` — Multi-chain batch pre-flight security firewall scanning up to 15 unique tokens per \`$0.025 USDC\` call with D1 cache hits and aggregated \`EXECUTE_SAFE\` / \`ABORT_CRITICAL_TRAP\` verdicts.
 
 ## 3. Mode 1: Non-Custodial Schema-Escrow Clearinghouse (\`POST /v1/clear\`)
 When paying third-party x402 merchants, route your signed EIP-3009 authorization through \`POST https://api.nullclear.dev/v1/clear\`. NullClear validates HTTP status, Draft-07 JSON Schema, deterministic invariants (\`gt\`, \`lt\`, \`maxStalenessSeconds\`), and LLM refusal traps (\`rejectRefusals: true\`) BEFORE settling on-chain. If upstream fails or hallucinates, the signature is shredded in memory (\`$0.00\` charged).
@@ -1409,7 +1495,8 @@ discoveryRouter.get("/.well-known/ai-catalog.json", (c) => {
       { id: "bazaar-verified-fetch", method: "GET", url: "https://api.nullclear.dev/v1/bazaar/verified-fetch", pricing: "$0.005 USDC" },
       { id: "bazaar-market-oracle", method: "GET", url: "https://api.nullclear.dev/v1/bazaar/market-oracle", pricing: "$0.005 USDC" },
       { id: "bazaar-audit", method: "GET", url: "https://api.nullclear.dev/v1/bazaar/audit", pricing: "$0.005 USDC" },
-      { id: "bazaar-verify", method: "POST", url: "https://api.nullclear.dev/v1/bazaar/verify", pricing: "$0.01 USDC" }
+      { id: "bazaar-verify", method: "POST", url: "https://api.nullclear.dev/v1/bazaar/verify", pricing: "$0.01 USDC" },
+      { id: "bazaar-scan-batch", method: "POST", url: "https://api.nullclear.dev/v1/bazaar/scan-batch", pricing: "$0.025 USDC" }
     ]
   });
 });
@@ -1512,6 +1599,15 @@ const FIXED_PAYMENT_INFO = {
   protocols: [{ x402: {} }]
 };
 
+const BATCH_PAYMENT_INFO = {
+  price: {
+    mode: "fixed",
+    currency: "USD",
+    amount: "0.025"
+  },
+  protocols: [{ x402: {} }]
+};
+
 const MICRO_PAYMENT_INFO = {
   price: {
     mode: "fixed",
@@ -1530,7 +1626,7 @@ const getOpenApiSpec = () => ({
     description:
       "Non-custodial x402 payment clearinghouse, schema & LLM-refusal escrow firewall, and ERC-8004 Sybil reputation & DeFi intelligence oracle on Base Mainnet (Agent #124595).",
     "x-guidance":
-      "NullClear provides two modes for autonomous AI agents on Base Mainnet (eip155:8453): (1) Direct x402 Payable Intelligence Oracles ($0.005-$0.01 USDC / 5000-10000 atomic units per call via PayAI Facilitator): call GET /v1/bazaar/market-oracle?symbol=ETH ($0.005) for cross-verified crypto spot prices, GET /v1/bazaar/token-security?address=0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913 ($0.005) for Base ERC-20 contract & liquidity scanning, GET /v1/bazaar/wallet-risk?address=0xfd74fF802EA0E735514C070AF04E0D6528deD145 ($0.005) for wallet counterparty & Sybil profiling, GET/POST /v1/bazaar/verified-fetch?url=https://api.coinbase.com/v2/prices/BTC-USD/spot ($0.005) for schema-verified anti-hallucination HTTP fetching, GET/POST /v1/bazaar/audit?agentId=124595 ($0.005) for ERC-8004 reputation audits, or POST /v1/bazaar/verify ($0.01) for x402 schema readiness verification (plus $0.005 USDC paid access on /v1/scan, /v1/inspect, /v1/decode, /v1/simulate). All paid endpoints return HTTP 402 with a PAYMENT-REQUIRED header first before any parameter rejection. (2) Non-Custodial Schema-Escrow Proxy: use POST /v1/clear (free to call; holds your signed EIP-3009 header in memory and only settles if the upstream response satisfies your JSON schema, numeric invariants, and LLM-refusal checks; voids with $0.00 charged on upstream failure).",
+      "NullClear provides two modes for autonomous AI agents on Base Mainnet (eip155:8453): (1) Direct x402 Payable Intelligence Oracles ($0.005-$0.025 USDC / 5000-25000 atomic units per call via PayAI Facilitator): call GET /v1/bazaar/market-oracle?symbol=ETH ($0.005) for cross-verified crypto spot prices, GET /v1/bazaar/token-security?address=0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913 ($0.005) for multi-chain (Base, ETH, Solana) contract & honeypot scanning, POST /v1/bazaar/scan-batch ($0.025) for parallel batch scanning up to 15 tokens across Base/ETH/Solana, GET /v1/bazaar/wallet-risk?address=0xfd74fF802EA0E735514C070AF04E0D6528deD145 ($0.005) for wallet counterparty & Sybil profiling, GET/POST /v1/bazaar/verified-fetch?url=https://api.coinbase.com/v2/prices/BTC-USD/spot ($0.005) for schema-verified anti-hallucination HTTP fetching, GET/POST /v1/bazaar/audit?agentId=124595 ($0.005) for ERC-8004 reputation audits, or POST /v1/bazaar/verify ($0.01) for x402 schema readiness verification (plus $0.005 USDC paid access on /v1/scan, /v1/inspect, /v1/decode, /v1/simulate). All paid endpoints return HTTP 402 with a PAYMENT-REQUIRED header first before any parameter rejection. (2) Non-Custodial Schema-Escrow Proxy: use POST /v1/clear (free to call; holds your signed EIP-3009 header in memory and only settles if the upstream response satisfies your JSON schema, numeric invariants, and LLM-refusal checks; voids with $0.00 charged on upstream failure).",
     contact: {
       name: "NullClear Protocol",
       email: "contact@nullclear.dev",
@@ -2191,6 +2287,65 @@ const getOpenApiSpec = () => ({
             }
           },
           "402": { description: "Payment Required" }
+        }
+      }
+    },
+    "/v1/bazaar/scan-batch": {
+      post: {
+        operationId: "bazaarScanBatch",
+        summary: "Multi-Chain Batch Token Security Scanner (POST) - Scan up to 15 unique Base, Ethereum, or Solana tokens for $0.025 USDC",
+        tags: ["Bazaar Oracles"],
+        "x-payment-info": BATCH_PAYMENT_INFO,
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                required: ["tokens"],
+                properties: {
+                  chain: {
+                    type: "string",
+                    default: "base",
+                    description: "Default chain for string entries ('base', 'eth', or 'solana')"
+                  },
+                  tokens: {
+                    type: "array",
+                    minItems: 1,
+                    maxItems: 15,
+                    description: "Up to 15 token addresses or { chain, address } descriptors",
+                    example: [
+                      { chain: "base", address: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913" },
+                      { chain: "base", address: "0x4200000000000000000000000000000000000006" }
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        responses: {
+          "200": {
+            description: "Aggregated batch token security response",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  required: ["recommendedAgentAction", "batchVerdict", "summary", "results"],
+                  properties: {
+                    recommendedAgentAction: { type: "string", example: "EXECUTE_SAFE" },
+                    batchVerdict: { type: "string", example: "ALL_CLEAR" },
+                    summary: { type: "object" },
+                    results: { type: "array" },
+                    attestation: { type: "string" },
+                    timestamp: { type: "integer" }
+                  }
+                }
+              }
+            }
+          },
+          "400": { description: "Invalid or oversized (>15 tokens) batch input after payment" },
+          "402": { description: "Payment Required ($0.025 USDC / 25000 atomic)" }
         }
       }
     },

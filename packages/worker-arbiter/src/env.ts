@@ -130,6 +130,9 @@ export interface ClearingRecord {
   attestationSignature?: string;
   errorReason?: string;
   eip3009Nonce?: string;
+  targetAddress?: string;
+  targetChain?: string;
+  queryType?: string;
   createdAt: number;
 }
 
@@ -277,7 +280,7 @@ export const DEFAULT_SEEDED_ENDPOINTS: IndexedEndpointRecord[] = [
     origin_domain: "api.nullclear.dev",
     agent_id_erc8004: "124595",
     seller_address: "0xB586eFcCa41dF27ad3873BEcA54da0c30bf04d5c",
-    price_atomic: "10000",
+    price_atomic: "5000",
     http_status: 402,
     is_valid_x402: 1,
     latency_ms: 38,
@@ -361,7 +364,7 @@ export const DEFAULT_SEEDED_ENDPOINTS: IndexedEndpointRecord[] = [
     origin_domain: "api.nullclear.dev",
     agent_id_erc8004: "124595",
     seller_address: "0xB586eFcCa41dF27ad3873BEcA54da0c30bf04d5c",
-    price_atomic: "10000",
+    price_atomic: "5000",
     http_status: 402,
     is_valid_x402: 1,
     latency_ms: 35,
@@ -375,6 +378,27 @@ export const DEFAULT_SEEDED_ENDPOINTS: IndexedEndpointRecord[] = [
     nullclear_proxy_url: "https://api.nullclear.dev/https://api.nullclear.dev/v1/bazaar/audit",
     last_audited_at: 1776400000000,
     source: "ERC8004_ONCHAIN"
+  },
+  {
+    id: "ep_bazaar_scan_batch",
+    endpoint_url: "https://api.nullclear.dev/v1/bazaar/scan-batch",
+    origin_domain: "api.nullclear.dev",
+    agent_id_erc8004: "124595",
+    seller_address: "0xB586eFcCa41dF27ad3873BEcA54da0c30bf04d5c",
+    price_atomic: "25000",
+    http_status: 402,
+    is_valid_x402: 1,
+    latency_ms: 180,
+    uptime_score: 100.0,
+    hallucination_rate: 0.0,
+    total_audits: 24,
+    failed_audits: 0,
+    category: "security",
+    description:
+      "Multi-chain batch token pre-flight security scanner (Base, Ethereum, Solana; up to 15 unique tokens per $0.025 call) returning aggregated EXECUTE_SAFE or ABORT_CRITICAL_TRAP verdicts.",
+    nullclear_proxy_url: "https://api.nullclear.dev/https://api.nullclear.dev/v1/bazaar/scan-batch",
+    last_audited_at: 1776400000000,
+    source: "X402_MANIFEST"
   },
   {
     id: "ep_bazaar_verify",
@@ -449,6 +473,8 @@ export interface IArbiterStore {
   listOnchainCounterpartyProfiles(roleFilter?: "SELLER" | "BUYER" | "BOTH", limit?: number): Promise<OnchainCounterpartyProfileRecord[]>;
   saveForensicScan(record: ForensicScanRecord): Promise<void>;
   getForensicScan(chain: string, address: string): Promise<ForensicScanRecord | null>;
+  getForensicScansBatch(targets: Array<{ chain: string; address: string }>): Promise<Map<string, ForensicScanRecord>>;
+  listRecentClearings(limit?: number): Promise<ClearingRecord[]>;
   listForensicScans(chain?: string, limit?: number): Promise<ForensicScanRecord[]>;
   reset(): void;
 }
@@ -844,6 +870,26 @@ export class MemoryArbiterStore implements IArbiterStore {
       .sort((a, b) => b.scannedAt - a.scannedAt || b.liquidityUsd - a.liquidityUsd)
       .slice(0, limit);
   }
+
+  async getForensicScansBatch(
+    targets: Array<{ chain: string; address: string }>
+  ): Promise<Map<string, ForensicScanRecord>> {
+    const map = new Map<string, ForensicScanRecord>();
+    for (const target of targets) {
+      const normChain = target.chain.trim().toLowerCase();
+      const normAddr = normChain === "solana" ? target.address.trim() : target.address.trim().toLowerCase();
+      const storeKey = `${normChain}:${target.address.trim().toLowerCase()}`;
+      const found = this.forensicScans.get(storeKey);
+      if (found) {
+        map.set(`${normChain}:${normAddr}`, { ...found });
+      }
+    }
+    return map;
+  }
+
+  async listRecentClearings(limit = 20): Promise<ClearingRecord[]> {
+    return this.clearings.slice(-limit).reverse().map((r) => ({ ...r }));
+  }
 }
 
 export function filterAndSortIndexedEndpoints(
@@ -1014,7 +1060,29 @@ function buildTelemetryWindow(
  * Cloudflare D1 Database adapter for production deployments
  */
 export class D1ArbiterStore implements IArbiterStore {
+  private clearingsParamsEnsured = false;
+
   constructor(private db: D1Database) {}
+
+  private async ensureClearingsParamColumns(): Promise<void> {
+    if (this.clearingsParamsEnsured) return;
+    try {
+      const info = await this.db.prepare("PRAGMA table_info(clearings)").all<{ name: string }>();
+      const cols = new Set((info.results || []).map((c) => c.name));
+      const alters: string[] = [];
+      if (!cols.has("target_address")) alters.push("ALTER TABLE clearings ADD COLUMN target_address TEXT");
+      if (!cols.has("target_chain")) alters.push("ALTER TABLE clearings ADD COLUMN target_chain TEXT");
+      if (!cols.has("query_type")) alters.push("ALTER TABLE clearings ADD COLUMN query_type TEXT");
+      for (const sql of alters) {
+        try {
+          await this.db.prepare(sql).run();
+        } catch {}
+      }
+      this.clearingsParamsEnsured = true;
+    } catch {
+      // Fall back quietly; migration 0006 creates these columns cleanly on remote D1
+    }
+  }
 
   reset(): void {
     // No-op for D1 database
@@ -1052,10 +1120,11 @@ export class D1ArbiterStore implements IArbiterStore {
     clearing: ClearingRecord
   ): Promise<void> {
     const normalizedBuyer = buyerAddress.toLowerCase();
+    await this.ensureClearingsParamColumns();
     await this.db.batch([
       this.db
         .prepare(
-          "INSERT INTO clearings (id, network, buyer_address, seller_agent_id, amount, fee, target_url, status, response_hash, attestation_signature, eip3009_nonce, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+          "INSERT INTO clearings (id, network, buyer_address, seller_agent_id, amount, fee, target_url, status, response_hash, attestation_signature, eip3009_nonce, target_address, target_chain, query_type, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
         )
         .bind(
           clearing.id,
@@ -1069,6 +1138,9 @@ export class D1ArbiterStore implements IArbiterStore {
           clearing.responseHash || null,
           clearing.attestationSignature || null,
           clearing.eip3009Nonce || null,
+          clearing.targetAddress || null,
+          clearing.targetChain || null,
+          clearing.queryType || null,
           clearing.createdAt
         ),
       this.db
@@ -1107,10 +1179,11 @@ export class D1ArbiterStore implements IArbiterStore {
     clearing: ClearingRecord
   ): Promise<void> {
     const normalizedBuyer = buyerAddress.toLowerCase();
+    await this.ensureClearingsParamColumns();
     await this.db.batch([
       this.db
         .prepare(
-          "INSERT INTO clearings (id, network, buyer_address, seller_agent_id, amount, fee, target_url, status, error_reason, eip3009_nonce, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+          "INSERT INTO clearings (id, network, buyer_address, seller_agent_id, amount, fee, target_url, status, error_reason, eip3009_nonce, target_address, target_chain, query_type, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
         )
         .bind(
           clearing.id,
@@ -1123,6 +1196,9 @@ export class D1ArbiterStore implements IArbiterStore {
           clearing.status,
           clearing.errorReason || null,
           clearing.eip3009Nonce || null,
+          clearing.targetAddress || null,
+          clearing.targetChain || null,
+          clearing.queryType || null,
           clearing.createdAt
         ),
       this.db
@@ -2229,6 +2305,81 @@ export class D1ArbiterStore implements IArbiterStore {
       attestationSha256: row.attestation_sha256 || "",
       payloadJson: row.payload_json || "{}",
       scannedAt: Number(row.scanned_at || Date.now())
+    }));
+  }
+
+  async getForensicScansBatch(
+    targets: Array<{ chain: string; address: string }>
+  ): Promise<Map<string, ForensicScanRecord>> {
+    const map = new Map<string, ForensicScanRecord>();
+    if (!targets.length) return map;
+    await this.ensureForensicScansTable();
+
+    const uniqueIds = Array.from(
+      new Set(
+        targets.map((t) => {
+          const normChain = t.chain.trim().toLowerCase();
+          const normAddr = normChain === "solana" ? t.address.trim() : t.address.trim().toLowerCase();
+          return `${normChain}:${normAddr}`;
+        })
+      )
+    );
+    if (!uniqueIds.length) return map;
+
+    const placeholders = uniqueIds.map(() => "?").join(", ");
+    const res = await this.db
+      .prepare(`SELECT * FROM forensic_scans WHERE id IN (${placeholders})`)
+      .bind(...uniqueIds)
+      .all<any>();
+
+    for (const row of res.results || []) {
+      const record: ForensicScanRecord = {
+        id: row.id,
+        chain: row.chain,
+        address: row.address,
+        symbol: row.symbol || "",
+        name: row.name || "",
+        score: Number(row.score || 0),
+        verdict: row.verdict || "CAUTION",
+        recommendedAction: row.recommended_action || "CAUTION_HIGH_RISK",
+        isProxy: Boolean(row.is_proxy),
+        implementationAddress: row.implementation_address || null,
+        buyTaxPercent: Number(row.buy_tax_percent || 0),
+        sellTaxPercent: Number(row.sell_tax_percent || 0),
+        liquidityUsd: Number(row.liquidity_usd || 0),
+        blockNumber: Number(row.block_number || 0),
+        attestationSha256: row.attestation_sha256 || "",
+        payloadJson: row.payload_json || "{}",
+        scannedAt: Number(row.scanned_at || Date.now())
+      };
+      map.set(row.id, record);
+    }
+    return map;
+  }
+
+  async listRecentClearings(limit = 20): Promise<ClearingRecord[]> {
+    await this.ensureClearingsParamColumns();
+    const res = await this.db
+      .prepare("SELECT * FROM clearings ORDER BY created_at DESC LIMIT ?")
+      .bind(limit)
+      .all<any>();
+    return (res.results || []).map((row: any) => ({
+      id: row.id,
+      network: row.network,
+      buyerAddress: row.buyer_address,
+      sellerAgentId: row.seller_agent_id,
+      amount: String(row.amount || "0"),
+      fee: String(row.fee || "0"),
+      targetUrl: row.target_url,
+      status: row.status,
+      responseHash: row.response_hash || undefined,
+      attestationSignature: row.attestation_signature || undefined,
+      errorReason: row.error_reason || undefined,
+      eip3009Nonce: row.eip3009_nonce || undefined,
+      targetAddress: row.target_address || undefined,
+      targetChain: row.target_chain || undefined,
+      queryType: row.query_type || undefined,
+      createdAt: Number(row.created_at || 0)
     }));
   }
 }
