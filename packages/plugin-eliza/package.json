@@ -1,0 +1,57 @@
+{
+  "name": "@nullclear/plugin-eliza",
+  "version": "1.0.0",
+  "description": "ElizaOS token & calldata pre-flight security firewall plugin powered by NullClear (Base, Ethereum, Solana)",
+  "license": "MIT",
+  "homepage": "https://nullclear.dev",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Nullclear-Protocol/nullclear.git",
+    "directory": "packages/plugin-eliza"
+  },
+  "keywords": [
+    "elizaos",
+    "eliza",
+    "nullclear",
+    "solana",
+    "base",
+    "honeypot",
+    "rug-check",
+    "firewall",
+    "x402"
+  ],
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    }
+  },
+  "scripts": {
+    "build": "tsup src/index.ts --format esm,cjs --dts",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "lint": "echo \"@nullclear/plugin-eliza clean\""
+  },
+  "dependencies": {
+    "@nullclear/x402-arbiter": "workspace:*"
+  },
+  "devDependencies": {
+    "@nullclear/worker-arbiter": "workspace:*",
+    "tsup": "^8.3.6",
+    "typescript": "^5.7.3",
+    "viem": "^2.23.0",
+    "vitest": "^3.0.5"
+  }
+}

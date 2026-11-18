@@ -1,14 +1,25 @@
-import type {
-  KYAMandate,
-  ValidationConfig,
-  FallbackTarget,
-  SpendPolicy
+import {
+  decodeBase64Json,
+  type KYAMandate,
+  type ValidationConfig,
+  type FallbackTarget,
+  type SpendPolicy,
+  type X402PaymentRequired,
+  type X402PaymentOption
 } from "@nullclear/shared";
+import { signX402Payment, type SignerInput } from "./signer.js";
+import {
+  assertSafeSecurityVerdict,
+  normalizeForensicTarget,
+  type ForensicChain
+} from "./firewall.js";
 
 export interface NullClearClientConfig {
   arbiterUrl?: string;
   defaultChainId?: number;
   fetch?: typeof fetch;
+  signer?: SignerInput;
+  timeoutMs?: number;
 }
 
 export interface ClearRequest {
@@ -55,11 +66,77 @@ export class NullClearClient {
   private arbiterUrl: string;
   private defaultChainId: number;
   private customFetch: typeof fetch;
+  private signer?: SignerInput;
+  private timeoutMs: number;
 
   constructor(config: NullClearClientConfig = {}) {
     this.arbiterUrl = (config.arbiterUrl || "https://api.nullclear.dev").replace(/\/$/, "");
     this.defaultChainId = config.defaultChainId || 8453;
     this.customFetch = config.fetch || fetch;
+    this.signer = config.signer;
+    this.timeoutMs = config.timeoutMs ?? 15000;
+  }
+
+  private async requestJsonWithAutoX402(
+    path: string,
+    init: RequestInit & { paymentSignatureHeader?: string } = {}
+  ): Promise<any> {
+    const url = `${this.arbiterUrl}${path}`;
+    const { paymentSignatureHeader, headers: rawHeaders, signal, ...restInit } = init;
+    const headers: Record<string, string> = {
+      ...(rawHeaders && typeof rawHeaders === "object" && !(rawHeaders instanceof Headers)
+        ? (rawHeaders as Record<string, string>)
+        : {})
+    };
+    if (paymentSignatureHeader) {
+      headers["PAYMENT-SIGNATURE"] = paymentSignatureHeader;
+    }
+
+    const requestSignal =
+      signal ||
+      (typeof AbortSignal !== "undefined" && typeof AbortSignal.timeout === "function"
+        ? AbortSignal.timeout(this.timeoutMs)
+        : undefined);
+
+    let res = await this.customFetch(url, {
+      ...restInit,
+      headers,
+      signal: requestSignal
+    });
+
+    if (res.status === 402 && !paymentSignatureHeader && this.signer) {
+      let paymentOption: X402PaymentOption | undefined;
+      const paymentReqHeader =
+        res.headers.get("PAYMENT-REQUIRED") || res.headers.get("X-Payment-Required");
+      if (paymentReqHeader) {
+        try {
+          const decoded = decodeBase64Json<X402PaymentRequired>(paymentReqHeader);
+          paymentOption = decoded.accepts?.[0];
+        } catch {}
+      }
+
+      const fallbackBody = await res.json().catch(() => null);
+      if (!paymentOption && Array.isArray(fallbackBody?.accepts) && fallbackBody.accepts[0]) {
+        paymentOption = fallbackBody.accepts[0] as X402PaymentOption;
+      }
+
+      if (paymentOption) {
+        const paymentSig = await signX402Payment(this.signer, paymentOption, url);
+        res = await this.customFetch(url, {
+          ...restInit,
+          headers: { ...headers, "PAYMENT-SIGNATURE": paymentSig },
+          signal: requestSignal
+        });
+      } else if (fallbackBody) {
+        return { ...fallbackBody, httpStatus: 402 };
+      }
+    }
+
+    const parsed = await res.json().catch(() => null);
+    if (!parsed || typeof parsed !== "object") {
+      throw new Error(`NullClear returned non-JSON response (${res.status}) for ${path}`);
+    }
+    return parsed;
   }
 
   async getScore(agentId: string, chainId?: number): Promise<any> {
@@ -175,19 +252,105 @@ export class NullClearClient {
   }
 
   /**
-   * Zero-key token audit across Base, Ethereum, or Solana (optional X-Payment header for >100/day calls).
+   * Zero-key token audit across Base, Ethereum, or Solana (auto-settles x402 when signer is configured).
    */
   async scanToken(
-    chain: "base" | "eth" | "solana",
+    chain: ForensicChain,
     address: string,
     paymentSignatureHeader?: string
   ): Promise<any> {
-    const headers: Record<string, string> = {};
-    if (paymentSignatureHeader) headers["PAYMENT-SIGNATURE"] = paymentSignatureHeader;
-    const res = await this.customFetch(`${this.arbiterUrl}/v1/scan/${chain}/${address}`, {
-      headers
+    const target = normalizeForensicTarget(address, chain);
+    return this.requestJsonWithAutoX402(`/v1/scan/${target.chain}/${target.address}`, {
+      paymentSignatureHeader
     });
-    return res.json();
+  }
+
+  /**
+   * Batch token pre-flight firewall (up to 15 unique tokens per $0.025 USDC call on Base Mainnet).
+   * When signer is omitted, falls back cleanly if fallbackToFreeSingleScans is true and batch <= 5.
+   */
+  async scanBatch(
+    tokens: Array<string | { chain?: ForensicChain; address: string }>,
+    options?: {
+      defaultChain?: ForensicChain;
+      paymentSignatureHeader?: string;
+      fallbackToFreeSingleScans?: boolean;
+    }
+  ): Promise<any> {
+    const res = await this.requestJsonWithAutoX402("/v1/bazaar/scan-batch", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      paymentSignatureHeader: options?.paymentSignatureHeader,
+      body: JSON.stringify({
+        chain: options?.defaultChain || "base",
+        tokens
+      })
+    });
+
+    if (
+      res?.error === "Payment Required" &&
+      options?.fallbackToFreeSingleScans &&
+      tokens.length > 0 &&
+      tokens.length <= 5
+    ) {
+      const normalized = tokens.map((entry) =>
+        typeof entry === "string"
+          ? normalizeForensicTarget(entry, options.defaultChain || "base")
+          : normalizeForensicTarget(entry.address, entry.chain || options.defaultChain || "base")
+      );
+      const scans = await Promise.all(normalized.map((t) => this.scanToken(t.chain, t.address)));
+      const criticalTrapCount = scans.filter(
+        (s) => s?.recommendedAgentAction === "ABORT_CRITICAL_TRAP" || s?.evidence?.isHoneypot
+      ).length;
+      const cautionCount = scans.filter(
+        (s) => s?.recommendedAgentAction === "CAUTION_HIGH_RISK" && !s?.evidence?.isHoneypot
+      ).length;
+      const safeCount = scans.length - criticalTrapCount - cautionCount;
+      return {
+        recommendedAgentAction:
+          criticalTrapCount > 0
+            ? "ABORT_CRITICAL_TRAP"
+            : cautionCount > 0
+              ? "CAUTION_HIGH_RISK"
+              : "EXECUTE_SAFE",
+        batchVerdict:
+          criticalTrapCount > 0
+            ? "CRITICAL_TRAP_DETECTED"
+            : cautionCount > 0
+              ? "CAUTION"
+              : "ALL_CLEAR",
+        summary: {
+          totalRequested: tokens.length,
+          uniqueEvaluated: scans.length,
+          cacheHits: scans.filter((s) => Boolean(s?.cached)).length,
+          freshScans: scans.filter((s) => !s?.cached).length,
+          safeCount,
+          cautionCount,
+          criticalTrapCount,
+          lowestScore: Math.min(...scans.map((s) => Number(s?.score ?? 0)))
+        },
+        results: scans,
+        fallbackMode: "free-single-scans"
+      };
+    }
+
+    return res;
+  }
+
+  /**
+   * Scans a token across Base, Ethereum, or Solana and throws NullClearSecurityBlockError on ABORT_* verdicts.
+   */
+  async assertSafeTokenSwap(
+    address: string,
+    chain: ForensicChain = "base",
+    options?: { strict?: boolean; paymentSignatureHeader?: string }
+  ): Promise<any> {
+    const scan = await this.scanToken(chain, address, options?.paymentSignatureHeader);
+    assertSafeSecurityVerdict(scan, {
+      strict: options?.strict,
+      targetLabel: `${chain}:${address}`
+    });
+    return scan;
   }
 
   /**
@@ -198,12 +361,9 @@ export class NullClearClient {
     address: string,
     paymentSignatureHeader?: string
   ): Promise<any> {
-    const headers: Record<string, string> = {};
-    if (paymentSignatureHeader) headers["PAYMENT-SIGNATURE"] = paymentSignatureHeader;
-    const res = await this.customFetch(`${this.arbiterUrl}/v1/inspect/${chain}/${address}`, {
-      headers
+    return this.requestJsonWithAutoX402(`/v1/inspect/${chain}/${address}`, {
+      paymentSignatureHeader
     });
-    return res.json();
   }
 
   /**
@@ -214,14 +374,12 @@ export class NullClearClient {
     chain: "base" | "eth" = "base",
     paymentSignatureHeader?: string
   ): Promise<any> {
-    const headers: Record<string, string> = { "Content-Type": "application/json" };
-    if (paymentSignatureHeader) headers["PAYMENT-SIGNATURE"] = paymentSignatureHeader;
-    const res = await this.customFetch(`${this.arbiterUrl}/v1/decode`, {
+    return this.requestJsonWithAutoX402("/v1/decode", {
       method: "POST",
-      headers,
+      headers: { "Content-Type": "application/json" },
+      paymentSignatureHeader,
       body: JSON.stringify({ input, chain })
     });
-    return res.json();
   }
 
   /**
@@ -235,11 +393,10 @@ export class NullClearClient {
     chain?: "base" | "eth";
     paymentSignatureHeader?: string;
   }): Promise<any> {
-    const headers: Record<string, string> = { "Content-Type": "application/json" };
-    if (params.paymentSignatureHeader) headers["PAYMENT-SIGNATURE"] = params.paymentSignatureHeader;
-    const res = await this.customFetch(`${this.arbiterUrl}/v1/simulate`, {
+    return this.requestJsonWithAutoX402("/v1/simulate", {
       method: "POST",
-      headers,
+      headers: { "Content-Type": "application/json" },
+      paymentSignatureHeader: params.paymentSignatureHeader,
       body: JSON.stringify({
         to: params.to,
         data: params.data,
@@ -248,6 +405,5 @@ export class NullClearClient {
         chain: params.chain || "base"
       })
     });
-    return res.json();
   }
 }

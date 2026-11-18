@@ -351,5 +351,21 @@ describe("@nullclear/x402-arbiter SDK Test Suite", () => {
     });
     expect(aborted.failoverAttempts).toBe(2);
     expect(aborted.failedCandidates).toHaveLength(1);
+
+    const safeUsdc = await client.assertSafeTokenSwap(
+      "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+      "base"
+    );
+    expect(safeUsdc.recommendedAgentAction).toBe("EXECUTE_SAFE");
+
+    const batchFallback = await client.scanBatch(
+      [
+        "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+        "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"
+      ],
+      { fallbackToFreeSingleScans: true }
+    );
+    expect(batchFallback.recommendedAgentAction).toBe("EXECUTE_SAFE");
+    expect(batchFallback.results).toHaveLength(2);
   });
 });

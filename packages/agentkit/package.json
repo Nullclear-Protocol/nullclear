@@ -1,0 +1,58 @@
+{
+  "name": "@nullclear/agentkit",
+  "version": "1.0.0",
+  "description": "Coinbase AgentKit ActionProvider and pre-swap security firewall powered by NullClear (Base, Ethereum, Solana)",
+  "license": "MIT",
+  "homepage": "https://nullclear.dev",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Nullclear-Protocol/nullclear.git",
+    "directory": "packages/agentkit"
+  },
+  "keywords": [
+    "coinbase",
+    "agentkit",
+    "nullclear",
+    "x402",
+    "base",
+    "solana",
+    "honeypot",
+    "firewall",
+    "ai-agents"
+  ],
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    }
+  },
+  "scripts": {
+    "build": "tsup src/index.ts --format esm,cjs --dts",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "lint": "echo \"@nullclear/agentkit clean\""
+  },
+  "dependencies": {
+    "@nullclear/x402-arbiter": "workspace:*",
+    "zod": "^3.24.2"
+  },
+  "devDependencies": {
+    "@nullclear/worker-arbiter": "workspace:*",
+    "tsup": "^8.3.6",
+    "typescript": "^5.7.3",
+    "viem": "^2.23.0",
+    "vitest": "^3.0.5"
+  }
+}

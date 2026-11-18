@@ -55,7 +55,9 @@ NullClear eliminates payment risk in Agent-to-Agent (A2A) commerce. In standard 
 |---|---|---|
 | [`@nullclear/shared`](./packages/shared) | `packages/shared` | Core constants (Base Mainnet 8453, Sepolia 84532), ERC-8004 ABIs, x402 V2 types, EIP-3009 & KYA EIP-712 schemas. |
 | [`@nullclear/worker-arbiter`](./packages/worker-arbiter) | `packages/worker-arbiter` | Cloudflare Worker Hono app handling deferred escrow clearing (`/v1/clear`), Sybil-resistant trust scores (`/v1/score`), KYA mandates (`/v1/kya`), and machine discovery honeypots (`/llms.txt`, `/.well-known/*`, `/openapi.json`). |
-| [`@nullclear/x402-arbiter`](./packages/x402-arbiter) | `packages/x402-arbiter` | Agent SDK providing `createNullClearFetch` with automatic HTTP 402 interception, EIP-3009 authorization signing, and Zod/JSON schema protection. |
+| [`@nullclear/x402-arbiter`](./packages/x402-arbiter) | `packages/x402-arbiter` | Agent SDK providing `createNullClearFetch` with automatic HTTP 402 interception, EIP-3009 authorization signing, Zod/JSON schema protection, `scanBatch`, and swap firewall guards. |
+| [`@nullclear/agentkit`](./packages/agentkit) | `packages/agentkit` | Coinbase AgentKit `ActionProvider` (`nullclearActionProvider`) & `createNullClearWalletGuard` for Base, Ethereum, and Solana pre-swap token & calldata safety. |
+| [`@nullclear/plugin-eliza`](./packages/plugin-eliza) | `packages/plugin-eliza` | ElizaOS trading firewall plugin (`NULLCLEAR_SCAN_TOKEN`, `NULLCLEAR_SCAN_BATCH`, `NULLCLEAR_GUARD_CALLDATA`, plus real-time context provider). |
 | [`@nullclear/mcp`](./packages/mcp-server) | `packages/mcp-server` | Model Context Protocol server (STDIO + Streamable HTTP at `https://api.nullclear.dev/mcp`) exposing 13 forensic, token-audit, clean-markdown, ERC-8004 reputation, KYA mandate, and x402 escrow tools to autonomous agents. |
 | [`@nullclear/e2e-simulator`](./packages/e2e-simulator) | `packages/e2e-simulator` | Self-contained local simulator validating honest sellers, hallucination voids, 500 crash voids, and Sybil wash-trade detection. |
 
@@ -69,6 +71,10 @@ NullClear eliminates payment risk in Agent-to-Agent (A2A) commerce. In standard 
 4. **Machine Discovery & Self-Describing Agents:** Complete `llms.txt`, `/.well-known/agent.json`, `/.well-known/x402.json`, `/.well-known/mcp.json`, and OpenAPI 3.1.0 specifications.
 
 ---
+
+## What's New in v1.5.1+
+- **Multi-Chain Batch Firewall (`POST /v1/bazaar/scan-batch`, `$0.025 USDC`) & D1 Param Telemetry:** Scans up to `15` unique Base, Ethereum, and Solana tokens per request (D1 cache-first lookup + bounded parallel chunking engineered for Cloudflare Workers Paid), aggregates `EXECUTE_SAFE` / `CAUTION_HIGH_RISK` / `ABORT_CRITICAL_TRAP` verdicts, logs sanitized `target_address` / `target_chain` / `query_type` in `clearings`, and upgrades `/v1/bazaar/token-security` to full multi-chain forensics (`Base`, `ETH`, `Solana`).
+- **Agent Framework Integrations (`@nullclear/agentkit` & `@nullclear/plugin-eliza`):** Plug-and-play pre-flight token & drainer-calldata firewalls for Coinbase AgentKit (`nullclearActionProvider`) and ElizaOS (`nullclearPlugin`).
 
 ## What's New in v1.5.0
 - **`\$0.005` Micro-Tier Pricing & Standard `/.well-known/x402` Resources:** Aligned high-frequency Bazaar intelligence routes (`/v1/bazaar/token-security`, `/v1/bazaar/wallet-risk`, `/v1/bazaar/verified-fetch`) to `\$0.005 USDC` (`5000` atomic), added KV-cached top-level `"resources": [...]` + machine-readable `"guarantee"` blocks on `/.well-known/x402` and `/.well-known/agent.json`, served RFC 9728 `/.well-known/oauth-protected-resource*` and `/.well-known/agent-registration.json`, and prevented `/llms.txt` documentation false-positives in the Canary Auditor.
