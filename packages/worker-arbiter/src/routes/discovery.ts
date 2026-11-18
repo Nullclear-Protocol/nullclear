@@ -1296,30 +1296,52 @@ const getAgentCard = (c: any) => {
     },
     tags: ["x402", "escrow", "forensics", "security", "defi", "erc8004", "reputation", "mcp", "a2a"],
     categories: ["security", "defi", "infrastructure"],
-    updatedAt: "2026-11-17T14:00:00Z",
+    updatedAt: "2026-11-18T16:00:00Z",
     active: true,
     x402Support: true,
     x402support: true,
     guarantee: X402_GUARANTEE,
     agentWallet,
     treasuryWallet,
-    supportedTrust: ["reputation", "crypto-economic", "validation", "x402-escrow"],
+    supportedTrust: ["reputation", "crypto-economic"],
     supportedTrusts: ["reputation", "crypto-economic"],
     mcpEndpoint: "https://api.nullclear.dev/mcp",
     a2aEndpoint: "https://api.nullclear.dev/a2a",
     defaultInputModes: ["application/json", "text/plain"],
     defaultOutputModes: ["application/json", "text/plain"],
     services: [
-      { name: "web", endpoint: "https://nullclear.dev" },
-      { name: "api", endpoint: "https://api.nullclear.dev" },
-      { name: "MCP", endpoint: "https://api.nullclear.dev/mcp", version: "2025-06-18" },
-      { name: "A2A", endpoint: "https://api.nullclear.dev/a2a", version: "0.3.0" },
-      { name: "agentCard", endpoint: "https://api.nullclear.dev/.well-known/agent-card.json" },
-      { name: "x402", endpoint: "https://api.nullclear.dev/.well-known/x402.json" },
-      { name: "erc8004", endpoint: "https://api.nullclear.dev/.well-known/erc-8004.json" },
-      { name: "llms", endpoint: "https://api.nullclear.dev/llms.txt" },
-      { name: "agentsMd", endpoint: "https://api.nullclear.dev/agents.md" },
-      { name: "openapi", endpoint: "https://api.nullclear.dev/openapi.json" }
+      {
+        name: "MCP",
+        endpoint: "https://api.nullclear.dev/mcp",
+        version: "2025-06-18",
+        mcpTools: MCP_TOOLS.map((t) => t.name),
+        mcpPrompts: ["safe-x402-payment", "audit-erc8004-agent"]
+      },
+      {
+        name: "A2A",
+        endpoint: "https://api.nullclear.dev/a2a",
+        version: "0.3.0",
+        a2aSkills: [
+          "security_privacy/smart_contract_auditing",
+          "analytical_skills/data_analysis/blockchain_analysis",
+          "tool_interaction/workflow_automation"
+        ]
+      },
+      {
+        name: "OASF",
+        endpoint: "https://api.nullclear.dev/.well-known/oasf.json",
+        version: "v0.8.0",
+        skills: [
+          "security_privacy/smart_contract_auditing",
+          "analytical_skills/data_analysis/blockchain_analysis",
+          "tool_interaction/api_schema_understanding"
+        ],
+        domains: [
+          "technology/blockchain/cryptocurrency",
+          "technology/security"
+        ]
+      },
+      { name: "web", endpoint: "https://nullclear.dev" }
     ],
     registrations: [
       {
@@ -1395,9 +1417,35 @@ const getErc8004Verification = (c: any) => {
   };
 };
 
-// GET /.well-known/erc-8004.json, /.well-known/agent-registration.json & GET /_aixyz/erc-8004.json
+// GET /.well-known/erc-8004.json, /.well-known/agent-registration.json, /.well-known/oasf.json & GET /_aixyz/erc-8004.json
 discoveryRouter.get("/.well-known/erc-8004.json", (c) => c.json(getErc8004Verification(c)));
-discoveryRouter.get("/.well-known/agent-registration.json", (c) => c.json(getAgentCard(c)));
+discoveryRouter.get("/.well-known/agent-registration.json", (c) => {
+  const agentId = Number(c.env?.ERC8004_AGENT_ID || 124595);
+  return c.json({
+    registrations: [
+      {
+        agentId,
+        agentRegistry: "eip155:8453:0x8004A169FB4a3325136EB29fA0ceB6D2e539a432"
+      }
+    ]
+  });
+});
+discoveryRouter.get("/.well-known/oasf.json", (c) =>
+  c.json({
+    name: "NullClear Arbiter OASF Profile",
+    version: "v0.8.0",
+    endpoint: "https://api.nullclear.dev/.well-known/oasf.json",
+    skills: [
+      "security_privacy/smart_contract_auditing",
+      "analytical_skills/data_analysis/blockchain_analysis",
+      "tool_interaction/api_schema_understanding"
+    ],
+    domains: [
+      "technology/blockchain/cryptocurrency",
+      "technology/security"
+    ]
+  })
+);
 discoveryRouter.get("/_aixyz/erc-8004.json", (c) => c.json(getErc8004Verification(c)));
 
 // GET /.well-known/oauth-protected-resource & /.well-known/oauth-protected-resource/mcp (RFC 9728 metadata)

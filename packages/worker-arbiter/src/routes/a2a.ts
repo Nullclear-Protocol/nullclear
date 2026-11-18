@@ -61,11 +61,21 @@ function getExtendedCard(c: any) {
       },
       {
         id: "nullclear-bazaar-suite",
-        name: "x402 Payable Intelligence Oracles ($0.005-$0.01 USDC / Free Trial)",
+        name: "x402 Payable Intelligence Oracles ($0.005-$0.025 USDC / Free Trial)",
         description:
-          "6 live Base Mainnet Bazaar endpoints ($0.005-$0.01 USDC with 10 free daily calls) plus 4 zero-key forensic endpoints (100 free daily calls, then $0.005 USDC): token-security, wallet-risk, verified-fetch, market-oracle, audit, verify, scan, inspect, decode, simulate.",
+          "7 live Base/ETH/Solana Bazaar endpoints ($0.005-$0.025 USDC with 10 free daily calls) plus 4 zero-key forensic endpoints (100 free daily calls, then $0.005 USDC): token-security, wallet-risk, verified-fetch, market-oracle, audit, verify, scan-batch, scan, inspect, decode, simulate.",
         endpoint: "https://api.nullclear.dev/openapi.json",
-        tags: ["x402", "bazaar", "defi", "oracle", "security"]
+        tags: ["x402", "bazaar", "defi", "oracle", "security"],
+        examples: ["Scan 0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913 on Base for honeypot taxes and proxy safety"]
+      },
+      {
+        id: "nullclear-pre-swap-firewall",
+        name: "Multi-Chain Pre-Swap Batch Token Firewall (scan-batch)",
+        description:
+          "Parallel pre-flight honeypot, tax, and bytecode verification for up to 15 unique tokens across Base, Ethereum, and Solana ($0.025 USDC via PayAI or Coinbase CDP).",
+        endpoint: "https://api.nullclear.dev/v1/bazaar/scan-batch",
+        tags: ["security", "firewall", "base", "ethereum", "solana", "scan-batch"],
+        examples: ["Batch audit 5 candidate Base & Solana tokens before executing a swap"]
       },
       {
         id: "nullclear-kya-verification",
@@ -73,7 +83,8 @@ function getExtendedCard(c: any) {
         description:
           "Verify whether an autonomous agent has an active corporate Know-Your-Agent liability mandate and transaction spend coverage.",
         endpoint: "https://api.nullclear.dev/v1/kya/verify",
-        tags: ["kya", "compliance", "mandate"]
+        tags: ["kya", "compliance", "mandate"],
+        examples: ["Verify KYA corporate spend mandate for agent #124595"]
       }
     ]
   };
