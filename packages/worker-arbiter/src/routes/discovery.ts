@@ -11,7 +11,7 @@ discoveryRouter.get("/health", (c) => {
   return c.json({
     status: "ok",
     protocol: "NullClear",
-    version: "1.5.1",
+    version: "1.6.0",
     timestamp: Date.now()
   });
 });
@@ -160,7 +160,7 @@ discoveryRouter.get("/", (c) => {
 <body>
   <div class="container">
     <header>
-      <div class="badge">PROTOCOL SPECIFICATION v1.5.1 &bull; ZERO-KEY FORENSICS + x402 ESCROW</div>
+      <div class="badge">PROTOCOL SPECIFICATION v1.6.0 &bull; ZERO-KEY FORENSICS + x402 ESCROW</div>
       <h1>NullClear Arbiter</h1>
       <p class="subtitle">Autonomous Non-Custodial Clearing, Deep Invariant Verification, URL-Prefix Auto-Guard & 1-Click Seller Gateways for x402 AI Agents on Base</p>
       <div class="quick-copy">
@@ -677,7 +677,7 @@ const getX402Manifest = async (c: any) => {
   return {
     version: 1,
     x402Version: 2,
-    protocolVersion: "1.5.1",
+    protocolVersion: "1.6.0",
     service: "NullClear Arbiter",
     description: "Autonomous non-custodial schema escrow, deep value invariant verification, and reputation clearinghouse on Base Mainnet",
     erc8004AgentId: agentId,
@@ -1282,7 +1282,7 @@ const getAgentCard = (c: any) => {
   return {
     type: "https://eips.ethereum.org/EIPS/eip-8004#registration-v1",
     name: "NullClear Arbiter",
-    version: "1.5.1",
+    version: "1.6.0",
     protocolVersion: "0.2.1",
     description:
       "Autonomous non-custodial clearing, reputation scoring, and KYA arbiter for AI commerce on Base Mainnet",
@@ -1467,7 +1467,7 @@ discoveryRouter.get("/.well-known/ai-plugin.json", (c) => {
 // GET /.well-known/ai-catalog.json, /.well-known/ard.json, /.well-known/security.txt, and crawler docs/legal routes
 discoveryRouter.get("/.well-known/ai-catalog.json", (c) => {
   return c.json({
-    version: "1.5.1",
+    version: "1.6.0",
     name: "NullClear Protocol",
     description:
       "Zero-key on-chain token/contract/calldata/simulation forensics (100 free calls/day/IP) and non-custodial x402 deferred schema-escrow & Bazaar oracles ($0.005-$0.025 USDC on Base).",
@@ -1510,7 +1510,7 @@ discoveryRouter.get("/.well-known/ard.json", (c) => {
   return c.json({
     schema: "agent-registry-discovery-v1",
     name: "NullClear Arbiter",
-    version: "1.5.1",
+    version: "1.6.0",
     erc8004: {
       chainId: 8453,
       agentId: 124595,
@@ -1549,7 +1549,7 @@ discoveryRouter.get("/.well-known/pricing", async (c) => c.json(await getX402Man
 discoveryRouter.get("/pricing", (c) =>
   c.json({
     protocol: "NullClear",
-    version: "1.5.1",
+    version: "1.6.0",
     freeTier: { forensicsDailyLimitPerIp: 100, bazaarDailyTrialCalls: 10, registrationRequired: false },
     paidTier: {
       currency: "USDC",
@@ -1626,12 +1626,12 @@ const getOpenApiSpec = () => ({
   openapi: "3.1.0",
   info: {
     title: "NullClear",
-    version: "1.5.1",
+    version: "1.6.0",
     "x-guarantee": X402_GUARANTEE,
     description:
       "Non-custodial x402 payment clearinghouse, schema & LLM-refusal escrow firewall, and ERC-8004 Sybil reputation & DeFi intelligence oracle on Base Mainnet (Agent #124595).",
     "x-guidance":
-      "NullClear provides two modes for autonomous AI agents on Base Mainnet (eip155:8453): (1) Direct x402 Payable Intelligence Oracles ($0.005-$0.025 USDC / 5000-25000 atomic units per call via PayAI Facilitator): call GET /v1/bazaar/market-oracle?symbol=ETH ($0.005) for cross-verified crypto spot prices, GET /v1/bazaar/token-security?address=0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913 ($0.005) for multi-chain (Base, ETH, Solana) contract & honeypot scanning, POST /v1/bazaar/scan-batch ($0.025) for parallel batch scanning up to 15 tokens across Base/ETH/Solana, GET /v1/bazaar/wallet-risk?address=0xfd74fF802EA0E735514C070AF04E0D6528deD145 ($0.005) for wallet counterparty & Sybil profiling, GET/POST /v1/bazaar/verified-fetch?url=https://api.coinbase.com/v2/prices/BTC-USD/spot ($0.005) for schema-verified anti-hallucination HTTP fetching, GET/POST /v1/bazaar/audit?agentId=124595 ($0.005) for ERC-8004 reputation audits, or POST /v1/bazaar/verify ($0.01) for x402 schema readiness verification (plus $0.005 USDC paid access on /v1/scan, /v1/inspect, /v1/decode, /v1/simulate). All paid endpoints return HTTP 402 with a PAYMENT-REQUIRED header first before any parameter rejection. (2) Non-Custodial Schema-Escrow Proxy: use POST /v1/clear (free to call; holds your signed EIP-3009 header in memory and only settles if the upstream response satisfies your JSON schema, numeric invariants, and LLM-refusal checks; voids with $0.00 charged on upstream failure).",
+      "NullClear provides two modes for autonomous AI agents on Base Mainnet (eip155:8453): (1) Direct x402 Payable Intelligence Oracles ($0.005-$0.025 USDC / 5000-25000 atomic units per call via PayAI or Coinbase CDP Facilitator): call GET /v1/bazaar/market-oracle?symbol=ETH ($0.005) for cross-verified crypto spot prices, GET /v1/bazaar/token-security?address=0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913 ($0.005) for multi-chain (Base, ETH, Solana) contract & honeypot scanning, POST /v1/bazaar/scan-batch ($0.025) for parallel batch scanning up to 15 tokens across Base/ETH/Solana, GET /v1/bazaar/wallet-risk?address=0xfd74fF802EA0E735514C070AF04E0D6528deD145 ($0.005) for wallet counterparty & Sybil profiling, GET/POST /v1/bazaar/verified-fetch?url=https://api.coinbase.com/v2/prices/BTC-USD/spot ($0.005) for schema-verified anti-hallucination HTTP fetching, GET/POST /v1/bazaar/audit?agentId=124595 ($0.005) for ERC-8004 reputation audits, or POST /v1/bazaar/verify ($0.01) for x402 schema readiness verification (plus $0.005 USDC paid access on /v1/scan, /v1/inspect, /v1/decode, /v1/simulate). All paid endpoints return HTTP 402 with a PAYMENT-REQUIRED header first before any parameter rejection. (2) Non-Custodial Schema-Escrow Proxy: use POST /v1/clear (free to call; holds your signed EIP-3009 header in memory and only settles if the upstream response satisfies your JSON schema, numeric invariants, and LLM-refusal checks; voids with $0.00 charged on upstream failure).",
     contact: {
       name: "NullClear Protocol",
       email: "contact@nullclear.dev",

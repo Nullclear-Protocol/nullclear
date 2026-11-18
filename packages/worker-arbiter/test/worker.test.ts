@@ -817,13 +817,13 @@ describe("NullClear Worker Arbiter Test Suite", () => {
   });
 
   // 21. Health Check Endpoint
-  it("GET /health returns 200 with status ok and version 1.5.1", async () => {
+  it("GET /health returns 200 with status ok and version 1.6.0", async () => {
     const res = await app.fetch(new Request("http://localhost/health"), testEnv);
     expect(res.status).toBe(200);
     const json = (await res.json()) as any;
     expect(json.status).toBe("ok");
     expect(json.protocol).toBe("NullClear");
-    expect(json.version).toBe("1.5.1");
+    expect(json.version).toBe("1.6.0");
   });
 
   // 22. Live Sandbox 402 Seller Endpoints & Public Stats
@@ -2601,7 +2601,7 @@ describe("NullClear Worker Arbiter Test Suite", () => {
     expect(x402Res.status).toBe(200);
     const x402Json = (await x402Res.json()) as any;
     expect(x402Json.version).toBe(1);
-    expect(x402Json.protocolVersion).toBe("1.5.1");
+    expect(x402Json.protocolVersion).toBe("1.6.0");
     expect(Array.isArray(x402Json.resources)).toBe(true);
     expect(x402Json.resources).toContain("https://api.nullclear.dev/v1/bazaar/token-security");
     expect(x402Json.resources).toContain("https://api.nullclear.dev/v1/decode");

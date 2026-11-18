@@ -12,7 +12,7 @@ function getExtendedCard(c: any) {
 
   return {
     name: "NullClear Arbiter",
-    version: "1.5.1",
+    version: "1.6.0",
     protocolVersion: "0.2.1",
     description:
       "Autonomous non-custodial clearing, reputation scoring, and KYA arbiter for AI commerce on Base Mainnet",
