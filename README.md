@@ -72,9 +72,10 @@ NullClear eliminates payment risk in Agent-to-Agent (A2A) commerce. In standard 
 
 ---
 
-## What's New in v1.5.1+
-- **Multi-Chain Batch Firewall (`POST /v1/bazaar/scan-batch`, `$0.025 USDC`) & D1 Param Telemetry:** Scans up to `15` unique Base, Ethereum, and Solana tokens per request (D1 cache-first lookup + bounded parallel chunking engineered for Cloudflare Workers Paid), aggregates `EXECUTE_SAFE` / `CAUTION_HIGH_RISK` / `ABORT_CRITICAL_TRAP` verdicts, logs sanitized `target_address` / `target_chain` / `query_type` in `clearings`, and upgrades `/v1/bazaar/token-security` to full multi-chain forensics (`Base`, `ETH`, `Solana`).
-- **Agent Framework Integrations (`@nullclear/agentkit` & `@nullclear/plugin-eliza`):** Plug-and-play pre-flight token & drainer-calldata firewalls for Coinbase AgentKit (`nullclearActionProvider`) and ElizaOS (`nullclearPlugin`).
+## What's New in v1.6.0
+- **Dual-Facilitator Discovery (Coinbase CDP Bazaar + PayAI + 402index.io):** Added Coinbase CDP EdDSA/ES256 JWT auth (`?facilitator=cdp` / `X-NullClear-Facilitator: cdp`) and `402index.io` domain verification (`/.well-known/402index-verify.txt`), getting all **7 / 7** `/v1/bazaar/*` endpoints indexed live across Coinbase CDP Bazaar, 402index.io, and PayAI Discovery.
+- **Multi-Chain Batch Firewall (`POST /v1/bazaar/scan-batch`, `$0.025 USDC`) & D1 Param Telemetry:** Scans up to `15` unique Base, Ethereum, and Solana tokens per request (D1 cache-first lookup + bounded parallel chunking engineered for Cloudflare Workers Paid), aggregates `EXECUTE_SAFE` / `CAUTION_HIGH_RISK` / `ABORT_CRITICAL_TRAP` verdicts, logs sanitized `target_address` / `target_chain` / `query_type` in `clearings`, aligns `/v1/bazaar/market-oracle` & `/v1/bazaar/audit` to `$0.005 USDC`, and upgrades `/v1/bazaar/token-security` to full multi-chain forensics (`Base`, `ETH`, `Solana`).
+- **Interactive Security Wedge (`/firewall`) & Agent Framework SDKs (`@nullclear/x402-arbiter@1.6.0`, `@nullclear/agentkit@1.0.0`, `@nullclear/plugin-eliza@1.0.0`):** Plug-and-play pre-flight token & drainer-calldata firewalls for Coinbase AgentKit (`nullclearActionProvider`) and ElizaOS (`nullclearPlugin`).
 
 ## What's New in v1.5.0
 - **`\$0.005` Micro-Tier Pricing & Standard `/.well-known/x402` Resources:** Aligned high-frequency Bazaar intelligence routes (`/v1/bazaar/token-security`, `/v1/bazaar/wallet-risk`, `/v1/bazaar/verified-fetch`) to `\$0.005 USDC` (`5000` atomic), added KV-cached top-level `"resources": [...]` + machine-readable `"guarantee"` blocks on `/.well-known/x402` and `/.well-known/agent.json`, served RFC 9728 `/.well-known/oauth-protected-resource*` and `/.well-known/agent-registration.json`, and prevented `/llms.txt` documentation false-positives in the Canary Auditor.
