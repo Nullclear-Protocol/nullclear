@@ -2914,6 +2914,12 @@ describe("NullClear Worker Arbiter Test Suite", () => {
     const openApiRes = await app.fetch(new Request("https://api.nullclear.dev/openapi.json"), testEnv);
     const openApiJson = (await openApiRes.json()) as any;
     expect(openApiJson.paths?.["/v1/bazaar/scan-batch"]?.post?.operationId).toBe("bazaarScanBatch");
+
+    const firewallRes = await app.fetch(new Request("https://nullclear.dev/firewall"), testEnv);
+    expect(firewallRes.status).toBe(200);
+    const firewallHtml = await firewallRes.text();
+    expect(firewallHtml).toContain("@nullclear/agentkit");
+    expect(firewallHtml).toContain("@nullclear/plugin-eliza");
   });
 });
 

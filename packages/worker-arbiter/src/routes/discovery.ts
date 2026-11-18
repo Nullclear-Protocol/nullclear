@@ -248,6 +248,7 @@ discoveryRouter.get("/", (c) => {
           <tr><td><span class="method-post">POST</span></td><td><code>/v1/gateways</code> &amp; <code>/g/:slug</code></td><td>1-Click Seller Gateway registration &amp; x402 execution proxy</td></tr>
           <tr><td><span class="method-post">POST</span></td><td><code>/v1/clear</code></td><td>Deferred schema escrow proxy, deep invariants &amp; failover routing (10 free/day)</td></tr>
           <tr><td><span class="method-get">GET</span></td><td><code>/v1/score/:chainId/:agentId</code></td><td>Sybil-resistant trust score &amp; cryptographic attestation</td></tr>
+          <tr><td><span class="method-get">GET</span></td><td><a href="/firewall"><code>/firewall</code></a></td><td>Interactive Pre-Swap Firewall Sandbox &amp; 3-line AgentKit / ElizaOS SDKs</td></tr>
           <tr><td><span class="method-get">GET</span></td><td><a href="/v1/telemetry/dashboard"><code>/v1/telemetry/dashboard</code></a></td><td>Live D1 traffic attribution &amp; conversion funnel dashboard</td></tr>
           <tr><td><span class="method-get">GET</span></td><td><code>/v1/bazaar/token-security</code></td><td>Multi-chain (Base, ETH, Solana) honeypot &amp; tax audit oracle (10 free/day)</td></tr>
           <tr><td><span class="method-post">POST</span></td><td><code>/v1/bazaar/scan-batch</code></td><td>Batch pre-flight firewall for up to 15 tokens ($0.025 USDC)</td></tr>

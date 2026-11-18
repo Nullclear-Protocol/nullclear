@@ -1119,9 +1119,10 @@ forensicsRouter.get("/x402", (c) => {
         <span class="mono" style="color:var(--emerald);font-size:12px;font-weight:700;">NULLCLEAR X402 CLEARINGHOUSE &bull; EIP-3009 RAIL</span>
         <h1 style="font-size:32px;font-weight:800;">x402 Schema-Escrow &amp; 1-Click Seller Gateways</h1>
       </div>
-      <div style="display:flex;gap:10px;">
+      <div style="display:flex;gap:10px;flex-wrap:wrap;">
+        <a href="/firewall" class="btn btn-primary">🛡️ Pre-Swap Firewall SDK</a>
         <a href="/" class="btn">🔍 Forensics Omnibox</a>
-        <a href="/safepay" class="btn">🛡️ SafePay Deals</a>
+        <a href="/safepay" class="btn">📜 SafePay Deals</a>
         <a href="https://nullclear.dev/leaderboard" class="btn">📡 x402 Leaderboard</a>
       </div>
     </div>
@@ -1172,6 +1173,180 @@ forensicsRouter.get("/x402", (c) => {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ upstreamUrl, sellerAddress, slug, priceUsdc: '0.005', validationPreset: 'STRICT_NO_REFUSAL' })
+        });
+        out.textContent = JSON.stringify(await res.json(), null, 2);
+      } catch (e) {
+        out.textContent = 'Error: ' + e.message;
+      }
+    }
+  </script>
+</body>
+</html>`;
+  return c.html(html);
+});
+
+// ============================================================================
+// 10. GET /firewall — Trading Bot & DeFi Builder Pre-Swap Security Wedge
+// ============================================================================
+forensicsRouter.get("/firewall", (c) => {
+  const html = `<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>NullClear Pre-Swap Firewall — Rug, Honeypot &amp; Drainer Guard for Trading Bots</title>
+  <meta name="description" content="Stop AI trading bots and DeFi agents from buying honeypots or signing unlimited approval drainers. Drop-in pre-flight security for Coinbase AgentKit, ElizaOS, Base, Ethereum, and Solana in 3 lines." />
+  <style>
+    :root {
+      --bg: #07090E;
+      --surface: #0C1018;
+      --surface-2: #111827;
+      --border: rgba(255,255,255,0.1);
+      --emerald: #10B981;
+      --amber: #F59E0B;
+      --rose: #F43F5E;
+      --cyan: #38BDF8;
+      --text: #F8FAFC;
+      --muted: #94A3B8;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, "Inter", sans-serif; padding: 24px 16px 72px; line-height: 1.55; }
+    .container { max-width: 1120px; margin: 0 auto; }
+    .mono { font-family: "JetBrains Mono", monospace; }
+    .card { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 22px; margin-bottom: 18px; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; margin-bottom: 18px; }
+    .btn { cursor: pointer; padding: 9px 14px; border-radius: 8px; border: 1px solid var(--border); background: #161F30; color: var(--text); font-weight: 600; font-size: 13px; text-decoration: none; display: inline-flex; align-items: center; gap: 6px; }
+    .btn-primary { background: var(--emerald); color: #04130D; border-color: var(--emerald); font-weight: 700; }
+    .pill { display: inline-block; padding: 3px 9px; border-radius: 999px; font-size: 11px; font-weight: 700; font-family: monospace; }
+    .pill-safe { background: rgba(16,185,129,0.15); color: var(--emerald); border: 1px solid rgba(16,185,129,0.35); }
+    .pill-trap { background: rgba(244,63,94,0.15); color: var(--rose); border: 1px solid rgba(244,63,94,0.35); }
+    input, select { background: #05070B; border: 1px solid var(--border); color: var(--text); padding: 10px 12px; border-radius: 8px; font-family: monospace; font-size: 13px; }
+    pre { background: #05070B; border: 1px solid var(--border); border-radius: 8px; padding: 14px; color: #7DD3FC; overflow-x: auto; font-size: 12.5px; margin-top: 10px; line-height: 1.5; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:14px;margin-bottom:24px;">
+      <div>
+        <span class="mono" style="color:var(--emerald);font-size:12px;font-weight:700;">NULLCLEAR PRE-FLIGHT SECURITY ORACLE &bull; BASE &bull; ETH &bull; SOLANA</span>
+        <h1 style="font-size:34px;font-weight:800;margin-top:4px;">Stop Your Trading Bot From Buying Honeypots in 3 Lines</h1>
+        <p style="color:var(--muted);max-width:740px;margin-top:8px;font-size:15px;">
+          Deterministic pre-swap security verdicts (<code>EXECUTE_SAFE</code> vs <code>ABORT_CRITICAL_TRAP</code> / <code>ABORT_DRAINER_APPROVAL</code>) for Coinbase AgentKit, ElizaOS, and custom Uniswap / Aerodrome / Jupiter bots. 100 free scans/day with zero API key, or gasless x402 USDC batch scanning (15 tokens for $0.025).
+        </p>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <a href="/x402" class="btn">⚡ x402 &amp; Gateways</a>
+        <a href="/v1/telemetry/dashboard" class="btn">📊 Telemetry</a>
+        <a href="https://github.com/Nullclear-Protocol/nullclear" target="_blank" rel="noopener" class="btn btn-primary">GitHub &amp; Docs</a>
+      </div>
+    </div>
+
+    <div class="grid">
+      <div class="card" style="margin-bottom:0;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+          <span class="mono" style="font-weight:700;">Base USDC Benchmark</span>
+          <span class="pill pill-safe">EXECUTE_SAFE (99/100)</span>
+        </div>
+        <p style="color:var(--muted);font-size:13px;">Resolves EIP-1967 proxy slot, verifies 0% buy/sell tax, confirms deep DEX liquidity, and returns SHA-256 provenance.</p>
+      </div>
+      <div class="card" style="margin-bottom:0;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+          <span class="mono" style="font-weight:700;">Wrapped PROS Honeypot Catch</span>
+          <span class="pill pill-trap">ABORT_CRITICAL_TRAP</span>
+        </div>
+        <p style="color:var(--muted);font-size:13px;">Instruction-boundary bytecode disassembly + multi-oracle consensus flags sell-block &amp; hidden tax traps before wallet signature.</p>
+      </div>
+      <div class="card" style="margin-bottom:0;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+          <span class="mono" style="font-weight:700;">Infinite Approval Drainer Guard</span>
+          <span class="pill pill-trap">ABORT_DRAINER_APPROVAL</span>
+        </div>
+        <p style="color:var(--muted);font-size:13px;">Decodes raw calldata (<code>approve</code>, <code>setApprovalForAll</code>) via <code>POST /v1/decode</code> before signing malicious spender approvals.</p>
+      </div>
+    </div>
+
+    <div class="grid">
+      <div class="card" style="margin-bottom:0;">
+        <h2 style="font-size:18px;color:var(--cyan);">1. Coinbase AgentKit (Base &amp; Solana)</h2>
+        <p style="color:var(--muted);font-size:13px;margin-top:4px;">Drop-in <code>ActionProvider</code> + wallet transaction guard on npm: <code>npm i @nullclear/agentkit</code></p>
+        <pre>import { AgentKit } from "@coinbase/agentkit";
+import { nullclearActionProvider, createNullClearWalletGuard } from "@nullclear/agentkit";
+
+const wallet = createNullClearWalletGuard(walletProvider);
+const agentKit = await AgentKit.from({
+  walletProvider: wallet,
+  actionProviders: [nullclearActionProvider()]
+});</pre>
+      </div>
+      <div class="card" style="margin-bottom:0;">
+        <h2 style="font-size:18px;color:var(--emerald);">2. ElizaOS Trading Plugin (Solana &amp; EVM)</h2>
+        <p style="color:var(--muted);font-size:13px;margin-top:4px;">Screens tokens mentioned in chat &amp; guards custom swaps on npm: <code>npm i @nullclear/plugin-eliza</code></p>
+        <pre>import { nullclearPlugin, assertSafeElizaSwap } from "@nullclear/plugin-eliza";
+
+const character = { name: "SafeTrader", plugins: [nullclearPlugin] };
+// Or hard-block rugs inside swap code:
+await assertSafeElizaSwap(mintAddress, { chain: "solana", strict: true });</pre>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2 style="font-size:18px;color:var(--amber);">3. High-Throughput 15-Token Batch API (<code>POST /v1/bazaar/scan-batch</code> — $0.025 USDC)</h2>
+      <p style="color:var(--muted);font-size:13px;margin-top:4px;">
+        Designed for DEX pair scanners &amp; snipers (~$0.0017/token with D1 cache-first lookup across Base, Ethereum &amp; Solana in one x402 call).
+      </p>
+      <pre>curl -X POST https://api.nullclear.dev/v1/bazaar/scan-batch \\
+  -H "Content-Type: application/json" \\
+  -H "PAYMENT-SIGNATURE: &lt;eip3009-base64&gt;" \\
+  -d '{"chain":"base","tokens":["0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",{"chain":"solana","address":"EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"}]}'</pre>
+    </div>
+
+    <div class="card">
+      <h2 style="font-size:18px;margin-bottom:8px;">🔍 Live Interactive Pre-Swap Sandbox (Zero API Key — 100 Free/Day)</h2>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;">
+        <button class="btn" onclick="runPreset('base','0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913')">Base USDC</button>
+        <button class="btn" onclick="runPreset('solana','EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v')">Solana USDC</button>
+        <button class="btn" onclick="runPreset('eth','0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48')">Ethereum USDC</button>
+        <button class="btn" onclick="runCalldataTest()">Test Infinite Approve Drainer</button>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <select id="fwChain">
+          <option value="base">base</option>
+          <option value="eth">eth</option>
+          <option value="solana">solana</option>
+        </select>
+        <input id="fwAddr" style="flex:1;min-width:260px;" value="0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913" placeholder="0x... or Solana mint address" />
+        <button class="btn btn-primary" onclick="runCustomScan()">Scan Token</button>
+      </div>
+      <pre id="fwOut">// Click a preset or enter any Base / ETH / Solana token mint above</pre>
+    </div>
+  </div>
+  <script>
+    async function runPreset(chain, addr) {
+      document.getElementById('fwChain').value = chain;
+      document.getElementById('fwAddr').value = addr;
+      return runCustomScan();
+    }
+    async function runCustomScan() {
+      const chain = document.getElementById('fwChain').value;
+      const addr = document.getElementById('fwAddr').value.trim();
+      const out = document.getElementById('fwOut');
+      out.textContent = 'Scanning ' + chain + ':' + addr + '...';
+      try {
+        const res = await fetch('/v1/scan/' + encodeURIComponent(chain) + '/' + encodeURIComponent(addr));
+        out.textContent = JSON.stringify(await res.json(), null, 2);
+      } catch (e) {
+        out.textContent = 'Error: ' + e.message;
+      }
+    }
+    async function runCalldataTest() {
+      const out = document.getElementById('fwOut');
+      out.textContent = 'Decoding infinite approve() calldata...';
+      try {
+        const calldata = '0x095ea7b3000000000000000000000000b586efcca41df27ad3873beca54da0c30bf04d5cffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff';
+        const res = await fetch('/v1/decode', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ input: calldata, chain: 'base' })
         });
         out.textContent = JSON.stringify(await res.json(), null, 2);
       } catch (e) {
