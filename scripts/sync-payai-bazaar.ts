@@ -76,6 +76,35 @@ async function main() {
       body: JSON.stringify({ agentId: "124595", schema: { type: "object", required: ["price"] } })
     });
     console.log("7. verify:", { verified: verifyRes.verified, tx: verifyRes.settlementTransaction });
+
+    const guardRes = await (client as any).requestJsonWithAutoX402(qsJoin("/v1/bazaar/guard"), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        chain: "base",
+        from: "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045",
+        to: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+        data: "0xa9059cbb000000000000000000000000b586efcca41df27ad3873beca54da0c30bf04d5c00000000000000000000000000000000000000000000000000000000000f4240",
+        value: "0x0"
+      })
+    });
+    console.log("8. guard:", { verdict: guardRes.recommendedAgentAction, tx: guardRes.settlementTransaction });
+
+    const inspectRes = await (client as any).requestJsonWithAutoX402(
+      qsJoin("/v1/bazaar/inspect?chain=base&address=0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913")
+    );
+    console.log("9. inspect:", { proxyType: inspectRes.proxyType, tx: inspectRes.settlementTransaction });
+
+    const ddRes = await (client as any).requestJsonWithAutoX402(qsJoin("/v1/bazaar/due-diligence"), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ chain: "base", address: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913" })
+    });
+    console.log("10. due-diligence:", {
+      verdict: ddRes.recommendedAgentAction,
+      hasCert: Boolean(ddRes.clearanceCertificate?.signature),
+      tx: ddRes.settlementTransaction
+    });
   }
 
   console.log("\nDone! Check discovery:");
