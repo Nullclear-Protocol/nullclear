@@ -11,7 +11,7 @@ discoveryRouter.get("/health", (c) => {
   return c.json({
     status: "ok",
     protocol: "NullClear",
-    version: "1.6.0",
+    version: "1.7.0",
     timestamp: Date.now()
   });
 });
@@ -160,9 +160,9 @@ discoveryRouter.get("/", (c) => {
 <body>
   <div class="container">
     <header>
-      <div class="badge">PROTOCOL SPECIFICATION v1.6.0 &bull; ZERO-KEY FORENSICS + x402 ESCROW</div>
+      <div class="badge">PROTOCOL SPECIFICATION v1.7.0 &bull; PRE-EXECUTION FIREWALL &amp; GUARDED RPC</div>
       <h1>NullClear Arbiter</h1>
-      <p class="subtitle">Autonomous Non-Custodial Clearing, Deep Invariant Verification, URL-Prefix Auto-Guard & 1-Click Seller Gateways for x402 AI Agents on Base</p>
+      <p class="subtitle">The Autonomous Pre-Execution Firewall for On-Chain Agents: 1-Call Guard, Drop-In Guarded JSON-RPC, $5-$100 Prepaid Passes, Policy Co-Signer &amp; x402 Escrow</p>
       <div class="quick-copy">
         <span>npx -y @nullclear/mcp</span>
         <span style="color:var(--muted)">|</span>
@@ -700,9 +700,10 @@ const getX402Manifest = async (c: any) => {
   return {
     version: 1,
     x402Version: 2,
-    protocolVersion: "1.6.0",
+    protocolVersion: "1.7.0",
     service: "NullClear Arbiter",
-    description: "Autonomous non-custodial schema escrow, deep value invariant verification, and reputation clearinghouse on Base Mainnet",
+    description:
+      "7-chain Pre-Execution Security Firewall, Drop-In Guarded JSON-RPC, $5-$100 Prepaid Passes, Policy Co-Signer, Watchtower & x402 schema-escrow clearinghouse",
     erc8004AgentId: agentId,
     treasuryAddress,
     arbiterAddress,
@@ -1544,10 +1545,10 @@ const getAgentCard = (c: any) => {
   return {
     type: "https://eips.ethereum.org/EIPS/eip-8004#registration-v1",
     name: "NullClear Arbiter",
-    version: "1.6.0",
+    version: "1.7.0",
     protocolVersion: "0.2.1",
     description:
-      "Autonomous non-custodial clearing, reputation scoring, and KYA arbiter for AI commerce on Base Mainnet",
+      "Pre-Execution Firewall & Guarded JSON-RPC Safety Rail for AI Agents (Base, ETH, Arb, OP, Poly, BSC, Solana): 1-call /v1/guard, $5-$100 Prepaid Passes, Policy Co-Signer, Watchtower & x402 schema escrow.",
     url: "https://api.nullclear.dev/a2a",
     documentationUrl: "https://api.nullclear.dev/agents.md",
     image: "https://nullclear.dev/logo.png",
@@ -1556,9 +1557,21 @@ const getAgentCard = (c: any) => {
       organization: "NullClear Protocol",
       url: "https://nullclear.dev"
     },
-    tags: ["x402", "escrow", "forensics", "security", "defi", "erc8004", "reputation", "mcp", "a2a"],
+    tags: [
+      "firewall",
+      "guarded-rpc",
+      "x402",
+      "escrow",
+      "forensics",
+      "security",
+      "defi",
+      "erc8004",
+      "reputation",
+      "mcp",
+      "a2a"
+    ],
     categories: ["security", "defi", "infrastructure"],
-    updatedAt: "2026-11-18T16:00:00Z",
+    updatedAt: "2026-11-19T16:00:00Z",
     active: true,
     x402Support: true,
     x402support: true,
@@ -1777,7 +1790,7 @@ discoveryRouter.get("/.well-known/ai-plugin.json", (c) => {
 // GET /.well-known/ai-catalog.json, /.well-known/ard.json, /.well-known/security.txt, and crawler docs/legal routes
 discoveryRouter.get("/.well-known/ai-catalog.json", (c) => {
   return c.json({
-    version: "1.6.0",
+    version: "1.7.0",
     name: "NullClear Protocol",
     description:
       "Zero-key 7-chain token/contract/calldata/simulation forensics (10 free calls/day/IP, or Prepaid Pass nc_live_...) and non-custodial x402 deferred schema-escrow & Bazaar oracles ($0.005-$0.10 USDC, $5-$100 passes).",
@@ -1828,7 +1841,7 @@ discoveryRouter.get("/.well-known/ard.json", (c) => {
   return c.json({
     schema: "agent-registry-discovery-v1",
     name: "NullClear Arbiter",
-    version: "1.6.0",
+    version: "1.7.0",
     erc8004: {
       chainId: 8453,
       agentId: 124595,
@@ -1867,8 +1880,8 @@ discoveryRouter.get("/.well-known/pricing", async (c) => c.json(await getX402Man
 discoveryRouter.get("/pricing", (c) =>
   c.json({
     protocol: "NullClear",
-    version: "1.6.0",
-    freeTier: { forensicsDailyLimitPerIp: 100, bazaarDailyTrialCalls: 10, registrationRequired: false },
+    version: "1.7.0",
+    freeTier: { forensicsDailyLimitPerIp: 10, bazaarDailyTrialCalls: 2, registrationRequired: false },
     paidTier: {
       currency: "USDC",
       network: "eip155:8453",
@@ -1944,7 +1957,7 @@ const getOpenApiSpec = () => ({
   openapi: "3.1.0",
   info: {
     title: "NullClear",
-    version: "1.6.0",
+    version: "1.7.0",
     "x-guarantee": X402_GUARANTEE,
     description:
       "Non-custodial x402 payment clearinghouse, schema & LLM-refusal escrow firewall, and ERC-8004 Sybil reputation & DeFi intelligence oracle on Base Mainnet (Agent #124595).",

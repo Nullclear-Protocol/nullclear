@@ -527,9 +527,9 @@ mcpHttpRouter.get("/", (c) => {
   return c.json({
     status: "active",
     name: "nullclear-mcp",
-    version: "1.5.1",
+    version: "1.6.0",
     protocolVersion: "2024-11-05",
-    description: "NullClear Model Context Protocol Remote Server (Zero-Config Free Trial Enabled)",
+    description: "NullClear 7-Chain Pre-Execution Firewall, Guarded RPC & x402 MCP Remote Server (10 free calls/day, zero API key)",
     endpoint: "https://api.nullclear.dev/mcp",
     transport: "streamable-http",
     freeTierDailyCalls: 10,
@@ -1622,12 +1622,12 @@ mcpHttpRouter.post("/", async (c) => {
         },
         serverInfo: {
           name: "nullclear-mcp",
-          version: "1.5.1",
+          version: "1.6.0",
           description:
-            "Zero-key EVM/Solana token & contract forensics, calldata/revert decoder, tx simulator, and non-custodial x402 deferred schema-escrow clearinghouse"
+            "7-chain Pre-Execution Firewall, Guarded JSON-RPC, proxy/ABI inspector, calldata/EIP-712 decoder, stateful simulator & x402 schema-escrow arbiter"
         },
         instructions:
-          "Use nullclear_scan_token for free Base/ETH/Solana token & proxy audits, nullclear_inspect_contract for bytecode/selector inspection, nullclear_decode_calldata for existing calldata or past reverted tx hashes, nullclear_simulate_transaction before signing unsigned transactions, nullclear_read_markdown for HTML docs, nullclear_fetch_guarded for simple API crash/refusal guards, nullclear_execute_escrow for paid x402 calls with schema/invariant escrow, nullclear_check_reputation for numeric ERC-8004 agentIds, and nullclear_score_wallet for 0x EVM wallet addresses."
+          "Use nullclear_preflight_guard as your 1-call Pre-Sign Firewall before any EVM/Solana tx or EIP-712 Permit; nullclear_scan_token for 7-chain token & Token-2022 audits; nullclear_inspect_contract for bytecode/proxy inspection; nullclear_decode_calldata for nested calldata or revert decoding; nullclear_simulate_transaction for eth_simulateV1/Solana preflight; nullclear_read_markdown for HTML docs; nullclear_execute_escrow for x402 calls; and nullclear_score_wallet for wallet risk."
       }
     });
   }
