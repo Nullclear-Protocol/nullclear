@@ -47,6 +47,7 @@ describe("@nullclear/agentkit ActionProvider Test Suite", () => {
     const actions = provider.getActions(createMockWallet());
     const actionNames = actions.map((a) => a.name);
     expect(actionNames).toEqual([
+      "nullclear_preflight_guard",
       "nullclear_scan_token",
       "nullclear_scan_batch",
       "nullclear_decode_calldata",

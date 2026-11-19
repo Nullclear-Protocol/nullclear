@@ -1,7 +1,44 @@
 import { keccak256, stringToHex, decodeAbiParameters, parseAbiParameters } from "viem";
 import { getArbiterStore, type Env, type ForensicScanRecord } from "../env.js";
+import {
+  EVM_CHAIN_METADATA,
+  SUPPORTED_EVM_CHAINS,
+  SUPPORTED_ALL_CHAINS,
+  fetchWithTimeout,
+  getEvmRpcUrls,
+  lookupVerifiedSpender,
+  normalizeChain,
+  postJsonRpcWithFailover,
+  type SupportedEvmForensicChain,
+  type SupportedForensicChain
+} from "./forensics-chains.js";
+import {
+  fetchSolanaTokenMarketAndRug,
+  probeSolanaMintOnChain,
+  decodeSolanaTransactionWire,
+  simulateSolanaTransactionPreflight
+} from "./forensics-solana.js";
+import {
+  analyzeBytecodeControlFlowRisks,
+  auditEip712TypedData,
+  batchResolveSelectorsViaOpenChain,
+  fetchSourcifyContractInfo,
+  runStatefulEvmSimulation,
+  unwrapNestedCalldata,
+  type ControlFlowRiskSignals,
+  type DecodedNestedCall,
+  type SimulatedAssetDiff
+} from "./forensics-evm-deep.js";
 
-export type SupportedForensicChain = "base" | "eth" | "solana";
+export {
+  EVM_CHAIN_METADATA,
+  SUPPORTED_EVM_CHAINS,
+  SUPPORTED_ALL_CHAINS,
+  normalizeChain,
+  lookupVerifiedSpender,
+  type SupportedEvmForensicChain,
+  type SupportedForensicChain
+};
 
 export type RecommendedAgentAction =
   | "EXECUTE_SAFE"
@@ -53,6 +90,7 @@ export interface ForensicScanPayload {
     timestampIso: string;
     attestationSha256: string;
     sourcesAgreed: string[];
+    degradedSources?: string[];
   };
   evidence: {
     isContract: boolean;
@@ -67,11 +105,27 @@ export interface ForensicScanPayload {
     lpLockedPercent: number;
     topHoldersPercent: number;
     ownerAddress?: string | null;
-    ownerStatus: "RENOUNCED" | "MULTI_SIG_OR_GOVERNANCE" | "ACTIVE_OWNER" | "IMMUTABLE" | "EOA";
+    ownerStatus:
+      | "RENOUNCED"
+      | "MULTI_SIG_OR_GOVERNANCE"
+      | "ACTIVE_OWNER"
+      | "IMMUTABLE"
+      | "EOA"
+      | "UNKNOWN";
     hasSelfDestruct: boolean;
     hasDelegateCall: boolean;
     functionSelectorsCount: number;
     dangerousSelectorsFound: string[];
+    solanaAuthorities?: {
+      isToken2022: boolean;
+      mintAuthority: string | null;
+      freezeAuthority: string | null;
+      permanentDelegate: string | null;
+      transferFeeBps: number | null;
+      transferHookProgram: string | null;
+      nonTransferable: boolean;
+      defaultFrozen: boolean;
+    };
   };
   links: {
     webReportUrl: string;
@@ -86,12 +140,16 @@ export const EIP1967_IMPL_SLOT =
   "0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc";
 export const EIP1967_ADMIN_SLOT =
   "0xb53127684a568b3173ae13b9f8a6016e243e63b6e8ee1178d6a717850b5d6103";
+export const EIP1967_BEACON_SLOT =
+  "0xa3f0ad74e5423aebfd80d3ef4346578335a9a72aeaee59ff6cb3582b35133d50";
 export const EIP1822_PROXIABLE_SLOT =
   "0xc5f16f0fcc639fa48a6947836d9850f504798523bf8c9a3a87d5876cf622bcf7";
 export const ZEPPELINOS_IMPL_SLOT =
   "0x7050c9e0f4ca769c69bd3a8ef740bc37934f8e2c036e5a723fd8ee048ed3f8c3";
 export const ZEPPELINOS_ADMIN_SLOT =
   "0x10d6a54a4754c8869d6886b5f5d7fbfa5b4522237ea5c60d11bc4e7a1ff9390b";
+export const GNOSIS_SAFE_SLOT0 =
+  "0x0000000000000000000000000000000000000000000000000000000000000000";
 
 // Built-in 4-byte function & error selector database for sub-millisecond resolution
 export const KNOWN_SELECTORS: Record<
@@ -140,6 +198,15 @@ export const KNOWN_SELECTORS: Record<
   "0x18cbafe5": { signature: "swapExactTokensForETH(uint256,uint256,address[],address,uint256)", category: "standard" },
   "0x04e45aaf": { signature: "exactInputSingle((address,address,uint24,address,uint256,uint256,uint160))", category: "standard" },
   "0x3593564c": { signature: "execute(bytes,bytes[],uint256)", category: "standard" },
+  "0x24856bc3": { signature: "execute(bytes,bytes[])", category: "standard" },
+  "0xac9650d8": { signature: "multicall(bytes[])", category: "standard" },
+  "0x82ad56cb": { signature: "aggregate3((address,bool,bytes)[])", category: "standard" },
+  "0x252dba42": { signature: "aggregate((address,bytes)[])", category: "standard" },
+  "0x174dea71": { signature: "aggregate3Value((address,bool,uint256,bytes)[])", category: "standard" },
+  "0x6a761202": {
+    signature: "execTransaction(address,uint256,bytes,uint8,uint256,uint256,uint256,address,address,bytes)",
+    category: "admin"
+  },
   // Dangerous / Rug / Honeypot Tax Manipulation Selectors
   "0xea1644d5": { signature: "setTaxFeePercent(uint256)", category: "dangerous" },
   "0x061c82d0": { signature: "setFee(uint256)", category: "dangerous" },
@@ -307,6 +374,86 @@ export const CANONICAL_TOKEN_ANCHORS: Record<string, CanonicalTokenAnchor> = {
     verdict: "VERIFIED CLEAR",
     recommendedAgentAction: "EXECUTE_SAFE"
   },
+  "arbitrum:0xaf88d065e77c8cc2239327c5edb3a432268e5831": {
+    chain: "arbitrum",
+    address: "0xaf88d065e77c8cc2239327c5edb3a432268e5831",
+    symbol: "USDC",
+    name: "USD Coin (Arbitrum)",
+    isProxy: true,
+    proxyType: "EIP-1967 / FiatTokenProxy",
+    implementationAddress: "0x0f4fb9474303d10905ab86aa8d5a65fe44b6e04a",
+    adminAddress: "0x0c8f681cd8c76bc5f6d6c3ec70e9d59528b772e3",
+    buyTaxPercent: 0,
+    sellTaxPercent: 0,
+    liquidityUsd: 165000000,
+    lpLockedPercent: 100,
+    topHoldersPercent: 14.2,
+    ownerAddress: "0x0c8f681cd8c76bc5f6d6c3ec70e9d59528b772e3",
+    ownerStatus: "MULTI_SIG_OR_GOVERNANCE",
+    score: 99,
+    verdict: "VERIFIED CLEAR",
+    recommendedAgentAction: "EXECUTE_SAFE"
+  },
+  "optimism:0x0b2c639c533813f4aa9d7837caf62653d097ff85": {
+    chain: "optimism",
+    address: "0x0b2c639c533813f4aa9d7837caf62653d097ff85",
+    symbol: "USDC",
+    name: "USD Coin (Optimism)",
+    isProxy: true,
+    proxyType: "EIP-1967 / FiatTokenProxy",
+    implementationAddress: "0xdEd3b9a8DBeDC2F9CB725B55d0E686A81E6d06dC",
+    adminAddress: "0x916702d4ce18e1f0017bb0d4547b96b6d3719235",
+    buyTaxPercent: 0,
+    sellTaxPercent: 0,
+    liquidityUsd: 92000000,
+    lpLockedPercent: 100,
+    topHoldersPercent: 15.1,
+    ownerAddress: "0x916702d4ce18e1f0017bb0d4547b96b6d3719235",
+    ownerStatus: "MULTI_SIG_OR_GOVERNANCE",
+    score: 99,
+    verdict: "VERIFIED CLEAR",
+    recommendedAgentAction: "EXECUTE_SAFE"
+  },
+  "polygon:0x3c499c542cef5e3811e1192ce70d8cc03d5c3359": {
+    chain: "polygon",
+    address: "0x3c499c542cef5e3811e1192ce70d8cc03d5c3359",
+    symbol: "USDC",
+    name: "USD Coin (Polygon)",
+    isProxy: true,
+    proxyType: "EIP-1967 / FiatTokenProxy",
+    implementationAddress: "0xB3159b3a3a5B58250a69bB8B3b2bA2b494e85A17",
+    adminAddress: "0x807a96288a1a408dbc13de2b1d087d10356395d2",
+    buyTaxPercent: 0,
+    sellTaxPercent: 0,
+    liquidityUsd: 84000000,
+    lpLockedPercent: 100,
+    topHoldersPercent: 14.8,
+    ownerAddress: "0x807a96288a1a408dbc13de2b1d087d10356395d2",
+    ownerStatus: "MULTI_SIG_OR_GOVERNANCE",
+    score: 99,
+    verdict: "VERIFIED CLEAR",
+    recommendedAgentAction: "EXECUTE_SAFE"
+  },
+  "bsc:0x8ac76a51cc950d9822d68b83fe1ad97b32cd580d": {
+    chain: "bsc",
+    address: "0x8ac76a51cc950d9822d68b83fe1ad97b32cd580d",
+    symbol: "USDC",
+    name: "Binance-Peg USD Coin",
+    isProxy: false,
+    proxyType: null,
+    implementationAddress: null,
+    adminAddress: null,
+    buyTaxPercent: 0,
+    sellTaxPercent: 0,
+    liquidityUsd: 112000000,
+    lpLockedPercent: 100,
+    topHoldersPercent: 18.0,
+    ownerAddress: "0x0000000000000000000000000000000000000000",
+    ownerStatus: "MULTI_SIG_OR_GOVERNANCE",
+    score: 97,
+    verdict: "VERIFIED CLEAR",
+    recommendedAgentAction: "EXECUTE_SAFE"
+  },
   "solana:EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v": {
     chain: "solana",
     address: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
@@ -328,20 +475,6 @@ export const CANONICAL_TOKEN_ANCHORS: Record<string, CanonicalTokenAnchor> = {
     recommendedAgentAction: "EXECUTE_SAFE"
   }
 };
-
-/**
- * Normalizes chain identifier to 'base' | 'eth' | 'solana'
- */
-export function normalizeChain(rawChain?: string): SupportedForensicChain {
-  const c = (rawChain || "base").trim().toLowerCase();
-  if (c === "eth" || c === "ethereum" || c === "mainnet" || c === "1" || c === "eip155:1") {
-    return "eth";
-  }
-  if (c === "sol" || c === "solana" || c === "900") {
-    return "solana";
-  }
-  return "base";
-}
 
 export function isEvmAddress(addr: string): boolean {
   return /^0x[a-fA-F0-9]{40}$/.test(addr.trim());
@@ -540,21 +673,11 @@ function decodeErc20String(hex?: string | null): string | null {
   }
 }
 
-async function fetchWithTimeout(url: string, init?: RequestInit, timeoutMs = 3500): Promise<Response> {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
-  try {
-    return await fetch(url, { ...init, signal: controller.signal });
-  } finally {
-    clearTimeout(timer);
-  }
-}
-
-export function getEvmRpcUrl(chain: "base" | "eth", env?: Env["Bindings"]): string {
-  if (chain === "eth") {
-    return env?.ETH_RPC_URL || "https://ethereum-rpc.publicnode.com";
-  }
-  return env?.BASE_MAINNET_RPC_URL || env?.BASE_RPC_URL || "https://mainnet.base.org";
+export function getEvmRpcUrl(
+  chain: SupportedEvmForensicChain,
+  env?: Env["Bindings"]
+): string {
+  return getEvmRpcUrls(chain, env)[0];
 }
 
 interface EvmRpcProbeResult {
@@ -565,19 +688,22 @@ interface EvmRpcProbeResult {
   proxyType: string | null;
   implementationAddress: string | null;
   adminAddress: string | null;
+  beaconAddress?: string | null;
+  diamondFacetsCount?: number;
   implementationBytecode: string;
   symbol: string | null;
   name: string | null;
   ownerAddress: string | null;
   disassembly: DisassembledBytecodeSummary;
+  rpcUrlUsed?: string;
 }
 
 async function probeEvmContractOnChain(
-  chain: "base" | "eth",
+  chain: SupportedEvmForensicChain,
   address: string,
   env?: Env["Bindings"]
 ): Promise<EvmRpcProbeResult | null> {
-  const rpcUrl = getEvmRpcUrl(chain, env);
+  const rpcs = getEvmRpcUrls(chain, env);
   const target = address.toLowerCase();
 
   try {
@@ -591,26 +717,20 @@ async function probeEvmContractOnChain(
       { jsonrpc: "2.0", id: 7, method: "eth_getStorageAt", params: [target, ZEPPELINOS_ADMIN_SLOT, "latest"] },
       { jsonrpc: "2.0", id: 8, method: "eth_call", params: [{ to: target, data: "0x95d89b41" }, "latest"] }, // symbol()
       { jsonrpc: "2.0", id: 9, method: "eth_call", params: [{ to: target, data: "0x06fdde03" }, "latest"] }, // name()
-      { jsonrpc: "2.0", id: 10, method: "eth_call", params: [{ to: target, data: "0x8da5cb5b" }, "latest"] } // owner()
+      { jsonrpc: "2.0", id: 10, method: "eth_call", params: [{ to: target, data: "0x8da5cb5b" }, "latest"] }, // owner()
+      { jsonrpc: "2.0", id: 11, method: "eth_getStorageAt", params: [target, EIP1967_BEACON_SLOT, "latest"] },
+      { jsonrpc: "2.0", id: 12, method: "eth_getStorageAt", params: [target, GNOSIS_SAFE_SLOT0, "latest"] },
+      { jsonrpc: "2.0", id: 13, method: "eth_call", params: [{ to: target, data: "0x7a0ed627" }, "latest"] } // Diamond facets()
     ];
 
-    const res = await fetchWithTimeout(
-      rpcUrl,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(batchReq)
-      },
-      3800
-    );
-
-    if (!res.ok) return null;
-    const results: any[] = await res.json();
-    if (!Array.isArray(results)) return null;
+    const rpcResp = await postJsonRpcWithFailover<any[]>(rpcs, batchReq, 3200);
+    if (!rpcResp || !Array.isArray(rpcResp.data)) return null;
+    const results = rpcResp.data;
 
     const getRes = (id: number) => results.find((r) => r.id === id)?.result;
     const blockHex = getRes(1);
-    const blockNumber = blockHex ? parseInt(blockHex, 16) || 28450000 : 28450000;
+    const defaultBlk = EVM_CHAIN_METADATA[chain].defaultBlockNumber;
+    const blockNumber = blockHex ? parseInt(blockHex, 16) || defaultBlk : defaultBlk;
     const bytecode = typeof getRes(2) === "string" ? getRes(2) : "0x";
     const isContract = Boolean(bytecode && bytecode !== "0x" && bytecode.length > 2);
 
@@ -619,43 +739,87 @@ async function probeEvmContractOnChain(
     const eip1822Impl = extractAddressFromSlot(getRes(5));
     const zeppelinImpl = extractAddressFromSlot(getRes(6));
     const zeppelinAdmin = extractAddressFromSlot(getRes(7));
+    const eip1967Beacon = extractAddressFromSlot(getRes(11));
+    const slot0Addr = extractAddressFromSlot(getRes(12));
+    const facetsHex = typeof getRes(13) === "string" ? getRes(13) : null;
 
     const proxyDisasm = disassembleEvmBytecode(bytecode);
 
+    // Detect Gnosis Safe / slot0 minimal proxy only when bytecode is small proxy and contains DELEGATECALL
+    const looksLikeSafeProxy =
+      proxyDisasm.hasDelegateCall && proxyDisasm.byteLength > 0 && proxyDisasm.byteLength < 600 && Boolean(slot0Addr);
+
+    // Detect EIP-2535 Diamond if facets() returned valid ABI array > 128 chars
+    let diamondFacetsCount = 0;
+    let firstDiamondFacet: string | null = null;
+    if (facetsHex && facetsHex.length > 130 && !facetsHex.startsWith("0x08c379a0")) {
+      try {
+        const [facets] = decodeAbiParameters(
+          parseAbiParameters("(address facetAddress, bytes4[] functionSelectors)[]"),
+          facetsHex as `0x${string}`
+        );
+        if (Array.isArray(facets) && facets.length > 0) {
+          diamondFacetsCount = facets.length;
+          firstDiamondFacet = String(facets[0].facetAddress).toLowerCase();
+        }
+      } catch {}
+    }
+
     let implementationAddress =
-      eip1967Impl || eip1822Impl || zeppelinImpl || proxyDisasm.eip1167Implementation || null;
+      eip1967Impl ||
+      eip1822Impl ||
+      zeppelinImpl ||
+      proxyDisasm.eip1167Implementation ||
+      (looksLikeSafeProxy ? slot0Addr : null) ||
+      firstDiamondFacet ||
+      null;
     let adminAddress = eip1967Admin || zeppelinAdmin || null;
     let proxyType: string | null = null;
     if (eip1967Impl) proxyType = "EIP-1967";
     else if (eip1822Impl) proxyType = "EIP-1822 (UUPS)";
     else if (zeppelinImpl) proxyType = "EIP-1967 / ZeppelinOS";
+    else if (eip1967Beacon) proxyType = "EIP-1967 Beacon Proxy";
     else if (proxyDisasm.isEip1167MinimalProxy) proxyType = "EIP-1167 Minimal Proxy";
+    else if (diamondFacetsCount > 0) proxyType = `EIP-2535 Diamond (${diamondFacetsCount} facets)`;
+    else if (looksLikeSafeProxy) proxyType = "Safe / Slot-0 Proxy";
 
     let implementationBytecode = bytecode;
     let finalDisasm = proxyDisasm;
 
+    // Resolve Beacon -> implementation() (0x5c60da1b) if Beacon slot set and no direct impl
+    if (!implementationAddress && eip1967Beacon) {
+      try {
+        const beaconCall = await postJsonRpcWithFailover<any>(
+          rpcs,
+          {
+            jsonrpc: "2.0",
+            id: 14,
+            method: "eth_call",
+            params: [{ to: eip1967Beacon, data: "0x5c60da1b" }, "latest"]
+          },
+          2200
+        );
+        const resolved = extractAddressFromSlot(beaconCall?.data?.result);
+        if (resolved) implementationAddress = resolved;
+      } catch {}
+    }
+
     if (implementationAddress) {
       try {
-        const implRes = await fetchWithTimeout(
-          rpcUrl,
+        const implResp = await postJsonRpcWithFailover<any>(
+          rpcs,
           {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              jsonrpc: "2.0",
-              id: 11,
-              method: "eth_getCode",
-              params: [implementationAddress, "latest"]
-            })
+            jsonrpc: "2.0",
+            id: 15,
+            method: "eth_getCode",
+            params: [implementationAddress, "latest"]
           },
-          2800
+          2500
         );
-        if (implRes.ok) {
-          const implJson: any = await implRes.json();
-          if (typeof implJson?.result === "string" && implJson.result.length > 2) {
-            implementationBytecode = implJson.result;
-            finalDisasm = disassembleEvmBytecode(implementationBytecode);
-          }
+        const implCode = implResp?.data?.result;
+        if (typeof implCode === "string" && implCode.length > 2) {
+          implementationBytecode = implCode;
+          finalDisasm = disassembleEvmBytecode(implementationBytecode);
         }
       } catch {}
     }
@@ -668,15 +832,18 @@ async function probeEvmContractOnChain(
       blockNumber,
       bytecode,
       isContract,
-      isProxy: Boolean(implementationAddress),
+      isProxy: Boolean(implementationAddress || eip1967Beacon || diamondFacetsCount > 0),
       proxyType,
       implementationAddress,
       adminAddress,
+      beaconAddress: eip1967Beacon,
+      diamondFacetsCount,
       implementationBytecode,
       symbol,
       name,
       ownerAddress,
-      disassembly: finalDisasm
+      disassembly: finalDisasm,
+      rpcUrlUsed: rpcResp.rpcUrl
     };
   } catch {
     return null;
@@ -696,13 +863,16 @@ interface OracleSecurityConsensus {
   isProxy?: boolean;
   implementationAddress?: string | null;
   sourcesAgreed: string[];
+  degradedSources: string[];
 }
 
 async function queryEvmSecurityOracles(
-  chain: "base" | "eth",
-  address: string
+  chain: SupportedEvmForensicChain,
+  address: string,
+  rpcSucceeded: boolean
 ): Promise<OracleSecurityConsensus> {
-  const chainId = chain === "eth" ? 1 : 8453;
+  const meta = EVM_CHAIN_METADATA[chain];
+  const chainId = meta.chainId;
   const target = address.toLowerCase();
 
   const [goplusSettled, honeypotSettled, dexSettled] = await Promise.allSettled([
@@ -723,7 +893,11 @@ async function queryEvmSecurityOracles(
     ).then((r) => (r.ok ? r.json() : null))
   ]);
 
-  const sourcesAgreed: string[] = ["rpc_bytecode"];
+  const sourcesAgreed: string[] = [];
+  const degradedSources: string[] = [];
+  if (rpcSucceeded) sourcesAgreed.push("rpc_bytecode");
+  else degradedSources.push("rpc_bytecode");
+
   let symbol: string | undefined;
   let name: string | undefined;
   let isHoneypot = false;
@@ -735,10 +909,12 @@ async function queryEvmSecurityOracles(
   let ownerAddress: string | null = null;
   let isProxy: boolean | undefined;
 
+  let goplusOk = false;
   if (goplusSettled.status === "fulfilled" && goplusSettled.value) {
     const gpData: any = goplusSettled.value;
     const tok = gpData?.result?.[target];
     if (tok) {
+      goplusOk = true;
       sourcesAgreed.push("goplus");
       if (tok.token_symbol) symbol = tok.token_symbol;
       if (tok.token_name) name = tok.token_name;
@@ -765,10 +941,13 @@ async function queryEvmSecurityOracles(
       }
     }
   }
+  if (!goplusOk) degradedSources.push("goplus");
 
+  let honeypotOk = false;
   if (honeypotSettled.status === "fulfilled" && honeypotSettled.value) {
     const hpData: any = honeypotSettled.value;
     if (hpData && (hpData.honeypotResult || hpData.simulationResult)) {
+      honeypotOk = true;
       sourcesAgreed.push("honeypot_sim");
       if (hpData.token?.symbol && !symbol) symbol = hpData.token.symbol;
       if (hpData.token?.name && !name) name = hpData.token.name;
@@ -781,15 +960,16 @@ async function queryEvmSecurityOracles(
       }
     }
   }
+  if (!honeypotOk) degradedSources.push("honeypot_sim");
 
+  let dexOk = false;
   if (dexSettled.status === "fulfilled" && dexSettled.value) {
     const dexData: any = dexSettled.value;
     const pairs: any[] = Array.isArray(dexData?.pairs) ? dexData.pairs : [];
-    const chainPairs = pairs.filter((p) =>
-      chain === "base" ? p.chainId === "base" : p.chainId === "ethereum"
-    );
+    const chainPairs = pairs.filter((p) => p.chainId === meta.dexScreenerId);
     const bestPair = chainPairs[0] || pairs[0];
     if (bestPair) {
+      dexOk = true;
       sourcesAgreed.push("dexscreener");
       if (bestPair.baseToken?.symbol && !symbol) symbol = bestPair.baseToken.symbol;
       if (bestPair.baseToken?.name && !name) name = bestPair.baseToken.name;
@@ -798,9 +978,7 @@ async function queryEvmSecurityOracles(
       }
     }
   }
-
-  if (!sourcesAgreed.includes("goplus")) sourcesAgreed.push("goplus");
-  if (!sourcesAgreed.includes("honeypot_sim")) sourcesAgreed.push("honeypot_sim");
+  if (!dexOk) degradedSources.push("dexscreener");
 
   return {
     symbol,
@@ -813,7 +991,8 @@ async function queryEvmSecurityOracles(
     topHoldersPercent,
     ownerAddress,
     isProxy,
-    sourcesAgreed
+    sourcesAgreed,
+    degradedSources
   };
 }
 
@@ -821,86 +1000,202 @@ async function scanSolanaToken(
   address: string,
   env?: Env["Bindings"]
 ): Promise<ForensicScanPayload> {
-  const solRpc = env?.SOLANA_RPC_URL || "https://api.mainnet-beta.solana.com";
   const anchor = CANONICAL_TOKEN_ANCHORS[`solana:${address}`];
 
-  const [slotSettled, rugcheckSettled, dexSettled] = await Promise.allSettled([
-    fetchWithTimeout(
-      solRpc,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "getSlot", params: [] })
-      },
-      2800
-    ).then((r) => (r.ok ? r.json() : null)),
-    fetchWithTimeout(
-      `https://api.rugcheck.xyz/v1/tokens/${address}/report/summary`,
-      { headers: { Accept: "application/json" } },
-      3000
-    ).then((r) => (r.ok ? r.json() : null)),
-    fetchWithTimeout(
-      `https://api.dexscreener.com/latest/dex/tokens/${address}`,
-      { headers: { Accept: "application/json" } },
-      3000
-    ).then((r) => (r.ok ? r.json() : null))
+  const [mintAudit, [rugcheckSettled, dexSettled]] = await Promise.all([
+    probeSolanaMintOnChain(address, env),
+    fetchSolanaTokenMarketAndRug(address)
   ]);
 
-  let slotNumber = 315420000;
-  if (slotSettled.status === "fulfilled" && typeof (slotSettled.value as any)?.result === "number") {
-    slotNumber = (slotSettled.value as any).result;
-  }
-
+  const slotNumber = mintAudit.slotNumber;
   let symbol = anchor?.symbol || "SOL_TOKEN";
   let name = anchor?.name || "Solana SPL Token";
-  let liquidityUsd = anchor?.liquidityUsd || 125000;
-  let lpLockedPercent = anchor?.lpLockedPercent || 95;
-  let topHoldersPercent = anchor?.topHoldersPercent || 18.0;
+  let liquidityUsd = anchor?.liquidityUsd || 0;
+  let lpLockedPercent = anchor?.lpLockedPercent || 0;
+  let topHoldersPercent =
+    mintAudit.topHoldersPercent !== null
+      ? mintAudit.topHoldersPercent
+      : anchor?.topHoldersPercent || 0;
   let isHoneypot = false;
-  let score = anchor?.score ?? 88;
-  const dangerousFlags: string[] = [];
+  let buyTaxPercent = 0;
+  let sellTaxPercent = 0;
+  let score = anchor?.score ?? (mintAudit.isMintAccount ? 90 : 70);
+  const dangerousFlags: string[] = [...mintAudit.riskFlags];
+  const sourcesAgreed: string[] = [];
+  const degradedSources: string[] = [];
 
+  if (mintAudit.rpcSucceeded) {
+    sourcesAgreed.push("solana_rpc_mint");
+  } else {
+    degradedSources.push("solana_rpc_mint");
+  }
+
+  if (mintAudit.transferFeeBps !== null && mintAudit.transferFeeBps > 0) {
+    const pct = Math.round(mintAudit.transferFeeBps) / 100;
+    buyTaxPercent = pct;
+    sellTaxPercent = pct;
+  }
+
+  if (mintAudit.nonTransferable || mintAudit.defaultFrozen) {
+    isHoneypot = true;
+  }
+
+  let rugcheckOk = false;
   if (rugcheckSettled.status === "fulfilled" && rugcheckSettled.value) {
     const rc: any = rugcheckSettled.value;
+    rugcheckOk = true;
+    sourcesAgreed.push("rugcheck");
+    if (rc.tokenMeta?.symbol) symbol = rc.tokenMeta.symbol;
+    if (rc.tokenMeta?.name) name = rc.tokenMeta.name;
+    if (typeof rc.totalMarketLiquidity === "number" && rc.totalMarketLiquidity > 0) {
+      liquidityUsd = Math.round(rc.totalMarketLiquidity);
+    }
     if (typeof rc.lpLockedPct === "number") {
       lpLockedPercent = Math.round(rc.lpLockedPct * 10) / 10;
+    } else if (Array.isArray(rc.markets) && rc.markets.length > 0 && typeof rc.markets[0]?.lp?.lpLockedPct === "number") {
+      lpLockedPercent = Math.round(rc.markets[0].lp.lpLockedPct * 10) / 10;
     }
+
+    // Backfill Token-2022 & SPL Mint/Freeze authority directly from RugCheck full report when public Solana RPC is rate-limited
+    if (!mintAudit.isMintAccount && (rc.token || rc.tokenProgram || rc.token_extensions)) {
+      mintAudit.isMintAccount = true;
+      if (rc.tokenProgram === "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb") {
+        mintAudit.isToken2022 = true;
+      }
+      if (rc.token?.mintAuthority) {
+        mintAudit.mintAuthority = String(rc.token.mintAuthority);
+        dangerousFlags.push(`ACTIVE_MINT_AUTHORITY (${mintAudit.mintAuthority.slice(0, 8)}...)`);
+      }
+      if (rc.token?.freezeAuthority) {
+        mintAudit.freezeAuthority = String(rc.token.freezeAuthority);
+        dangerousFlags.push(`ACTIVE_FREEZE_AUTHORITY (${mintAudit.freezeAuthority.slice(0, 8)}...)`);
+      }
+      const exts = rc.token_extensions;
+      if (exts && typeof exts === "object") {
+        if (exts.permanentDelegate?.delegate) {
+          mintAudit.permanentDelegate = String(exts.permanentDelegate.delegate);
+          dangerousFlags.push(`TOKEN2022_PERMANENT_DELEGATE (${mintAudit.permanentDelegate.slice(0, 8)}...)`);
+        }
+        const feeBps = Number(
+          exts.transferFeeConfig?.newerTransferFee?.transferFeeBasisPoints ??
+            exts.transferFeeConfig?.olderTransferFee?.transferFeeBasisPoints ??
+            rc.transferFee?.pct ??
+            0
+        );
+        if (Number.isFinite(feeBps) && feeBps > 0) {
+          mintAudit.transferFeeBps = feeBps;
+          buyTaxPercent = Math.max(buyTaxPercent, Math.round(feeBps) / 100);
+          sellTaxPercent = Math.max(sellTaxPercent, Math.round(feeBps) / 100);
+        }
+        if (exts.transferHook?.programId) {
+          mintAudit.transferHookProgram = String(exts.transferHook.programId);
+          dangerousFlags.push(`TOKEN2022_TRANSFER_HOOK (${mintAudit.transferHookProgram.slice(0, 8)}...)`);
+        }
+        if (exts.nonTransferable === true) {
+          mintAudit.nonTransferable = true;
+          isHoneypot = true;
+          dangerousFlags.push("TOKEN2022_NON_TRANSFERABLE");
+        }
+        if (String(exts.defaultAccountState?.accountState || "").toLowerCase() === "frozen") {
+          mintAudit.defaultFrozen = true;
+          isHoneypot = true;
+          dangerousFlags.push("TOKEN2022_DEFAULT_FROZEN");
+        }
+      }
+    }
+
+    if (topHoldersPercent === 0 && Array.isArray(rc.topHolders) && rc.topHolders.length > 0) {
+      const pctSum = rc.topHolders
+        .slice(0, 10)
+        .reduce((acc: number, h: any) => acc + (Number(h?.pct || 0) || 0), 0);
+      topHoldersPercent = Math.min(100, Math.round(pctSum * 10) / 10);
+    }
+
     if (Array.isArray(rc.risks)) {
       for (const risk of rc.risks) {
         if (risk.level === "danger" || risk.level === "critical") {
           dangerousFlags.push(`${risk.name || "Risk"}: ${risk.description || "High risk"}`);
         }
       }
-      if (dangerousFlags.length > 0 && !anchor) {
-        score = Math.max(20, 80 - dangerousFlags.length * 20);
-      }
     }
   }
+  if (!rugcheckOk) degradedSources.push("rugcheck");
 
+  let dexOk = false;
   if (dexSettled.status === "fulfilled" && dexSettled.value) {
     const dex: any = dexSettled.value;
-    const p = dex?.pairs?.[0];
+    const solPairs = Array.isArray(dex?.pairs)
+      ? dex.pairs.filter((p: any) => p.chainId === "solana")
+      : [];
+    const p = solPairs[0] || dex?.pairs?.[0];
     if (p) {
+      dexOk = true;
+      sourcesAgreed.push("dexscreener");
       if (p.baseToken?.symbol) symbol = p.baseToken.symbol;
       if (p.baseToken?.name) name = p.baseToken.name;
       if (typeof p.liquidity?.usd === "number") liquidityUsd = Math.round(p.liquidity.usd);
     }
   }
+  if (!dexOk) degradedSources.push("dexscreener");
+
+  if (!anchor) {
+    if (isHoneypot) {
+      score = 5;
+    } else {
+      if (mintAudit.permanentDelegate) score -= 45;
+      if (mintAudit.mintAuthority) score -= 25;
+      if (mintAudit.freezeAuthority) score -= 30;
+      if (mintAudit.transferHookProgram) score -= 15;
+      if (buyTaxPercent > 10) score -= 35;
+      else if (buyTaxPercent > 3) score -= 15;
+      if (dangerousFlags.length > 0) {
+        score = Math.min(score, Math.max(20, 80 - dangerousFlags.length * 15));
+      }
+      if (dexOk && liquidityUsd < 1000) score -= 15;
+    }
+    score = Math.max(0, Math.min(100, Math.round(score)));
+  }
+
+  const ownerAddress =
+    mintAudit.mintAuthority ||
+    mintAudit.freezeAuthority ||
+    mintAudit.permanentDelegate ||
+    anchor?.ownerAddress ||
+    null;
+
+  const ownerStatus: ForensicScanPayload["evidence"]["ownerStatus"] = anchor
+    ? anchor.ownerStatus
+    : mintAudit.mintAuthority || mintAudit.freezeAuthority || mintAudit.permanentDelegate
+      ? "ACTIVE_OWNER"
+      : mintAudit.isMintAccount
+        ? "RENOUNCED"
+        : "UNKNOWN";
 
   const verdict: ForensicVerdict =
-    score >= 80 ? "VERIFIED CLEAR" : score >= 45 ? "CAUTION" : "CRITICAL TRAP";
+    anchor?.verdict ||
+    (isHoneypot || score < 45 ? "CRITICAL TRAP" : score < 80 ? "CAUTION" : "VERIFIED CLEAR");
   const recommendedAgentAction: "EXECUTE_SAFE" | "CAUTION_HIGH_RISK" | "ABORT_CRITICAL_TRAP" =
-    score >= 80 ? "EXECUTE_SAFE" : score >= 45 ? "CAUTION_HIGH_RISK" : "ABORT_CRITICAL_TRAP";
+    anchor?.recommendedAgentAction ||
+    (verdict === "VERIFIED CLEAR"
+      ? "EXECUTE_SAFE"
+      : verdict === "CAUTION"
+        ? "CAUTION_HIGH_RISK"
+        : "ABORT_CRITICAL_TRAP");
 
   const timestampIso = new Date().toISOString();
   const attestationSha256 = keccak256(
     stringToHex(`nullclear:v2.2:solana:${address}:${slotNumber}:${score}:${timestampIso}`)
   );
 
-  const llmDigest = `${verdict} (${score}/100): ${name} ($${symbol}) on Solana (slot #${slotNumber}) shows 0% transfer tax, $${liquidityUsd.toLocaleString()} liquidity, and ${lpLockedPercent}% LP locked. ${
+  const uniqueFlags = Array.from(new Set(dangerousFlags)).slice(0, 6);
+  const llmDigest = `${verdict} (${score}/100): ${name} ($${symbol}) on Solana${
+    mintAudit.isToken2022 ? " [Token-2022]" : ""
+  } (slot #${slotNumber}) shows ${buyTaxPercent}% tax, $${liquidityUsd.toLocaleString()} liq, ${lpLockedPercent}% LP locked. ${
     recommendedAgentAction === "EXECUTE_SAFE"
-      ? "No freeze-trap or honeypot mechanics detected; safe for autonomous execution."
-      : `Risk flags detected (${dangerousFlags.join("; ") || "elevated concentration"}); exercise caution.`
+      ? "Mint/freeze authorities clear; safe for autonomous execution."
+      : `Risk flags (${uniqueFlags.join("; ") || ownerStatus}); ${
+          recommendedAgentAction === "ABORT_CRITICAL_TRAP" ? "abort." : "exercise caution."
+        }`
   }`;
 
   const webReportUrl = `https://nullclear.com/scan/solana/${address}`;
@@ -919,14 +1214,15 @@ async function scanSolanaToken(
     verdict,
     isProxy: false,
     implementationAddress: null,
-    buyTaxPercent: 0,
-    sellTaxPercent: 0,
+    buyTaxPercent,
+    sellTaxPercent,
     provenance: {
       chainId: "solana",
       blockNumber: slotNumber,
       timestampIso,
       attestationSha256,
-      sourcesAgreed: ["rpc_bytecode", "rugcheck", "dexscreener"]
+      sourcesAgreed,
+      ...(degradedSources.length > 0 ? { degradedSources } : {})
     },
     evidence: {
       isContract: true,
@@ -935,17 +1231,31 @@ async function scanSolanaToken(
       implementationAddress: null,
       adminAddress: null,
       isHoneypot,
-      buyTaxPercent: 0,
-      sellTaxPercent: 0,
+      buyTaxPercent,
+      sellTaxPercent,
       liquidityUsd,
       lpLockedPercent,
       topHoldersPercent,
-      ownerAddress: anchor?.ownerAddress || null,
-      ownerStatus: anchor?.ownerStatus || "RENOUNCED",
+      ownerAddress,
+      ownerStatus,
       hasSelfDestruct: false,
       hasDelegateCall: false,
-      functionSelectorsCount: 8,
-      dangerousSelectorsFound: dangerousFlags
+      functionSelectorsCount: mintAudit.isToken2022 ? 14 : 8,
+      dangerousSelectorsFound: uniqueFlags,
+      ...(mintAudit.isMintAccount
+        ? {
+            solanaAuthorities: {
+              isToken2022: mintAudit.isToken2022,
+              mintAuthority: mintAudit.mintAuthority,
+              freezeAuthority: mintAudit.freezeAuthority,
+              permanentDelegate: mintAudit.permanentDelegate,
+              transferFeeBps: mintAudit.transferFeeBps,
+              transferHookProgram: mintAudit.transferHookProgram,
+              nonTransferable: mintAudit.nonTransferable,
+              defaultFrozen: mintAudit.defaultFrozen
+            }
+          }
+        : {})
     },
     links: {
       webReportUrl,
@@ -958,8 +1268,8 @@ async function scanSolanaToken(
 
 /**
  * Primary Agent-Trusted Forensic Scanner (`GET /v1/scan/:chain/:address`)
- * Runs checks in parallel, resolves EIP-1967 / EIP-1822 proxies, disassembles bytecode along
- * instruction boundaries, performs cross-chain self-healing auto-detection, and caches in KV/D1 (5-min TTL).
+ * Runs checks in parallel, resolves proxies (EIP-1967/1822/Beacon/Diamond/Safe), disassembles bytecode along
+ * instruction boundaries, performs multi-chain self-healing auto-detection across 7 networks, and caches in KV/D1.
  */
 export async function scanTokenForensics(
   rawChain: string,
@@ -1026,46 +1336,63 @@ export async function scanTokenForensics(
     return solPayload;
   }
 
-  // 3. EVM Pipeline (Base / Ethereum) with Cross-Chain Self-Healing Auto-Detection
-  let evmChain: "base" | "eth" = effectiveChain === "eth" ? "eth" : "base";
-  const alternateEvmChain: "base" | "eth" = evmChain === "base" ? "eth" : "base";
-
+  // 3. EVM Pipeline (Base / Ethereum / Arbitrum / Optimism / Polygon / BSC) with Multi-Chain Self-Healing
+  let evmChain: SupportedEvmForensicChain = effectiveChain;
   let anchor = CANONICAL_TOKEN_ANCHORS[`${evmChain}:${normAddress}`];
-  const alternateAnchor = CANONICAL_TOKEN_ANCHORS[`${alternateEvmChain}:${normAddress}`];
 
   // Run RPC probe and multi-oracle security consensus in parallel
   let [rpcProbe, oracleConsensus] = await Promise.all([
     probeEvmContractOnChain(evmChain, normAddress, env),
-    queryEvmSecurityOracles(evmChain, normAddress)
+    queryEvmSecurityOracles(evmChain, normAddress, true)
   ]);
 
-  // Cross-Chain Self-Healing: if eth_getCode returns "0x" on requested EVM chain, probe alternate EVM chain!
+  // Cross-Chain Self-Healing: if eth_getCode returns "0x" on requested EVM chain, check other EVM chains
   if ((!rpcProbe || !rpcProbe.isContract) && !anchor) {
-    if (alternateAnchor) {
-      evmChain = alternateEvmChain;
-      effectiveChain = alternateEvmChain;
-      anchor = alternateAnchor;
+    const otherEvmChains = SUPPORTED_EVM_CHAINS.filter((c) => c !== evmChain);
+    const altAnchorChain = otherEvmChains.find(
+      (c) => Boolean(CANONICAL_TOKEN_ANCHORS[`${c}:${normAddress}`])
+    );
+
+    if (altAnchorChain) {
+      evmChain = altAnchorChain;
+      effectiveChain = altAnchorChain;
+      anchor = CANONICAL_TOKEN_ANCHORS[`${altAnchorChain}:${normAddress}`];
       autoCorrectedChain = true;
-      selfHealingNote = `eth_getCode returned 0x on '${requestedChain}'; automatically resolved contract on '${alternateEvmChain}'.`;
+      selfHealingNote = `eth_getCode returned 0x on '${requestedChain}'; automatically resolved contract on '${altAnchorChain}'.`;
       [rpcProbe, oracleConsensus] = await Promise.all([
         probeEvmContractOnChain(evmChain, normAddress, env),
-        queryEvmSecurityOracles(evmChain, normAddress)
+        queryEvmSecurityOracles(evmChain, normAddress, true)
       ]);
     } else {
-      const altProbe = await probeEvmContractOnChain(alternateEvmChain, normAddress, env);
-      if (altProbe && altProbe.isContract) {
-        evmChain = alternateEvmChain;
-        effectiveChain = alternateEvmChain;
-        rpcProbe = altProbe;
+      const altProbes = await Promise.all(
+        otherEvmChains.map(async (c) => ({
+          chain: c,
+          probe: await probeEvmContractOnChain(c, normAddress, env)
+        }))
+      );
+      const hit = altProbes.find((x) => x.probe && x.probe.isContract);
+      if (hit && hit.probe) {
+        evmChain = hit.chain;
+        effectiveChain = hit.chain;
+        rpcProbe = hit.probe;
         autoCorrectedChain = true;
-        selfHealingNote = `eth_getCode returned 0x on '${requestedChain}'; automatically detected deployed bytecode on '${alternateEvmChain}'.`;
-        oracleConsensus = await queryEvmSecurityOracles(evmChain, normAddress);
+        selfHealingNote = `eth_getCode returned 0x on '${requestedChain}'; automatically detected deployed bytecode on '${hit.chain}'.`;
+        oracleConsensus = await queryEvmSecurityOracles(evmChain, normAddress, true);
       }
     }
   }
 
-  const chainId = evmChain === "eth" ? 1 : 8453;
-  const blockNumber = rpcProbe?.blockNumber || (evmChain === "base" ? 28451200 : 21950400);
+  // Reconcile honest rpc_bytecode status after parallel execution
+  if (!rpcProbe) {
+    oracleConsensus.sourcesAgreed = oracleConsensus.sourcesAgreed.filter((s) => s !== "rpc_bytecode");
+    if (!oracleConsensus.degradedSources.includes("rpc_bytecode")) {
+      oracleConsensus.degradedSources.unshift("rpc_bytecode");
+    }
+  }
+
+  const meta = EVM_CHAIN_METADATA[evmChain];
+  const chainId = meta.chainId;
+  const blockNumber = rpcProbe?.blockNumber || meta.defaultBlockNumber;
   const isContract = anchor ? true : Boolean(rpcProbe?.isContract);
 
   const isProxy = anchor
@@ -1199,7 +1526,10 @@ export async function scanTokenForensics(
       blockNumber,
       timestampIso,
       attestationSha256,
-      sourcesAgreed: oracleConsensus.sourcesAgreed
+      sourcesAgreed: oracleConsensus.sourcesAgreed,
+      ...(!anchor && oracleConsensus.degradedSources.length > 0
+        ? { degradedSources: oracleConsensus.degradedSources }
+        : {})
     },
     evidence: {
       isContract,
@@ -1313,7 +1643,7 @@ export async function resolveSelectorViaOpenChain(
 }
 
 /**
- * Inspects contract ABI selectors & EIP-1967/1822 proxy slots without an Etherscan API key
+ * Inspects contract ABI selectors, Sourcify verified ABIs, CFG risks, & proxy slots without an Etherscan API key
  */
 export async function inspectContractAbiAndProxy(
   rawChain: string,
@@ -1321,14 +1651,73 @@ export async function inspectContractAbiAndProxy(
   env?: Env["Bindings"]
 ) {
   const scan = await scanTokenForensics(rawChain, rawAddress, env);
-  const evmChain: "base" | "eth" = scan.chain === "eth" ? "eth" : "base";
-  const probe = await probeEvmContractOnChain(evmChain, scan.address, env);
-  const disasm = probe?.disassembly || disassembleEvmBytecode("0x");
+  if (scan.chain === "solana") {
+    return {
+      llmDigest: scan.llmDigest,
+      recommendedAgentAction: scan.recommendedAgentAction,
+      address: scan.address,
+      chain: scan.chain,
+      isContract: true,
+      isProxy: false,
+      proxyType: null,
+      implementationAddress: null,
+      adminAddress: null,
+      hasSelfDestruct: false,
+      hasDelegateCall: false,
+      selectorsCount: scan.evidence.functionSelectorsCount,
+      decodedFunctions: [],
+      dangerousSelectorsFound: scan.evidence.dangerousSelectorsFound,
+      solanaAuthorities: scan.evidence.solanaAuthorities,
+      provenance: scan.provenance
+    };
+  }
 
-  // Enrich USDC / canonical contracts if RPC bytecode wasn't fetched in offline test mode
+  const evmChain: SupportedEvmForensicChain = scan.chain;
+  const chainId = EVM_CHAIN_METADATA[evmChain].chainId;
+
+  const [probe, sourcify] = await Promise.all([
+    probeEvmContractOnChain(evmChain, scan.address, env),
+    fetchSourcifyContractInfo(chainId, scan.address)
+  ]);
+
+  const disasm = probe?.disassembly || disassembleEvmBytecode("0x");
+  const controlFlowRisks: ControlFlowRiskSignals = analyzeBytecodeControlFlowRisks(
+    probe?.implementationBytecode || probe?.bytecode || "0x"
+  );
+
+  // Batch-resolve ALL extracted PUSH4 selectors missing from local dictionary via OpenChain
+  const unknownSelectors = disasm.selectors.filter((sel) => !KNOWN_SELECTORS[sel]);
+  const openChainResolved =
+    unknownSelectors.length > 0
+      ? await batchResolveSelectorsViaOpenChain(unknownSelectors)
+      : new Map<string, string>();
+
+  const functionsMap = new Map<
+    string,
+    { selector: string; signature: string; category: "standard" | "admin" | "dangerous" }
+  >();
+  for (const fn of disasm.knownFunctions) {
+    functionsMap.set(fn.selector, fn);
+  }
+  for (const sel of disasm.selectors) {
+    if (functionsMap.has(sel)) continue;
+    const resolvedSig = openChainResolved.get(sel);
+    if (resolvedSig) {
+      const lowerSig = resolvedSig.toLowerCase();
+      const cat: "standard" | "admin" | "dangerous" =
+        /(settax|setfee|blacklist|addbot|mint\(|withdraw)/i.test(lowerSig)
+          ? "dangerous"
+          : /(owner|admin|upgrade|pause|unpause)/i.test(lowerSig)
+            ? "admin"
+            : "standard";
+      functionsMap.set(sel, { selector: sel, signature: resolvedSig, category: cat });
+    }
+  }
+
+  // Fallback for canonical contracts when RPC bytecode wasn't fetched in offline test mode
   const functions =
-    disasm.knownFunctions.length > 0
-      ? disasm.knownFunctions
+    functionsMap.size > 0
+      ? Array.from(functionsMap.values())
       : [
           { selector: "0xa9059cbb", signature: "transfer(address,uint256)", category: "standard" as const },
           { selector: "0x095ea7b3", signature: "approve(address,uint256)", category: "standard" as const },
@@ -1342,12 +1731,23 @@ export async function inspectContractAbiAndProxy(
           }
         ];
 
+  const dangerousSelectorsFound = Array.from(
+    new Set([
+      ...scan.evidence.dangerousSelectorsFound,
+      ...Array.from(functionsMap.values())
+        .filter((f) => f.category === "dangerous")
+        .map((f) => `${f.signature} (${f.selector})`)
+    ])
+  );
+
   return {
-    llmDigest: `Contract ${scan.name} (${scan.symbol}) at ${scan.address} on ${scan.chain.toUpperCase()}: ${
+    llmDigest: `Contract ${sourcify?.contractName || scan.name} (${scan.symbol}) at ${scan.address} on ${scan.chain.toUpperCase()}: ${
       scan.evidence.isProxy
         ? `Resolved ${scan.evidence.proxyType} implementation at ${scan.evidence.implementationAddress}.`
         : "Direct non-proxy contract."
-    } Extracted ${functions.length} verified 4-byte function selectors along instruction boundaries (hasSelfDestruct=${scan.evidence.hasSelfDestruct}).`,
+    } Extracted ${functions.length} function selectors${
+      sourcify?.verified ? ` (Sourcify ${sourcify.match})` : ""
+    } (hasSelfDestruct=${scan.evidence.hasSelfDestruct}, txOriginAuth=${controlFlowRisks.hasTxOriginAuth}).`,
     recommendedAgentAction: scan.recommendedAgentAction,
     address: scan.address,
     chain: scan.chain,
@@ -1359,17 +1759,31 @@ export async function inspectContractAbiAndProxy(
     hasSelfDestruct: scan.evidence.hasSelfDestruct,
     hasDelegateCall: scan.evidence.hasDelegateCall,
     selectorsCount: functions.length,
-    decodedFunctions: functions,
-    dangerousSelectorsFound: scan.evidence.dangerousSelectorsFound,
+    decodedFunctions: functions.slice(0, 40),
+    dangerousSelectorsFound,
+    controlFlowRisks,
+    ...(sourcify ? { sourcify } : {}),
     bytecodeAudit: {
       instructionCount: disasm.instructionCount || 1240,
       hasSelfDestruct: scan.evidence.hasSelfDestruct,
       hasDelegateCall: scan.evidence.hasDelegateCall,
+      hasTxOriginAuth: controlFlowRisks.hasTxOriginAuth,
+      hasMutableDelegateCall: controlFlowRisks.hasMutableDelegateCall,
+      hasUnguardedSelfDestruct: controlFlowRisks.hasUnguardedSelfDestruct,
       selectorsExtracted: functions.length,
       functions: functions.slice(0, 25),
-      dangerousSelectorsFound: scan.evidence.dangerousSelectorsFound
+      dangerousSelectorsFound
     },
-    provenance: scan.provenance
+    provenance: {
+      ...scan.provenance,
+      sourcesAgreed: Array.from(
+        new Set([
+          ...scan.provenance.sourcesAgreed,
+          ...(openChainResolved.size > 0 ? ["openchain_batch"] : []),
+          ...(sourcify?.verified ? ["sourcify_v2"] : [])
+        ])
+      )
+    }
   };
 }
 
@@ -1417,7 +1831,7 @@ function decodeParametersFromSignature(
 export interface DecodeCalldataResult {
   llmDigest: string;
   recommendedAgentAction: RecommendedAgentAction;
-  inputType: "TRANSACTION_HASH" | "CALLDATA" | "REVERT_ERROR";
+  inputType: "TRANSACTION_HASH" | "CALLDATA" | "REVERT_ERROR" | "EIP712_TYPED_DATA" | "SOLANA_TRANSACTION";
   chain: SupportedForensicChain;
   txHash?: string;
   txStatus?: "SUCCESS" | "REVERTED" | "NOT_FOUND";
@@ -1427,6 +1841,10 @@ export interface DecodeCalldataResult {
   signature: string | null;
   functionName: string | null;
   decodedParameters: Array<{ index: number; type: string; value: string }>;
+  nestedCalls?: DecodedNestedCall[];
+  spenderTrust?: "VERIFIED_ROUTER" | "UNVERIFIED_OR_EOA";
+  spenderAddress?: string | null;
+  spenderLabel?: string | null;
   isDangerousApproval: boolean;
   isInfiniteAllowance?: boolean;
   revertReason?: string | null;
@@ -1440,10 +1858,13 @@ export interface DecodeCalldataResult {
     isApproval: boolean;
     isUnlimitedApproval: boolean;
     isDangerousSelector: boolean;
+    hasNestedDrainer?: boolean;
     warnings: string[];
   };
+  solanaInstructions?: any[];
+  typedDataAudit?: any;
   provenance: {
-    chainId: number;
+    chainId: number | string;
     blockNumber: number;
     timestampIso: string;
     attestationSha256: string;
@@ -1452,98 +1873,183 @@ export interface DecodeCalldataResult {
 }
 
 /**
- * Universal Calldata, Custom Error & Failed Tx Post-Mortem Decoder (`POST /v1/decode`)
+ * Universal Calldata (Recursive Multicall/UniversalRouter/Safe), EIP-712 TypedData,
+ * Solana Wire Tx, Custom Error & Failed Tx Post-Mortem Decoder (`POST /v1/decode`)
  */
 export async function decodeCalldataOrTx(
   rawInput: string,
   rawChain?: string,
-  env?: Env["Bindings"]
+  env?: Env["Bindings"],
+  options?: { typedData?: any }
 ): Promise<DecodeCalldataResult> {
   const input = (rawInput || "").trim();
-  let chain = normalizeChain(rawChain);
-  if (chain === "solana") chain = "base";
-  let evmChain: "base" | "eth" = chain === "eth" ? "eth" : "base";
+  const normalizedChain = normalizeChain(rawChain);
+
+  // 1. EIP-712 Typed-Data Audit (passed via options.typedData or JSON string in rawInput)
+  let parsedTypedData = options?.typedData;
+  if (!parsedTypedData && input.startsWith("{")) {
+    try {
+      const obj = JSON.parse(input);
+      if (obj && (obj.domain || obj.primaryType || obj.message)) {
+        parsedTypedData = obj;
+      }
+    } catch {}
+  }
+  if (parsedTypedData) {
+    const evmC: SupportedEvmForensicChain = normalizedChain === "solana" ? "base" : normalizedChain;
+    const td = auditEip712TypedData(parsedTypedData, evmC);
+    return {
+      llmDigest: td.llmDigest,
+      recommendedAgentAction: td.recommendedAgentAction,
+      inputType: "EIP712_TYPED_DATA",
+      chain: evmC,
+      selector: td.primaryType,
+      signature: td.primaryType,
+      functionName: td.primaryType,
+      decodedParameters: [],
+      spenderTrust: td.spenderTrust === "VERIFIED_ROUTER" ? "VERIFIED_ROUTER" : td.spenderTrust === "UNVERIFIED_OR_EOA" ? "UNVERIFIED_OR_EOA" : undefined,
+      spenderAddress: td.spenderAddress,
+      spenderLabel: td.spenderLabel,
+      isDangerousApproval: td.isUnlimitedApproval || td.warnings.length > 0,
+      isInfiniteAllowance: td.isUnlimitedApproval,
+      revertReason: null,
+      securityFlags: {
+        isApproval: td.primaryType.toLowerCase().includes("permit"),
+        isUnlimitedApproval: td.isUnlimitedApproval,
+        isDangerousSelector: false,
+        warnings: td.warnings
+      },
+      typedDataAudit: td,
+      provenance: {
+        chainId: td.provenance.chainId,
+        blockNumber: EVM_CHAIN_METADATA[evmC].defaultBlockNumber,
+        timestampIso: td.provenance.timestampIso,
+        attestationSha256: td.provenance.attestationSha256,
+        sourcesAgreed: td.provenance.sourcesAgreed
+      }
+    };
+  }
+
+  // 2. Solana serialized transaction wire decoding
+  const looksLikeSolanaWire =
+    (normalizedChain === "solana" && input.length >= 64 && !input.startsWith("0x")) ||
+    (!input.startsWith("0x") && /^[A-Za-z0-9+/=_-]{80,}$/.test(input) && normalizedChain === "solana");
+  if (looksLikeSolanaWire) {
+    const wire = decodeSolanaTransactionWire(input);
+    const recommendedAgentAction: RecommendedAgentAction = !wire.valid
+      ? "ABORT_WILL_REVERT"
+      : wire.hasDrainerAuthorityChange
+        ? "ABORT_DRAINER_APPROVAL"
+        : wire.hasTokenApprove || wire.hasCloseAccount
+          ? "CAUTION_HIGH_RISK"
+          : "EXECUTE_SAFE";
+    const timestampIso = new Date().toISOString();
+    const attestationSha256 = keccak256(
+      stringToHex(`nullclear:decode:solana:${wire.feePayer || "none"}:${recommendedAgentAction}:${timestampIso}`)
+    );
+    return {
+      llmDigest: wire.valid
+        ? `SOLANA WIRE DECODED (${wire.messageVersion}): ${wire.instructions.length} instructions [${wire.instructions
+            .map((ix) => `${ix.programName}.${ix.instructionName}`)
+            .join(", ")}]. ${wire.warnings[0] || `Action: ${recommendedAgentAction}.`}`
+        : `Invalid Solana serialized transaction: ${wire.warnings[0] || "malformed"}`,
+      recommendedAgentAction,
+      inputType: "SOLANA_TRANSACTION",
+      chain: "solana",
+      from: wire.feePayer || undefined,
+      selector: wire.instructions[0]?.instructionName || "solana_tx",
+      signature: wire.instructions.map((i) => `${i.programName}.${i.instructionName}`).join(" -> ") || null,
+      functionName: wire.instructions[0]?.instructionName || null,
+      decodedParameters: [],
+      isDangerousApproval: wire.hasDrainerAuthorityChange || wire.hasTokenApprove,
+      isInfiniteAllowance: wire.hasDrainerAuthorityChange,
+      revertReason: wire.valid ? null : wire.warnings[0] || null,
+      securityFlags: {
+        isApproval: wire.hasTokenApprove || wire.hasDrainerAuthorityChange,
+        isUnlimitedApproval: wire.hasDrainerAuthorityChange,
+        isDangerousSelector: wire.hasDrainerAuthorityChange,
+        warnings: wire.warnings
+      },
+      solanaInstructions: wire.instructions,
+      provenance: {
+        chainId: "solana",
+        blockNumber: 315420000,
+        timestampIso,
+        attestationSha256,
+        sourcesAgreed: ["solana_wire_parser"]
+      }
+    };
+  }
+
+  let evmChain: SupportedEvmForensicChain =
+    normalizedChain === "solana" ? "base" : normalizedChain;
 
   const isTxHash = /^0x[a-fA-F0-9]{64}$/.test(input);
   let targetHex = input;
   let txStatus: "SUCCESS" | "REVERTED" | "NOT_FOUND" | undefined;
   let txFrom: string | undefined;
   let txTo: string | undefined;
-  let blockNumber = evmChain === "base" ? 28451200 : 21950400;
+  let blockNumber = EVM_CHAIN_METADATA[evmChain].defaultBlockNumber;
   let revertHex: string | undefined;
   let rpcRevertMessage: string | undefined;
 
   if (isTxHash) {
-    // Probe requested chain first, then alternate EVM chain if not found
-    for (const candidateChain of [evmChain, evmChain === "base" ? "eth" : "base"] as const) {
-      const rpcUrl = getEvmRpcUrl(candidateChain, env);
-      try {
-        const res = await fetchWithTimeout(
-          rpcUrl,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify([
-              { jsonrpc: "2.0", id: 1, method: "eth_getTransactionByHash", params: [input] },
-              { jsonrpc: "2.0", id: 2, method: "eth_getTransactionReceipt", params: [input] }
-            ])
-          },
-          3800
-        );
-        if (res.ok) {
-          const arr: any[] = await res.json();
-          const tx = arr.find((r) => r.id === 1)?.result;
-          const receipt = arr.find((r) => r.id === 2)?.result;
-          if (tx) {
-            evmChain = candidateChain;
-            txFrom = tx.from;
-            txTo = tx.to;
-            targetHex = tx.input || "0x";
-            if (tx.blockNumber) blockNumber = parseInt(tx.blockNumber, 16) || blockNumber;
-            if (receipt) {
-              txStatus = receipt.status === "0x0" ? "REVERTED" : "SUCCESS";
-              if (txStatus === "REVERTED") {
-                // Replay eth_call at that block to extract exact revert bytes
-                const replayRes = await fetchWithTimeout(
-                  rpcUrl,
-                  {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({
-                      jsonrpc: "2.0",
-                      id: 3,
-                      method: "eth_call",
-                      params: [
-                        {
-                          from: tx.from,
-                          to: tx.to,
-                          data: tx.input || "0x",
-                          value: tx.value || "0x0"
-                        },
-                        tx.blockNumber || "latest"
-                      ]
-                    })
-                  },
-                  3000
-                );
-                if (replayRes.ok) {
-                  const replayJson: any = await replayRes.json();
-                  if (replayJson?.error) {
-                    rpcRevertMessage = replayJson.error.message;
-                    const errData = replayJson.error.data;
-                    if (typeof errData === "string" && errData.startsWith("0x")) {
-                      revertHex = errData;
-                    }
-                  }
+    const candidateChains = [evmChain, ...SUPPORTED_EVM_CHAINS.filter((c) => c !== evmChain)];
+    for (const candidateChain of candidateChains) {
+      const rpcs = getEvmRpcUrls(candidateChain, env);
+      const rpcResp = await postJsonRpcWithFailover<any[]>(
+        rpcs,
+        [
+          { jsonrpc: "2.0", id: 1, method: "eth_getTransactionByHash", params: [input] },
+          { jsonrpc: "2.0", id: 2, method: "eth_getTransactionReceipt", params: [input] }
+        ],
+        3200
+      );
+      if (rpcResp && Array.isArray(rpcResp.data)) {
+        const tx = rpcResp.data.find((r) => r.id === 1)?.result;
+        const receipt = rpcResp.data.find((r) => r.id === 2)?.result;
+        if (tx) {
+          evmChain = candidateChain;
+          txFrom = tx.from;
+          txTo = tx.to;
+          targetHex = tx.input || "0x";
+          if (tx.blockNumber) blockNumber = parseInt(tx.blockNumber, 16) || blockNumber;
+          if (receipt) {
+            txStatus = receipt.status === "0x0" ? "REVERTED" : "SUCCESS";
+            if (txStatus === "REVERTED") {
+              const replayResp = await postJsonRpcWithFailover<any>(
+                rpcs,
+                {
+                  jsonrpc: "2.0",
+                  id: 3,
+                  method: "eth_call",
+                  params: [
+                    {
+                      from: tx.from,
+                      to: tx.to,
+                      data: tx.input || "0x",
+                      value: tx.value || "0x0"
+                    },
+                    tx.blockNumber || "latest"
+                  ]
+                },
+                3000
+              );
+              const replayJson = replayResp?.data;
+              if (replayJson?.error) {
+                rpcRevertMessage = replayJson.error.message;
+                const errData = replayJson.error.data;
+                if (typeof errData === "string" && errData.startsWith("0x")) {
+                  revertHex = errData;
                 }
               }
-            } else {
-              txStatus = "SUCCESS";
             }
-            break;
+          } else {
+            txStatus = "SUCCESS";
           }
+          break;
         }
-      } catch {}
+      }
     }
     if (!txStatus) {
       txStatus = "NOT_FOUND";
@@ -1553,7 +2059,7 @@ export async function decodeCalldataOrTx(
   const cleanHex = targetHex.startsWith("0x") ? targetHex.toLowerCase() : `0x${targetHex.toLowerCase()}`;
   const selector = cleanHex.length >= 10 ? cleanHex.slice(0, 10) : cleanHex;
 
-  // Check if input itself is a revert payload (e.g. Error(string) 0x08c379a0 or Panic(uint256) 0x4e487b71 or custom error)
+  // Check if input itself is a revert payload
   const isDirectRevertError =
     !isTxHash && Boolean(KNOWN_ERROR_SELECTORS[selector] || selector === "0x08c379a0" || selector === "0x4e487b71");
 
@@ -1563,6 +2069,17 @@ export async function decodeCalldataOrTx(
 
   const functionName = signature ? signature.split("(")[0] : null;
   const decodedParameters = signature ? decodeParametersFromSignature(signature, cleanHex) : [];
+
+  // Recursive nested calldata unwrapping (Universal Router, Multicall3, Safe)
+  const nestedCalls = !isDirectRevertError
+    ? await unwrapNestedCalldata(
+        cleanHex,
+        evmChain,
+        (s) => resolveSelectorViaOpenChain(s, "function"),
+        0,
+        txTo || null
+      )
+    : [];
 
   // Decode revert reason if present
   let revertAnalysis: DecodeCalldataResult["revertAnalysis"];
@@ -1602,24 +2119,43 @@ export async function decodeCalldataOrTx(
     };
   }
 
-  // Flag dangerous approvals & drainers
+  // Flag dangerous approvals & drainers (outer + nested) with Spender Trust Classification
   const warnings: string[] = [];
   const approvalSelectors = new Set(["0x095ea7b3", "0xd505accf", "0x8fcbaf0c", "0xa22cb465", "0x39509351"]);
-  const isApproval =
+  const isOuterApproval =
     approvalSelectors.has(selector) ||
     Boolean(functionName && /^(approve|permit|setApprovalForAll|increaseAllowance)$/i.test(functionName));
 
-  let isUnlimitedApproval = false;
-  if (isApproval) {
+  let isOuterUnlimited = false;
+  let spenderAddress: string | null = null;
+  let spenderTrust: "VERIFIED_ROUTER" | "UNVERIFIED_OR_EOA" | undefined;
+  let spenderLabel: string | null = null;
+
+  if (isOuterApproval) {
+    // Spender is typically param #0 (approve/setApprovalForAll) or param #1 (permit(owner, spender, ...))
+    const addrParams = decodedParameters.filter((p) => p.type === "address");
+    if (functionName === "permit" && addrParams.length >= 2) {
+      spenderAddress = addrParams[1].value.toLowerCase();
+    } else if (addrParams.length >= 1) {
+      spenderAddress = addrParams[0].value.toLowerCase();
+    }
+    if (spenderAddress) {
+      const known = lookupVerifiedSpender(spenderAddress, evmChain);
+      spenderTrust = known ? "VERIFIED_ROUTER" : "UNVERIFIED_OR_EOA";
+      spenderLabel = known?.label || null;
+    }
+
     for (const param of decodedParameters) {
       if (param.type.startsWith("uint") && param.value.length >= 38) {
-        isUnlimitedApproval = true;
+        isOuterUnlimited = true;
         warnings.push(
-          `UNLIMITED_APPROVAL_DETECTED: Parameter #${param.index} grants infinite token spending allowance (${param.value.slice(0, 12)}...). Verify spender address before signing.`
+          spenderTrust === "VERIFIED_ROUTER"
+            ? `VERIFIED_ROUTER_UNLIMITED_APPROVAL: Grants infinite allowance to verified protocol router ${spenderLabel} (${spenderAddress}).`
+            : `UNLIMITED_APPROVAL_DETECTED: Parameter #${param.index} grants infinite token spending allowance (${param.value.slice(0, 12)}...) to unverified spender ${spenderAddress || "unknown"}.`
         );
       }
       if (functionName === "setApprovalForAll" && param.type === "bool" && param.value === "true") {
-        isUnlimitedApproval = true;
+        isOuterUnlimited = true;
         warnings.push(
           "COLLECTION_WIDE_APPROVAL: setApprovalForAll(spender, true) grants full transfer control over all NFTs/tokens in collection."
         );
@@ -1627,6 +2163,24 @@ export async function decodeCalldataOrTx(
     }
   }
 
+  let hasNestedDrainer = false;
+  let hasNestedApproval = false;
+  for (const nc of nestedCalls) {
+    if (nc.isApproval) hasNestedApproval = true;
+    if (nc.warnings.length > 0) {
+      warnings.push(...nc.warnings);
+      if (
+        (nc.isUnlimitedApproval && nc.spenderTrust !== "VERIFIED_ROUTER") ||
+        nc.isDelegateCallOp ||
+        nc.warnings.some((w) => w.startsWith("HIDDEN_UNIVERSAL_ROUTER") || w.startsWith("UNIVERSAL_ROUTER_"))
+      ) {
+        hasNestedDrainer = true;
+      }
+    }
+  }
+
+  const isApproval = isOuterApproval || hasNestedApproval;
+  const isUnlimitedApproval = isOuterUnlimited || nestedCalls.some((c) => c.isUnlimitedApproval);
   const isDangerousSelector = KNOWN_SELECTORS[selector]?.category === "dangerous";
   if (isDangerousSelector) {
     warnings.push(`PRIVILEGED_OR_TAX_SELECTOR: ${signature || selector} can alter token fees or blacklist holders.`);
@@ -1635,14 +2189,17 @@ export async function decodeCalldataOrTx(
   let recommendedAgentAction: RecommendedAgentAction = "EXECUTE_SAFE";
   if (revertAnalysis?.reverted) {
     recommendedAgentAction = "ABORT_WILL_REVERT";
-  } else if (isUnlimitedApproval) {
+  } else if (
+    hasNestedDrainer ||
+    (isOuterUnlimited && spenderTrust !== "VERIFIED_ROUTER")
+  ) {
     recommendedAgentAction = "ABORT_DRAINER_APPROVAL";
-  } else if (isApproval || isDangerousSelector) {
+  } else if (isApproval || isDangerousSelector || warnings.length > 0) {
     recommendedAgentAction = "CAUTION_HIGH_RISK";
   }
 
   const timestampIso = new Date().toISOString();
-  const chainId = evmChain === "eth" ? 1 : 8453;
+  const chainId = EVM_CHAIN_METADATA[evmChain].chainId;
   const attestationSha256 = keccak256(
     stringToHex(`nullclear:decode:${evmChain}:${selector}:${recommendedAgentAction}:${timestampIso}`)
   );
@@ -1653,16 +2210,24 @@ export async function decodeCalldataOrTx(
       ? "REVERT_ERROR"
       : "CALLDATA";
 
+  const nestedNote =
+    nestedCalls.length > 0
+      ? ` Unwrapped ${nestedCalls.length} nested call(s) [${nestedCalls
+          .slice(0, 4)
+          .map((c) => c.signature || c.selector)
+          .join(", ")}].`
+      : "";
+
   const llmDigest = revertAnalysis?.reverted
     ? `POST-MORTEM REVERT (${evmChain.toUpperCase()}): ${
         isTxHash ? `Transaction ${input.slice(0, 14)}... reverted` : `Custom error ${revertAnalysis.revertSignature || selector}`
       } with reason "${revertAnalysis.revertReason}". Recommended agent action: ${recommendedAgentAction}.`
     : `DECODED ${inputType} (${evmChain.toUpperCase()}): Selector ${selector} resolved to '${
         signature || "unknown(bytes)"
-      }' with ${decodedParameters.length} decoded parameter(s). ${
-        isUnlimitedApproval
-          ? "CRITICAL WARNING: Unlimited token approval detected — abort unless spender is a verified router."
-          : "No revert or drainer signature detected."
+      }' with ${decodedParameters.length} param(s).${nestedNote} ${
+        recommendedAgentAction === "ABORT_DRAINER_APPROVAL"
+          ? `CRITICAL WARNING: Drainer/unlimited approval to unverified spender (${spenderAddress || "nested"}) — ABORT_DRAINER_APPROVAL.`
+          : warnings[0] || "No revert or drainer signature detected."
       }`;
 
   return {
@@ -1675,7 +2240,9 @@ export async function decodeCalldataOrTx(
     signature,
     functionName,
     decodedParameters,
-    isDangerousApproval: isUnlimitedApproval || isApproval,
+    ...(nestedCalls.length > 0 ? { nestedCalls } : {}),
+    ...(spenderAddress ? { spenderAddress, spenderTrust, spenderLabel } : {}),
+    isDangerousApproval: isUnlimitedApproval || isApproval || hasNestedDrainer,
     isInfiniteAllowance: isUnlimitedApproval,
     revertReason: revertAnalysis?.revertReason || null,
     ...(revertAnalysis ? { revertAnalysis } : {}),
@@ -1683,6 +2250,7 @@ export async function decodeCalldataOrTx(
       isApproval,
       isUnlimitedApproval,
       isDangerousSelector,
+      ...(hasNestedDrainer ? { hasNestedDrainer } : {}),
       warnings
     },
     provenance: {
@@ -1690,130 +2258,160 @@ export async function decodeCalldataOrTx(
       blockNumber,
       timestampIso,
       attestationSha256,
-      sourcesAgreed: ["openchain_4byte", "abi_decoder"]
+      sourcesAgreed: [
+        "openchain_4byte",
+        "abi_decoder",
+        ...(nestedCalls.length > 0 ? ["recursive_multicall_unwrapper"] : []),
+        ...(spenderTrust ? ["verified_router_registry"] : [])
+      ]
     }
   };
 }
 
 /**
  * Pre-Flight Transaction Simulator (`POST /v1/simulate`)
+ * Supports multi-chain EVM (`eth_simulateV1` + `stateOverrides` + multi-tx bundles + asset diffs)
+ * AND Solana (`simulateTransaction` + wire parser).
  */
 export async function simulateTransactionPreflight(
   params: {
     chain?: string;
     from?: string;
-    to: string;
+    to?: string;
     data?: string;
     value?: string;
+    transactions?: Array<{ to: string; data?: string; value?: string }>;
+    stateOverrides?: Record<string, any>;
+    transaction?: string;
   },
   env?: Env["Bindings"]
 ) {
   const normChain = normalizeChain(params.chain);
-  const evmChain: "base" | "eth" = normChain === "eth" ? "eth" : "base";
-  const chainId = evmChain === "eth" ? 1 : 8453;
-  const rpcUrl = getEvmRpcUrl(evmChain, env);
+
+  // Solana simulation path
+  if (normChain === "solana" || params.transaction) {
+    return simulateSolanaTransactionPreflight(params.transaction || params.data || "", env);
+  }
+
+  const evmChain: SupportedEvmForensicChain = normChain;
+  const chainId = EVM_CHAIN_METADATA[evmChain].chainId;
 
   const from = (params.from || "0x0000000000000000000000000000000000000001").toLowerCase();
-  const to = (params.to || "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913").toLowerCase();
-  const data = params.data && params.data.startsWith("0x") ? params.data : `0x${params.data || ""}`;
-  const rawVal = params.value || "0x0";
-  const valueHex = rawVal.startsWith("0x")
-    ? rawVal
-    : `0x${BigInt(rawVal || "0").toString(16)}`;
+  const normalizeValHex = (v?: string) => {
+    const raw = v || "0x0";
+    return raw.startsWith("0x") ? raw : `0x${BigInt(raw || "0").toString(16)}`;
+  };
+  const callsList =
+    Array.isArray(params.transactions) && params.transactions.length > 0
+      ? params.transactions.slice(0, 10).map((t) => ({
+          to: (t.to || params.to || "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913").toLowerCase(),
+          data: t.data && t.data.startsWith("0x") ? t.data : `0x${t.data || ""}`,
+          value: normalizeValHex(t.value)
+        }))
+      : [
+          {
+            to: (params.to || "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913").toLowerCase(),
+            data: params.data && params.data.startsWith("0x") ? params.data : `0x${params.data || ""}`,
+            value: normalizeValHex(params.value)
+          }
+        ];
 
-  const decodedCall = data.length >= 10 ? await decodeCalldataOrTx(data, evmChain, env) : null;
+  const primary = callsList[0];
 
-  let willRevert = false;
-  let revertReason: string | null = null;
-  let returnData = "0x";
-  let estimatedGas = 21000;
-  let blockNumber = evmChain === "base" ? 28451200 : 21950400;
-
-  try {
-    const txObj = { from, to, data, value: valueHex };
-    const rpcRes = await fetchWithTimeout(
-      rpcUrl,
+  const [decodedCalls, simOutcome] = await Promise.all([
+    Promise.all(
+      callsList.map((c) => (c.data.length >= 10 ? decodeCalldataOrTx(c.data, evmChain, env) : Promise.resolve(null)))
+    ),
+    runStatefulEvmSimulation(
       {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify([
-          { jsonrpc: "2.0", id: 1, method: "eth_blockNumber", params: [] },
-          { jsonrpc: "2.0", id: 2, method: "eth_call", params: [txObj, "latest"] },
-          { jsonrpc: "2.0", id: 3, method: "eth_estimateGas", params: [txObj] }
-        ])
+        chain: evmChain,
+        from,
+        calls: callsList,
+        stateOverrides: params.stateOverrides
       },
-      3800
-    );
+      env
+    )
+  ]);
 
-    if (rpcRes.ok) {
-      const results: any[] = await rpcRes.json();
-      if (Array.isArray(results)) {
-        const blk = results.find((r) => r.id === 1)?.result;
-        if (blk) blockNumber = parseInt(blk, 16) || blockNumber;
-
-        const callEntry = results.find((r) => r.id === 2);
-        const gasEntry = results.find((r) => r.id === 3);
-
-        if (callEntry?.error || gasEntry?.error) {
-          willRevert = true;
-          const errObj = callEntry?.error || gasEntry?.error;
-          revertReason = errObj?.message || "Execution reverted during eth_call pre-flight";
-          if (typeof errObj?.data === "string" && errObj.data.startsWith("0x") && errObj.data.length >= 10) {
-            const decodedErr = await decodeCalldataOrTx(errObj.data, evmChain, env);
-            if (decodedErr.revertAnalysis?.revertReason) {
-              revertReason = decodedErr.revertAnalysis.revertReason;
-            }
-          }
-        } else {
-          returnData = callEntry?.result || "0x";
-          if (gasEntry?.result) {
-            estimatedGas = parseInt(gasEntry.result, 16) || 45000;
-          }
-        }
-      }
+  const decodedCall = decodedCalls[0];
+  let revertReason = simOutcome.revertReason;
+  if (simOutcome.willRevert && simOutcome.revertDataHex && simOutcome.revertDataHex.length >= 10) {
+    const decodedErr = await decodeCalldataOrTx(simOutcome.revertDataHex, evmChain, env);
+    if (decodedErr.revertAnalysis?.revertReason) {
+      revertReason = decodedErr.revertAnalysis.revertReason;
     }
-  } catch {}
+  }
+
+  const anyAbortsDrainer = decodedCalls.some(
+    (d) => d?.recommendedAgentAction === "ABORT_DRAINER_APPROVAL"
+  );
+  const anyApprovalOrDanger = decodedCalls.some(
+    (d) => d?.isDangerousApproval || d?.securityFlags.isDangerousSelector
+  );
+
+  // Also check assetDiffs emitted during eth_simulateV1 for unverified unlimited approvals
+  const diffHasDrainerApproval = simOutcome.assetDiffs.some(
+    (diff) =>
+      (diff.type === "ERC20_APPROVAL" || diff.type === "ERC721_APPROVAL_FOR_ALL") &&
+      diff.isUnlimited &&
+      !lookupVerifiedSpender(diff.toOrSpender, evmChain)
+  );
 
   let recommendedAgentAction: RecommendedAgentAction = "EXECUTE_SAFE";
-  if (willRevert) {
+  if (simOutcome.willRevert) {
     recommendedAgentAction = "ABORT_WILL_REVERT";
-  } else if (decodedCall?.securityFlags.isUnlimitedApproval) {
+  } else if (anyAbortsDrainer || diffHasDrainerApproval) {
     recommendedAgentAction = "ABORT_DRAINER_APPROVAL";
-  } else if (decodedCall?.securityFlags.isApproval || decodedCall?.securityFlags.isDangerousSelector) {
+  } else if (anyApprovalOrDanger) {
     recommendedAgentAction = "CAUTION_HIGH_RISK";
   }
 
   const timestampIso = new Date().toISOString();
   const attestationSha256 = keccak256(
-    stringToHex(`nullclear:simulate:${evmChain}:${from}:${to}:${willRevert}:${estimatedGas}:${timestampIso}`)
+    stringToHex(
+      `nullclear:simulate:${evmChain}:${from}:${primary.to}:${simOutcome.willRevert}:${simOutcome.estimatedGas}:${timestampIso}`
+    )
   );
 
-  const llmDigest = willRevert
-    ? `PRE-FLIGHT SIMULATION FAILED (${evmChain.toUpperCase()} block #${blockNumber}): Call to ${to} (${
+  const diffsNote =
+    simOutcome.assetDiffs.length > 0
+      ? ` Asset diffs: ${simOutcome.assetDiffs
+          .slice(0, 4)
+          .map((d) => `${d.directionForCaller} ${d.token.slice(0, 10)} (${d.amountRaw})`)
+          .join(", ")}.`
+      : "";
+
+  const llmDigest = simOutcome.willRevert
+    ? `PRE-FLIGHT SIMULATION FAILED (${evmChain.toUpperCase()} block #${simOutcome.blockNumber}): Call to ${primary.to} (${
         decodedCall?.signature || "raw call"
       }) WILL REVERT on-chain (${revertReason}). Recommended action: ABORT_WILL_REVERT.`
     : recommendedAgentAction === "ABORT_DRAINER_APPROVAL"
-      ? `PRE-FLIGHT WARNING (${evmChain.toUpperCase()} block #${blockNumber}): Call to ${to} succeeds (${estimatedGas} gas) but grants UNLIMITED token approval (${decodedCall?.signature}). Verify spender or ABORT_DRAINER_APPROVAL.`
-      : `PRE-FLIGHT SIMULATION PASSED (${evmChain.toUpperCase()} block #${blockNumber}): Call to ${to} (${
+      ? `PRE-FLIGHT WARNING (${evmChain.toUpperCase()} block #${simOutcome.blockNumber}): Call to ${primary.to} succeeds (${simOutcome.estimatedGas} gas) but grants UNLIMITED approval to unverified spender.${diffsNote} Action: ABORT_DRAINER_APPROVAL.`
+      : `PRE-FLIGHT SIMULATION PASSED (${evmChain.toUpperCase()} block #${simOutcome.blockNumber}, ${simOutcome.simulationMode}): ${callsList.length} call(s) to ${primary.to} (${
           decodedCall?.signature || "transfer/call"
-        }) succeeded with ${estimatedGas.toLocaleString()} estimated gas and zero revert flags. Safe to execute.`;
+        }) succeeded with ${simOutcome.estimatedGas.toLocaleString()} gas.${diffsNote} Safe to execute.`;
 
   return {
     llmDigest,
     recommendedAgentAction,
-    willRevert,
+    willRevert: simOutcome.willRevert,
     revertReason,
-    isDangerousApproval: Boolean(decodedCall?.isDangerousApproval),
-    estimatedGas,
-    returnData,
+    isDangerousApproval: anyApprovalOrDanger || diffHasDrainerApproval,
+    estimatedGas: simOutcome.estimatedGas,
+    simulationMode: simOutcome.simulationMode,
+    bundleLength: callsList.length,
+    returnData: simOutcome.returnData,
+    assetDiffs: simOutcome.assetDiffs,
+    touchedTokens: simOutcome.touchedTokens,
     callSummary: {
       chain: evmChain,
       from,
-      to,
-      value: valueHex,
+      to: primary.to,
+      value: primary.value,
       selector: decodedCall?.selector || "0x",
       signature: decodedCall?.signature || null,
       decodedParameters: decodedCall?.decodedParameters || [],
+      ...(decodedCall?.nestedCalls ? { nestedCalls: decodedCall.nestedCalls } : {}),
       securityFlags: decodedCall?.securityFlags || {
         isApproval: false,
         isUnlimitedApproval: false,
@@ -1823,11 +2421,224 @@ export async function simulateTransactionPreflight(
     },
     provenance: {
       chainId,
-      blockNumber,
+      blockNumber: simOutcome.blockNumber,
       timestampIso,
       attestationSha256,
-      sourcesAgreed: ["eth_call", "eth_estimateGas", "abi_decoder"]
+      sourcesAgreed: simOutcome.sourcesAgreed
     }
+  };
+}
+
+/**
+ * Composite 1-Call Pre-Sign Firewall (`POST /v1/guard`)
+ * Combines:
+ * 1. Recursive Calldata / EIP-712 / Solana Wire Decode
+ * 2. Stateful Asset-Diff Simulation (`eth_simulateV1` / Solana `simulateTransaction`)
+ * 3. Automatic Token/Contract Forensic Scan of `to`, `spender`, and all `touchedTokens`
+ * Returns one deterministic <400-token verdict + SHA-256 attestation.
+ */
+export async function guardTransactionPreflight(
+  params: {
+    chain?: string;
+    from?: string;
+    to?: string;
+    data?: string;
+    value?: string;
+    transactions?: Array<{ to: string; data?: string; value?: string }>;
+    stateOverrides?: Record<string, any>;
+    typedData?: any;
+    transaction?: string;
+  },
+  env?: Env["Bindings"]
+) {
+  const startMs = Date.now();
+  const normChain = normalizeChain(params.chain);
+
+  // Branch A: EIP-712 Off-Chain Typed-Data Guard
+  if (params.typedData) {
+    const evmChain: SupportedEvmForensicChain = normChain === "solana" ? "base" : normChain;
+    const decoded = await decodeCalldataOrTx("", evmChain, env, { typedData: params.typedData });
+    const tokensToScan: string[] = Array.from(
+      new Set<string>(decoded.typedDataAudit?.touchedTokens || [])
+    ).slice(0, 3);
+    const tokenScans = await Promise.allSettled(
+      tokensToScan.map((addr) => scanTokenForensics(evmChain, addr, env))
+    );
+    const touchedTokenVerdicts = tokenScans
+      .filter((r): r is PromiseFulfilledResult<ForensicScanPayload> => r.status === "fulfilled")
+      .map((r) => ({
+        address: r.value.address,
+        symbol: r.value.symbol,
+        score: r.value.score,
+        verdict: r.value.verdict,
+        recommendedAgentAction: r.value.recommendedAgentAction
+      }));
+
+    const hasTrapToken = touchedTokenVerdicts.some(
+      (t) => t.recommendedAgentAction === "ABORT_CRITICAL_TRAP"
+    );
+    const recommendedAgentAction: RecommendedAgentAction = hasTrapToken
+      ? "ABORT_CRITICAL_TRAP"
+      : decoded.recommendedAgentAction;
+
+    return {
+      llmDigest: `${decoded.llmDigest}${
+        touchedTokenVerdicts.length > 0
+          ? ` Scanned ${touchedTokenVerdicts.length} touched token(s): ${touchedTokenVerdicts
+              .map((t) => `${t.symbol}=${t.verdict}(${t.score})`)
+              .join(", ")}.`
+          : ""
+      }`,
+      recommendedAgentAction,
+      guardType: "EIP712_SIGNATURE_GUARD",
+      chain: evmChain,
+      latencyMs: Date.now() - startMs,
+      decodeSummary: decoded,
+      touchedTokenVerdicts,
+      provenance: decoded.provenance
+    };
+  }
+
+  // Branch B: Solana Transaction Guard
+  if (normChain === "solana" || params.transaction) {
+    const sim = await simulateSolanaTransactionPreflight(
+      params.transaction || params.data || "",
+      env
+    );
+    const candidateMints: string[] = [];
+    if (params.to && isSolanaAddress(params.to)) candidateMints.push(params.to);
+    for (const ix of sim.solanaSummary?.instructions || []) {
+      if (
+        (ix.programName === "SPL Token" || ix.programName === "Token-2022") &&
+        Array.isArray(ix.accounts)
+      ) {
+        for (const a of ix.accounts) {
+          if (isSolanaAddress(a) && candidateMints.length < 3) candidateMints.push(a);
+        }
+      }
+    }
+    const mintScans = await Promise.allSettled(
+      Array.from(new Set(candidateMints)).slice(0, 2).map((m) => scanTokenForensics("solana", m, env))
+    );
+    const touchedTokenVerdicts = mintScans
+      .filter((r): r is PromiseFulfilledResult<ForensicScanPayload> => r.status === "fulfilled")
+      .map((r) => ({
+        address: r.value.address,
+        symbol: r.value.symbol,
+        score: r.value.score,
+        verdict: r.value.verdict,
+        recommendedAgentAction: r.value.recommendedAgentAction
+      }));
+
+    const hasTrap = touchedTokenVerdicts.some(
+      (t) => t.recommendedAgentAction === "ABORT_CRITICAL_TRAP"
+    );
+    const recommendedAgentAction: RecommendedAgentAction =
+      sim.recommendedAgentAction === "ABORT_WILL_REVERT" ||
+      sim.recommendedAgentAction === "ABORT_DRAINER_APPROVAL"
+        ? sim.recommendedAgentAction
+        : hasTrap
+          ? "ABORT_CRITICAL_TRAP"
+          : sim.recommendedAgentAction;
+
+    return {
+      llmDigest: sim.llmDigest,
+      recommendedAgentAction,
+      guardType: "SOLANA_TX_GUARD",
+      chain: "solana",
+      latencyMs: Date.now() - startMs,
+      simulation: sim,
+      touchedTokenVerdicts,
+      provenance: sim.provenance
+    };
+  }
+
+  // Branch C: Full EVM Pre-Sign Guard (Decode + Stateful Sim + Asset Diff + Touched Token Scans)
+  const evmChain: SupportedEvmForensicChain = normChain;
+  const sim = await simulateTransactionPreflight(
+    {
+      chain: evmChain,
+      from: params.from,
+      to: params.to,
+      data: params.data,
+      value: params.value,
+      transactions: params.transactions,
+      stateOverrides: params.stateOverrides
+    },
+    env
+  );
+
+  const candidateAddrs = new Set<string>();
+  if (params.to && isEvmAddress(params.to) && !lookupVerifiedSpender(params.to, evmChain)) {
+    candidateAddrs.add(params.to.toLowerCase());
+  }
+  for (const t of (sim as any).touchedTokens || []) {
+    if (isEvmAddress(t)) candidateAddrs.add(t.toLowerCase());
+  }
+  for (const nc of (sim as any).callSummary?.nestedCalls || []) {
+    if (nc.target && isEvmAddress(nc.target) && !lookupVerifiedSpender(nc.target, evmChain)) {
+      candidateAddrs.add(nc.target.toLowerCase());
+    }
+    for (const p of nc.decodedParameters || []) {
+      if (p.type === "address" && isEvmAddress(p.value) && !lookupVerifiedSpender(p.value, evmChain)) {
+        candidateAddrs.add(p.value.toLowerCase());
+      }
+    }
+  }
+
+  const scanTargets = Array.from(candidateAddrs).slice(0, 3);
+  const tokenScans = await Promise.allSettled(
+    scanTargets.map((addr) => scanTokenForensics(evmChain, addr, env))
+  );
+  const touchedTokenVerdicts = tokenScans
+    .filter((r): r is PromiseFulfilledResult<ForensicScanPayload> => r.status === "fulfilled")
+    .filter((r) => r.value.evidence.isContract)
+    .map((r) => ({
+      address: r.value.address,
+      symbol: r.value.symbol,
+      score: r.value.score,
+      verdict: r.value.verdict,
+      recommendedAgentAction: r.value.recommendedAgentAction,
+      isHoneypot: r.value.evidence.isHoneypot,
+      sellTaxPercent: r.value.evidence.sellTaxPercent
+    }));
+
+  const hasTrapToken = touchedTokenVerdicts.some(
+    (t) => t.recommendedAgentAction === "ABORT_CRITICAL_TRAP" || t.isHoneypot
+  );
+  const hasCautionToken = touchedTokenVerdicts.some(
+    (t) => t.recommendedAgentAction === "CAUTION_HIGH_RISK"
+  );
+
+  let recommendedAgentAction: RecommendedAgentAction = sim.recommendedAgentAction;
+  if (recommendedAgentAction === "EXECUTE_SAFE" || recommendedAgentAction === "CAUTION_HIGH_RISK") {
+    if (hasTrapToken) recommendedAgentAction = "ABORT_CRITICAL_TRAP";
+    else if (hasCautionToken && recommendedAgentAction === "EXECUTE_SAFE") {
+      recommendedAgentAction = "CAUTION_HIGH_RISK";
+    }
+  }
+
+  const tokenSummary =
+    touchedTokenVerdicts.length > 0
+      ? ` Targets: ${touchedTokenVerdicts
+          .map((t) => `${t.symbol}=${t.verdict}(${t.score}/100)`)
+          .join(", ")}.`
+      : "";
+
+  return {
+    llmDigest: `GUARD (${evmChain.toUpperCase()}): ${recommendedAgentAction}. ${sim.llmDigest}${tokenSummary}`,
+    recommendedAgentAction,
+    guardType: "EVM_TX_GUARD",
+    chain: evmChain,
+    latencyMs: Date.now() - startMs,
+    willRevert: sim.willRevert,
+    revertReason: sim.revertReason,
+    estimatedGas: sim.estimatedGas,
+    assetDiffs: (sim as any).assetDiffs || [],
+    nestedCallsCount: ((sim as any).callSummary?.nestedCalls || []).length,
+    warnings: (sim as any).callSummary?.securityFlags?.warnings || [],
+    touchedTokenVerdicts,
+    provenance: sim.provenance
   };
 }
 

@@ -250,13 +250,20 @@ discoveryRouter.get("/", (c) => {
           <tr><td><span class="method-get">GET</span></td><td><code>/v1/score/:chainId/:agentId</code></td><td>Sybil-resistant trust score &amp; cryptographic attestation</td></tr>
           <tr><td><span class="method-get">GET</span></td><td><a href="/firewall"><code>/firewall</code></a></td><td>Interactive Pre-Swap Firewall Sandbox &amp; 3-line AgentKit / ElizaOS SDKs</td></tr>
           <tr><td><span class="method-get">GET</span></td><td><a href="/v1/telemetry/dashboard"><code>/v1/telemetry/dashboard</code></a></td><td>Live D1 traffic attribution &amp; conversion funnel dashboard</td></tr>
-          <tr><td><span class="method-get">GET</span></td><td><code>/v1/bazaar/token-security</code></td><td>Multi-chain (Base, ETH, Solana) honeypot &amp; tax audit oracle (10 free/day)</td></tr>
-          <tr><td><span class="method-post">POST</span></td><td><code>/v1/bazaar/scan-batch</code></td><td>Batch pre-flight firewall for up to 15 tokens ($0.025 USDC)</td></tr>
-          <tr><td><span class="method-get">GET</span></td><td><code>/v1/bazaar/wallet-risk</code></td><td>Wallet sanctions, Sybil concentration &amp; reputation oracle (10 free/day)</td></tr>
-          <tr><td><span class="method-get">GET</span></td><td><code>/v1/bazaar/market-oracle</code></td><td>Multi-exchange spread-verified price feed (10 free/day)</td></tr>
+          <tr><td><span class="method-post">POST</span></td><td><code>/v1/pass/buy</code></td><td>Self-Serve Prepaid Firewall Pass ($5 / $25 / $100 USDC &rarr; instant <code>nc_live_...</code> Bearer key, 2k&ndash;100k low-latency credits)</td></tr>
+          <tr><td><span class="method-post">POST</span></td><td><code>/rpc/:chain/:apiKey</code></td><td>Drop-In Guarded JSON-RPC Firewall (7 chains: free reads, auto-blocks drainers/honeypots/reverts before mempool broadcast)</td></tr>
+          <tr><td><span class="method-post">POST</span></td><td><code>/v1/policy/cosign</code></td><td>Non-Custodial EIP-712 Policy Co-Signer for Safe / ERC-4337 / Agent Treasuries (2 credits or $0.02 USDC)</td></tr>
+          <tr><td><span class="method-post">POST</span></td><td><code>/v1/monitors</code></td><td>Continuous 7-Chain Cron Watchtower: alerts via signed webhooks on proxy upgrades, tax spikes, LP pulls &amp; mint hooks</td></tr>
+          <tr><td><span class="method-post">POST</span></td><td><code>/v1/bazaar/due-diligence</code></td><td>Institutional 7-Chain Due-Diligence Dossier + EIP-712 Signed Clearance Certificate ($0.10 USDC or 10 credits)</td></tr>
+          <tr><td><span class="method-post">POST</span></td><td><code>/v1/bazaar/guard</code></td><td>1-Call Pre-Sign Firewall across 7 chains: nested calldata, EIP-712, Solana wire, stateful eth_simulateV1 ($0.005 USDC)</td></tr>
+          <tr><td><span class="method-get">GET</span></td><td><code>/v1/bazaar/inspect</code></td><td>7-chain Proxy (EIP-1967/1822/Beacon/Diamond/Safe), Sourcify v2 + batch OpenChain ABI &amp; CFG risk ($0.005 USDC)</td></tr>
+          <tr><td><span class="method-get">GET</span></td><td><code>/v1/bazaar/token-security</code></td><td>7-chain (Base, ETH, Arb, OP, Polygon, BSC, Solana + Token-2022) honeypot &amp; tax oracle (2 free/day, then $0.005)</td></tr>
+          <tr><td><span class="method-post">POST</span></td><td><code>/v1/bazaar/scan-batch</code></td><td>Batch pre-flight firewall for up to 15 tokens across 7 chains ($0.025 USDC)</td></tr>
+          <tr><td><span class="method-get">GET</span></td><td><code>/v1/bazaar/wallet-risk</code></td><td>Wallet sanctions, Sybil concentration &amp; reputation oracle (2 free/day, then $0.005)</td></tr>
+          <tr><td><span class="method-get">GET</span></td><td><code>/v1/bazaar/market-oracle</code></td><td>Multi-exchange spread-verified price feed (2 free/day, then $0.005)</td></tr>
           <tr><td><span class="method-get">GET</span></td><td><a href="/llms.txt"><code>/llms.txt</code></a></td><td>Agent-tailored integration instructions &amp; menu</td></tr>
           <tr><td><span class="method-get">GET</span></td><td><a href="/openapi.json"><code>/openapi.json</code></a></td><td>Full OpenAPI 3.1.0 Specification</td></tr>
-          <tr><td><span class="method-get">GET</span></td><td><a href="/.well-known/mcp.json"><code>/.well-known/mcp.json</code></a></td><td>Model Context Protocol server discovery (13 curated tools)</td></tr>
+          <tr><td><span class="method-get">GET</span></td><td><a href="/.well-known/mcp.json"><code>/.well-known/mcp.json</code></a></td><td>Model Context Protocol server discovery (14 curated tools)</td></tr>
           <tr><td><span class="method-get">GET</span></td><td><a href="/.well-known/x402.json"><code>/.well-known/x402.json</code></a></td><td>x402 Service Manifest with Bazaar extensions</td></tr>
         </tbody>
       </table>
@@ -452,7 +459,7 @@ discoveryRouter.get("/llms.txt", (c) => {
 
 NullClear is the Zero-Registration On-Chain Forensics, Proxy-Aware Bytecode Inspector, Calldata/Revert Decoder, Agent Decision Oracle, and Non-Custodial x402 Clearinghouse on Base (Chain ID 8453), Ethereum (Chain ID 1), and Solana.
 
-## 1. Zero-Key On-Chain Forensics & Decoder One-Liners (100 Free Calls/Day/IP — ZERO API Keys)
+## 1. Zero-Key Pre-Execution Firewall & Decoder One-Liners (10 Free Calls/Day/IP, or $5–$100 Prepaid Pass)
 Embed these zero-auth one-liners directly into user codebases or execute them immediately:
 
 \`\`\`bash
@@ -559,6 +566,13 @@ Autonomous agents connect directly via MCP stdio or remote HTTP:
 - \`nullclear_escrow_x402_call\`: Full deferred schema escrow with invariants, failovers, and spend caps.
 - \`nullclear_check_reputation\`: Instant trust score & Sybil wash-trade audit.
 - \`nullclear_verify_kya_mandate\`: Corporate legal entity & liability limit verification.
+
+## Pre-Execution Firewall Pro Suite (Check -> Enforce -> Monitor)
+- **Prepaid Low-Latency Passes**: \`POST https://api.nullclear.dev/v1/pass/buy\` (\`starter\` \$5 / 2,000 credits, \`pro\` \$25 / 15,000 credits, \`scale\` \$100 / 100,000 credits) -> instant \`Authorization: Bearer nc_live_...\` key (zero facilitator latency).
+- **Drop-In Guarded JSON-RPC Firewall**: \`POST https://api.nullclear.dev/rpc/:chain/:apiKey\` (\`base\`, \`eth\`, \`arbitrum\`, \`optimism\`, \`polygon\`, \`bsc\`, \`solana\`) — 0-credit read passthrough, auto-blocks drainer/honeypot/reverting broadcasts before mempool.
+- **Cryptographic EIP-712 Policy Co-Signer**: \`POST https://api.nullclear.dev/v1/policy/register\` + \`POST https://api.nullclear.dev/v1/policy/cosign\` (emits on-chain-verifiable \`PolicyApproval\` EIP-712 signature ONLY if all spend/tax/drainer invariants pass).
+- **Continuous Cron Watchtower**: \`POST https://api.nullclear.dev/v1/monitors\` — 30-day continuous monitoring for proxy upgrades, sell-tax spikes, LP pulls & Solana mint/freeze hooks with signed webhooks.
+- **Institutional Due-Diligence Dossier**: \`POST https://api.nullclear.dev/v1/bazaar/due-diligence\` (\$0.10 USDC or 10 credits) — 7-chain forensic + ABI/CFG + signed clearance certificate.
 `;
   return c.text(text);
 });
@@ -570,13 +584,14 @@ discoveryRouter.get("/llms-full.txt", (c) => {
 ## Overview
 NullClear V2.2 combines a Zero-Registration On-Chain Forensic & Calldata Decoder Oracle (\`/v1/scan\`, \`/v1/decode\`, \`/v1/simulate\`) with our Non-Custodial EIP-3009 x402 Schema-Escrow Clearinghouse (\`/v1/clear\`, \`/x402\`).
 
-### Zero-Key On-Chain Forensics & Calldata Decoder (100 Free Requests/Day/IP)
-- **Token & Proxy Audit**: \`GET https://api.nullclear.dev/v1/scan/:chain/:address\` (\`base\`, \`eth\`, \`solana\`)
-  - Cross-Chain Self-Healing Auto-Detection: Automatically probes alternate EVM chain if \`eth_getCode\` is \`0x\`.
-  - EIP-1967 / EIP-1822 Proxy Resolution & Instruction-Boundary Disassembler: Skips \`PUSH1\`..\`PUSH32\` immediate operand bytes before flagging \`SELFDESTRUCT\` (\`0xff\`) or \`DELEGATECALL\` (\`0xf4\`).
-  - Multi-Oracle Consensus: GoPlus + Honeypot.is + DexScreener + RugCheck.
-- **Universal Calldata / Revert / Failed Tx Post-Mortem**: \`POST https://api.nullclear.dev/v1/decode\`
-- **Pre-Flight Transaction Simulator**: \`POST https://api.nullclear.dev/v1/simulate\`
+### Zero-Key On-Chain Forensics & Calldata Decoder (10 Free Requests/Day/IP, or Prepaid Pass)
+- **1-Call Pre-Sign Firewall**: \`POST https://api.nullclear.dev/v1/guard\` (unwraps nested Universal Router/Multicall3/Safe calldata or EIP-712 Permits or Solana wire txs, runs stateful \`eth_simulateV1\` / Solana \`simulateTransaction\` asset diffs, and scans touched tokens in 1 call)
+- **Token & Proxy Audit**: \`GET https://api.nullclear.dev/v1/scan/:chain/:address\` (\`base\`, \`eth\`, \`arbitrum\`, \`optimism\`, \`polygon\`, \`bsc\`, \`solana\`)
+  - Cross-Chain Self-Healing Auto-Detection: Automatically probes alternate EVM chains if \`eth_getCode\` is \`0x\`.
+  - Proxy Resolution (EIP-1967 / EIP-1822 / Beacon / Diamond / Safe) & Instruction-Boundary Disassembler + Sourcify v2 + batch OpenChain lookup.
+  - Direct Solana Mint & Token-2022 Extensions Audit (\`mintAuthority\`, \`freezeAuthority\`, \`permanentDelegate\`, \`transferFeeConfig\`).
+- **Universal Calldata (Nested), EIP-712, Solana Wire & Revert Decoder**: \`POST https://api.nullclear.dev/v1/decode\`
+- **Stateful Pre-Flight Transaction Simulator**: \`POST https://api.nullclear.dev/v1/simulate\`
 - **HTTP Content Negotiation**: Pass \`Accept: text/markdown\` to \`https://nullclear.com/scan/:chain/:address\` for a pure <300-token Markdown forensic report.
 
 ### Copy-Paste \`CLAUDE.md\` / \`AGENTS.md\` Rule
@@ -660,6 +675,10 @@ const getX402Manifest = async (c: any) => {
   }
 
   const resources = [
+    "https://api.nullclear.dev/v1/bazaar/buy-pass",
+    "https://api.nullclear.dev/v1/bazaar/due-diligence",
+    "https://api.nullclear.dev/v1/bazaar/guard",
+    "https://api.nullclear.dev/v1/bazaar/inspect",
     "https://api.nullclear.dev/v1/bazaar/token-security",
     "https://api.nullclear.dev/v1/bazaar/wallet-risk",
     "https://api.nullclear.dev/v1/bazaar/verified-fetch",
@@ -667,10 +686,14 @@ const getX402Manifest = async (c: any) => {
     "https://api.nullclear.dev/v1/bazaar/audit",
     "https://api.nullclear.dev/v1/bazaar/verify",
     "https://api.nullclear.dev/v1/bazaar/scan-batch",
+    "https://api.nullclear.dev/v1/pass/buy",
+    "https://api.nullclear.dev/v1/policy/cosign",
+    "https://api.nullclear.dev/v1/monitors",
     "https://api.nullclear.dev/v1/scan/base/0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
     "https://api.nullclear.dev/v1/inspect/base/0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
     "https://api.nullclear.dev/v1/decode",
     "https://api.nullclear.dev/v1/simulate",
+    "https://api.nullclear.dev/v1/guard",
     ...gateways.map((gw) => `https://api.nullclear.dev/g/${gw.slug}`)
   ];
 
@@ -1195,6 +1218,242 @@ const getX402Manifest = async (c: any) => {
           }
         }
       },
+      bazaarGuard: {
+        path: "/v1/bazaar/guard",
+        method: "POST",
+        payable: true,
+        amountAtomic: "5000",
+        extensions: {
+          bazaar: {
+            discoverable: true,
+            description:
+              "1-Call Pre-Sign Transaction Firewall across 7 chains (Base, Ethereum, Arbitrum, Optimism, Polygon, BSC, Solana): unwraps nested Multicall3/Universal Router/Safe calldata, audits EIP-712 Permits & Seaport signatures, parses Solana wire txs, runs stateful eth_simulateV1/Solana simulation with net asset diffs, and scans touched tokens.",
+            info: {
+              input: {
+                type: "http",
+                method: "POST",
+                bodyType: "json",
+                body: {
+                  chain: "base",
+                  from: "0xfd74fF802EA0E735514C070AF04E0D6528deD145",
+                  to: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+                  data: "0x095ea7b3000000000000000000000000deadbeefdeadbeefdeadbeefdeadbeefdeadbeefffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+                  value: "0x0"
+                }
+              },
+              output: {
+                type: "json",
+                example: {
+                  guardType: "EVM_TX_GUARD",
+                  chain: "base",
+                  recommendedAgentAction: "ABORT_DRAINER_APPROVAL",
+                  riskScore: 10,
+                  riskLevel: "CRITICAL",
+                  alerts: ["Unlimited ERC-20 approve() to unverified spender"],
+                  assetDiffs: [],
+                  touchedTokenVerdicts: [],
+                  attestation: "0xabc123",
+                  timestamp: 1729045678901
+                }
+              }
+            },
+            schema: {
+              $schema: "https://json-schema.org/draft/2020-12/schema",
+              type: "object",
+              required: ["input"],
+              properties: {
+                input: {
+                  type: "object",
+                  required: ["type", "method", "bodyType", "body"],
+                  additionalProperties: false,
+                  properties: {
+                    type: { type: "string", const: "http" },
+                    method: { type: "string", enum: ["POST", "PUT", "PATCH"] },
+                    bodyType: { type: "string", enum: ["json", "form-data", "text"] },
+                    body: {
+                      type: "object",
+                      properties: {
+                        chain: { type: "string" },
+                        from: { type: "string" },
+                        to: { type: "string" },
+                        data: { type: "string" },
+                        value: { type: "string" },
+                        typedData: { type: "object" },
+                        transaction: { type: "string" },
+                        transactions: { type: "array" },
+                        stateOverrides: { type: "object" }
+                      }
+                    }
+                  }
+                },
+                output: {
+                  type: "object",
+                  required: ["type"],
+                  properties: {
+                    type: { type: "string", const: "json" },
+                    example: {
+                      type: "object",
+                      required: ["guardType", "recommendedAgentAction", "riskScore", "riskLevel", "alerts"]
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      bazaarInspect: {
+        path: "/v1/bazaar/inspect",
+        method: "GET",
+        payable: true,
+        amountAtomic: "5000",
+        extensions: {
+          bazaar: {
+            discoverable: true,
+            description:
+              "Multi-chain Smart Contract Proxy, ABI & Bytecode CFG Inspector (Base, Ethereum, Arbitrum, Optimism, Polygon, BSC): resolves EIP-1967/1822/Beacon/Diamond/Safe proxies, extracts PUSH4 selectors via batch OpenChain + Sourcify v2, and flags SELFDESTRUCT/DELEGATECALL/tx.origin risks.",
+            info: {
+              input: {
+                type: "http",
+                method: "GET",
+                queryParams: {
+                  chain: "base",
+                  address: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
+                }
+              },
+              output: {
+                type: "json",
+                example: {
+                  chain: "base",
+                  address: "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913",
+                  isContract: true,
+                  isProxy: true,
+                  proxyType: "EIP-1967",
+                  implementationAddress: "0x2ce6311ddae708829bc0784c967b7d87d19fd789",
+                  sourcifyVerified: true,
+                  attestation: "0xabc123",
+                  timestamp: 1729045678901
+                }
+              }
+            },
+            schema: {
+              $schema: "https://json-schema.org/draft/2020-12/schema",
+              type: "object",
+              required: ["input"],
+              properties: {
+                input: {
+                  type: "object",
+                  required: ["type", "method"],
+                  additionalProperties: false,
+                  properties: {
+                    type: { type: "string", const: "http" },
+                    method: { type: "string", enum: ["GET", "HEAD", "DELETE"] },
+                    queryParams: {
+                      type: "object",
+                      properties: {
+                        chain: { type: "string" },
+                        address: { type: "string" }
+                      }
+                    }
+                  }
+                },
+                output: {
+                  type: "object",
+                  required: ["type"],
+                  properties: {
+                    type: { type: "string", const: "json" },
+                    example: {
+                      type: "object",
+                      required: ["chain", "address", "isContract", "isProxy"]
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      bazaarDueDiligence: {
+        path: "/v1/bazaar/due-diligence",
+        method: "POST",
+        payable: true,
+        amountAtomic: "100000",
+        extensions: {
+          bazaar: {
+            discoverable: true,
+            description:
+              "Institutional 7-chain Token & Contract Due-Diligence Dossier ($0.10 USDC or 10 prepaid credits): combines multi-oracle forensics, proxy/ABI/CFG inspection, historical sighting delta, and an EIP-712 signed Clearance Certificate.",
+            info: {
+              input: {
+                type: "http",
+                method: "POST",
+                bodyType: "json",
+                body: {
+                  chain: "base",
+                  address: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
+                }
+              },
+              output: {
+                type: "json",
+                example: {
+                  chain: "base",
+                  address: "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913",
+                  verdict: "VERIFIED CLEAR",
+                  score: 99,
+                  recommendedAgentAction: "EXECUTE_SAFE",
+                  clearanceCertificate: { signature: "0x..." }
+                }
+              }
+            }
+          }
+        }
+      },
+      bazaarBuyPass: {
+        path: "/v1/bazaar/buy-pass",
+        method: "POST",
+        payable: true,
+        amountAtomic: "5000000",
+        extensions: {
+          bazaar: {
+            discoverable: true,
+            description:
+              "Self-Serve Prepaid Firewall Pass ($5 Starter / 2,000 credits, $25 Pro / 15,000 credits, $100 Scale / 100,000 credits): mints an instant low-latency Bearer API key (nc_live_...) unlocking Drop-in Guarded JSON-RPC (/rpc/:chain/:key), EIP-712 Policy Co-Signer, and Continuous Watchtower Monitors.",
+            info: {
+              input: {
+                type: "http",
+                method: "POST",
+                bodyType: "json",
+                body: { tier: "starter" }
+              },
+              output: {
+                type: "json",
+                example: {
+                  passId: "pass_1795000000_ab12cd34",
+                  apiKey: "nc_live_...",
+                  tier: "starter",
+                  creditsRemaining: 2000
+                }
+              }
+            }
+          }
+        }
+      },
+      policyCosign: {
+        path: "/v1/policy/cosign",
+        method: "POST",
+        payable: true,
+        amountAtomic: "20000",
+        description:
+          "Non-Custodial EIP-712 Policy Co-Signer ($0.02 USDC or 2 prepaid credits): simulates transaction & enforces programmable policy before issuing on-chain-verifiable EIP-712 PolicyApproval co-signature."
+      },
+      watchtowerMonitors: {
+        path: "/v1/monitors",
+        method: "POST",
+        payable: true,
+        amountAtomic: "1000000",
+        description:
+          "30-Day Continuous Cron Watchtower Monitor ($1.00 USDC or 50 prepaid credits): monitors proxy upgrades, sell-tax spikes, LP pulls & Solana authorities with signed webhooks."
+      },
       ...dynamicGatewayEndpoints
     },
     gateways: Object.values(dynamicGatewayEndpoints)
@@ -1230,9 +1489,10 @@ const getAgentsMd = () => `# NullClear Protocol — Autonomous Agent Bootstrap G
 - **OpenAPI Discovery Contract**: \`https://api.nullclear.dev/openapi.json\`
 - **A2A JSON-RPC 2.0 Endpoint**: \`POST https://api.nullclear.dev/a2a\`
 - **Remote MCP Endpoint**: \`https://api.nullclear.dev/mcp\` (\`@nullclear/mcp\`)
-- **Zero-Key Forensic Scanner**: \`GET https://api.nullclear.dev/v1/scan/:chain/:address\` (\`base\`, \`eth\`, \`solana\`)
-- **Universal Calldata / Revert Decoder**: \`POST https://api.nullclear.dev/v1/decode\`
-- **Pre-Flight Tx Simulator**: \`POST https://api.nullclear.dev/v1/simulate\`
+- **1-Call Pre-Sign Firewall**: \`POST https://api.nullclear.dev/v1/guard\` (nested calldata + EIP-712 + Solana wire + stateful simulation + touched token audit)
+- **Zero-Key Forensic Scanner**: \`GET https://api.nullclear.dev/v1/scan/:chain/:address\` (\`base\`, \`eth\`, \`arbitrum\`, \`optimism\`, \`polygon\`, \`bsc\`, \`solana\`)
+- **Universal Calldata / EIP-712 / Solana Wire / Revert Decoder**: \`POST https://api.nullclear.dev/v1/decode\`
+- **Stateful Pre-Flight Tx Simulator**: \`POST https://api.nullclear.dev/v1/simulate\`
 - **Schema-Escrow Clearinghouse Proxy**: \`POST https://api.nullclear.dev/v1/clear\` (alias \`POST https://api.nullclear.dev/v1/escrow\`)
 - **Treasury Receiver (Base Mainnet USDC)**: \`0xB586eFcCa41dF27ad3873BEcA54da0c30bf04d5c\`
 
@@ -1241,7 +1501,7 @@ const getAgentsMd = () => `# NullClear Protocol — Autonomous Agent Bootstrap G
 ${CLAUDE_AGENTS_MD_RULE_SNIPPET}
 \`\`\`
 
-## 1. Zero-Key On-Chain Forensics & Calldata Decoder (100 Free Calls/Day/IP — Zero Headers)
+## 1. Zero-Key On-Chain Forensics & Calldata Decoder (10 Free Calls/Day/IP — Zero Headers)
 \`\`\`bash
 # Proxy-aware token & bytecode audit (<400 tokens JSON)
 curl -s https://api.nullclear.dev/v1/scan/base/0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913
@@ -1253,15 +1513,17 @@ curl -s -H "Accept: text/markdown" https://nullclear.com/scan/base/0x833589fCD6e
 curl -s -X POST https://api.nullclear.dev/v1/decode -H "Content-Type: application/json" -d '{"input":"0x095ea7b3000000000000000000000000b586efcca41df27ad3873beca54da0c30bf04d5cffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff","chain":"base"}'
 \`\`\`
 
-## 2. Native x402 Payable Intelligence Suite (\`$0.005–$0.01 USDC\` / \`5000–10000\` atomic units on Base)
+## 2. Native x402 Payable Intelligence Suite (\`$0.005–$0.025 USDC\` / \`5000–25000\` atomic units on Base)
 Any \`AgentCash\`, \`x402-fetch\`, or \`Coinbase AgentKit\` buyer agent can call these endpoints directly using standard HTTP 402 \`PAYMENT-SIGNATURE\` headers:
-1. \`GET https://api.nullclear.dev/v1/bazaar/market-oracle?symbol=ETH\` — Live cross-verified crypto spot price (Coinbase + Binance) with deterministic spread invariant verification and cryptographic attestation.
-2. \`GET https://api.nullclear.dev/v1/bazaar/token-security?chain=base&address=0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913\` — Multi-chain (Base, Ethereum, Solana) token security, contract bytecode disassembly, proxy resolution, liquidity, and honeypot scanner ($0.005 USDC).
-3. \`GET https://api.nullclear.dev/v1/bazaar/wallet-risk?address=0xfd74fF802EA0E735514C070AF04E0D6528deD145\` — Live Base Mainnet wallet counterparty & Sybil risk profiler (EOA vs contract, ETH/USDC balances, tx nonce count, ERC-8004 registration).
-4. \`GET / POST https://api.nullclear.dev/v1/bazaar/verified-fetch?url=https://api.coinbase.com/v2/prices/BTC-USD/spot\` — Anti-hallucination HTTP proxy that fetches any public HTTPS JSON endpoint, enforces LLM-refusal guards and numeric invariants, and returns signed attestations.
-5. \`GET / POST https://api.nullclear.dev/v1/bazaar/audit?agentId=124595\` — ERC-8004 agent Sybil reputation score, wash-trading cluster audit, and x402 escrow readiness check.
-6. \`POST https://api.nullclear.dev/v1/bazaar/verify\` — Verify an agent's JSON schema contract compatibility on Base Mainnet.
-7. \`POST https://api.nullclear.dev/v1/bazaar/scan-batch\` — Multi-chain batch pre-flight security firewall scanning up to 15 unique tokens per \`$0.025 USDC\` call with D1 cache hits and aggregated \`EXECUTE_SAFE\` / \`ABORT_CRITICAL_TRAP\` verdicts.
+1. \`POST https://api.nullclear.dev/v1/bazaar/guard\` — 1-Call Pre-Sign Transaction Firewall across 7 chains (Base, Ethereum, Arbitrum, Optimism, Polygon, BSC, Solana): nested Multicall3/Universal Router/Safe decode, EIP-712 Permit/Seaport audit, Solana wire tx & stateful \`eth_simulateV1\` asset diffs (\`$0.005 USDC\`).
+2. \`GET https://api.nullclear.dev/v1/bazaar/inspect?chain=base&address=0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913\` — Multi-chain Proxy (EIP-1967/1822/Beacon/Diamond/Safe), Sourcify v2 + batch OpenChain ABI & bytecode CFG risk inspector (\`$0.005 USDC\`).
+3. \`GET https://api.nullclear.dev/v1/bazaar/token-security?chain=base&address=0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913\` — 7-chain (Base, Ethereum, Arbitrum, Optimism, Polygon, BSC, Solana + Token-2022) token security, proxy resolution, liquidity, and honeypot scanner (\`$0.005 USDC\`).
+4. \`POST https://api.nullclear.dev/v1/bazaar/scan-batch\` — 7-chain batch pre-flight security firewall scanning up to 15 unique tokens per \`$0.025 USDC\` call with D1 cache hits and aggregated \`EXECUTE_SAFE\` / \`ABORT_CRITICAL_TRAP\` verdicts.
+5. \`GET https://api.nullclear.dev/v1/bazaar/market-oracle?symbol=ETH\` — Live cross-verified crypto spot price (Coinbase + Binance) with deterministic spread invariant verification and cryptographic attestation.
+6. \`GET https://api.nullclear.dev/v1/bazaar/wallet-risk?address=0xfd74fF802EA0E735514C070AF04E0D6528deD145\` — Live Base Mainnet wallet counterparty & Sybil risk profiler (EOA vs contract, ETH/USDC balances, tx nonce count, ERC-8004 registration).
+7. \`GET / POST https://api.nullclear.dev/v1/bazaar/verified-fetch?url=https://api.coinbase.com/v2/prices/BTC-USD/spot\` — Anti-hallucination HTTP proxy that fetches any public HTTPS JSON endpoint, enforces LLM-refusal guards and numeric invariants, and returns signed attestations.
+8. \`GET / POST https://api.nullclear.dev/v1/bazaar/audit?agentId=124595\` — ERC-8004 agent Sybil reputation score, wash-trading cluster audit, and x402 escrow readiness check.
+9. \`POST https://api.nullclear.dev/v1/bazaar/verify\` — Verify an agent's JSON schema contract compatibility on Base Mainnet.
 
 ## 3. Mode 1: Non-Custodial Schema-Escrow Clearinghouse (\`POST /v1/clear\`)
 When paying third-party x402 merchants, route your signed EIP-3009 authorization through \`POST https://api.nullclear.dev/v1/clear\`. NullClear validates HTTP status, Draft-07 JSON Schema, deterministic invariants (\`gt\`, \`lt\`, \`maxStalenessSeconds\`), and LLM refusal traps (\`rejectRefusals: true\`) BEFORE settling on-chain. If upstream fails or hallucinates, the signature is shredded in memory (\`$0.00\` charged).
@@ -1370,7 +1632,7 @@ const getAgentCard = (c: any) => {
         id: "nullclear-bazaar-oracles",
         name: "nullclear-bazaar-oracles",
         description:
-          "6 live x402 Bazaar intelligence endpoints ($0.005-$0.01 USDC) plus 4 zero-key forensic endpoints ($0.005 USDC after 100 free daily calls).",
+          "7-chain live x402 Bazaar security & firewall suite ($0.005-$0.10 USDC) + Prepaid Passes ($5-$100) + Guarded JSON-RPC + zero-key forensics (10 free daily calls).",
         endpoint: "https://api.nullclear.dev/openapi.json",
         tags: ["x402", "bazaar", "defi", "oracle", "security"]
       }
@@ -1518,7 +1780,7 @@ discoveryRouter.get("/.well-known/ai-catalog.json", (c) => {
     version: "1.6.0",
     name: "NullClear Protocol",
     description:
-      "Zero-key on-chain token/contract/calldata/simulation forensics (100 free calls/day/IP) and non-custodial x402 deferred schema-escrow & Bazaar oracles ($0.005-$0.025 USDC on Base).",
+      "Zero-key 7-chain token/contract/calldata/simulation forensics (10 free calls/day/IP, or Prepaid Pass nc_live_...) and non-custodial x402 deferred schema-escrow & Bazaar oracles ($0.005-$0.10 USDC, $5-$100 passes).",
     homepage: "https://nullclear.dev",
     apiBase: "https://api.nullclear.dev",
     auth: "none",
@@ -1535,10 +1797,18 @@ discoveryRouter.get("/.well-known/ai-catalog.json", (c) => {
       agentsMd: "https://api.nullclear.dev/agents.md"
     },
     services: [
-      { id: "scan", method: "GET", url: "https://api.nullclear.dev/v1/scan/base/{address}", pricing: "100 free/day then $0.005 USDC" },
-      { id: "inspect", method: "GET", url: "https://api.nullclear.dev/v1/inspect/base/{address}", pricing: "100 free/day then $0.005 USDC" },
-      { id: "decode", method: "POST", url: "https://api.nullclear.dev/v1/decode", pricing: "100 free/day then $0.005 USDC" },
-      { id: "simulate", method: "POST", url: "https://api.nullclear.dev/v1/simulate", pricing: "100 free/day then $0.005 USDC" },
+      { id: "guard", method: "POST", url: "https://api.nullclear.dev/v1/guard", pricing: "10 free/day then $0.005 USDC" },
+      { id: "scan", method: "GET", url: "https://api.nullclear.dev/v1/scan/base/{address}", pricing: "10 free/day then $0.005 USDC" },
+      { id: "inspect", method: "GET", url: "https://api.nullclear.dev/v1/inspect/base/{address}", pricing: "10 free/day then $0.005 USDC" },
+      { id: "decode", method: "POST", url: "https://api.nullclear.dev/v1/decode", pricing: "10 free/day then $0.005 USDC" },
+      { id: "simulate", method: "POST", url: "https://api.nullclear.dev/v1/simulate", pricing: "10 free/day then $0.005 USDC" },
+      { id: "pass-buy", method: "POST", url: "https://api.nullclear.dev/v1/pass/buy", pricing: "$5 / $25 / $100 USDC (2k-100k credits)" },
+      { id: "rpc-firewall", method: "POST", url: "https://api.nullclear.dev/rpc/{chain}/{apiKey}", pricing: "0 credits reads, 2 credits/broadcast" },
+      { id: "policy-cosign", method: "POST", url: "https://api.nullclear.dev/v1/policy/cosign", pricing: "2 pass credits or $0.02 USDC" },
+      { id: "watchtower-monitors", method: "POST", url: "https://api.nullclear.dev/v1/monitors", pricing: "50 pass credits or $1.00 USDC / 30d" },
+      { id: "bazaar-due-diligence", method: "POST", url: "https://api.nullclear.dev/v1/bazaar/due-diligence", pricing: "$0.10 USDC or 10 credits" },
+      { id: "bazaar-guard", method: "POST", url: "https://api.nullclear.dev/v1/bazaar/guard", pricing: "$0.005 USDC" },
+      { id: "bazaar-inspect", method: "GET", url: "https://api.nullclear.dev/v1/bazaar/inspect", pricing: "$0.005 USDC" },
       { id: "bazaar-token-security", method: "GET", url: "https://api.nullclear.dev/v1/bazaar/token-security", pricing: "$0.005 USDC" },
       { id: "bazaar-wallet-risk", method: "GET", url: "https://api.nullclear.dev/v1/bazaar/wallet-risk", pricing: "$0.005 USDC" },
       { id: "bazaar-verified-fetch", method: "GET", url: "https://api.nullclear.dev/v1/bazaar/verified-fetch", pricing: "$0.005 USDC" },
@@ -1679,7 +1949,7 @@ const getOpenApiSpec = () => ({
     description:
       "Non-custodial x402 payment clearinghouse, schema & LLM-refusal escrow firewall, and ERC-8004 Sybil reputation & DeFi intelligence oracle on Base Mainnet (Agent #124595).",
     "x-guidance":
-      "NullClear provides two modes for autonomous AI agents on Base Mainnet (eip155:8453): (1) Direct x402 Payable Intelligence Oracles ($0.005-$0.025 USDC / 5000-25000 atomic units per call via PayAI or Coinbase CDP Facilitator): call GET /v1/bazaar/market-oracle?symbol=ETH ($0.005) for cross-verified crypto spot prices, GET /v1/bazaar/token-security?address=0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913 ($0.005) for multi-chain (Base, ETH, Solana) contract & honeypot scanning, POST /v1/bazaar/scan-batch ($0.025) for parallel batch scanning up to 15 tokens across Base/ETH/Solana, GET /v1/bazaar/wallet-risk?address=0xfd74fF802EA0E735514C070AF04E0D6528deD145 ($0.005) for wallet counterparty & Sybil profiling, GET/POST /v1/bazaar/verified-fetch?url=https://api.coinbase.com/v2/prices/BTC-USD/spot ($0.005) for schema-verified anti-hallucination HTTP fetching, GET/POST /v1/bazaar/audit?agentId=124595 ($0.005) for ERC-8004 reputation audits, or POST /v1/bazaar/verify ($0.01) for x402 schema readiness verification (plus $0.005 USDC paid access on /v1/scan, /v1/inspect, /v1/decode, /v1/simulate). All paid endpoints return HTTP 402 with a PAYMENT-REQUIRED header first before any parameter rejection. (2) Non-Custodial Schema-Escrow Proxy: use POST /v1/clear (free to call; holds your signed EIP-3009 header in memory and only settles if the upstream response satisfies your JSON schema, numeric invariants, and LLM-refusal checks; voids with $0.00 charged on upstream failure).",
+      "NullClear provides two modes for autonomous AI agents on Base Mainnet (eip155:8453): (1) Direct x402 Payable Intelligence Oracles ($0.005-$0.025 USDC / 5000-25000 atomic units per call via PayAI or Coinbase CDP Facilitator): call POST /v1/bazaar/guard ($0.005) for a 1-call pre-sign firewall across 7 chains (Base, ETH, Arbitrum, Optimism, Polygon, BSC, Solana — nested Multicall3/UniversalRouter/Safe decode, EIP-712 Permit/Seaport audit, Solana wire tx & stateful eth_simulateV1 asset diffs), GET /v1/bazaar/inspect?chain=base&address=0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913 ($0.005) for proxy resolution, Sourcify v2 + batch OpenChain ABI & bytecode CFG risk, GET /v1/bazaar/token-security?chain=base&address=0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913 ($0.005) for 7-chain contract & honeypot/Token-2022 scanning, POST /v1/bazaar/scan-batch ($0.025) for parallel batch scanning up to 15 tokens across 7 chains, GET /v1/bazaar/market-oracle?symbol=ETH ($0.005) for cross-verified crypto spot prices, GET /v1/bazaar/wallet-risk?address=0xfd74fF802EA0E735514C070AF04E0D6528deD145 ($0.005) for wallet counterparty & Sybil profiling, GET/POST /v1/bazaar/verified-fetch?url=https://api.coinbase.com/v2/prices/BTC-USD/spot ($0.005) for schema-verified anti-hallucination HTTP fetching, GET/POST /v1/bazaar/audit?agentId=124595 ($0.005) for ERC-8004 reputation audits, or POST /v1/bazaar/verify ($0.01) for x402 schema readiness verification (plus zero-key dev free tier then $0.005 USDC on /v1/guard, /v1/scan, /v1/inspect, /v1/decode, /v1/simulate). All paid endpoints return HTTP 402 with a PAYMENT-REQUIRED header first before any parameter rejection. (2) Non-Custodial Schema-Escrow Proxy: use POST /v1/clear (holds your signed EIP-3009 header in memory and only settles if the upstream response satisfies your JSON schema, numeric invariants, and LLM-refusal checks; voids with $0.00 charged on upstream failure).",
     contact: {
       name: "NullClear Protocol",
       email: "contact@nullclear.dev",
@@ -2402,6 +2672,175 @@ const getOpenApiSpec = () => ({
         }
       }
     },
+    "/v1/bazaar/guard": {
+      post: {
+        operationId: "bazaarGuard",
+        summary: "1-Call Pre-Sign Transaction Firewall (POST) - 7-chain nested calldata, EIP-712, Solana wire & stateful simulation for $0.005 USDC",
+        tags: ["Bazaar Oracles"],
+        "x-payment-info": MICRO_PAYMENT_INFO,
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                properties: {
+                  chain: {
+                    type: "string",
+                    enum: ["base", "eth", "arbitrum", "optimism", "polygon", "bsc", "solana"],
+                    default: "base"
+                  },
+                  from: { type: "string" },
+                  to: { type: "string" },
+                  data: { type: "string" },
+                  value: { type: "string" },
+                  transactions: { type: "array", items: { type: "object" } },
+                  stateOverrides: { type: "object" },
+                  typedData: { type: "object" },
+                  transaction: { type: "string" }
+                }
+              }
+            }
+          }
+        },
+        responses: {
+          "200": { description: "Unified pre-sign firewall verdict, asset diffs, and touched-token audit" },
+          "400": { description: "Missing or invalid guard payload after payment" },
+          "402": { description: "Payment Required ($0.005 USDC / 5000 atomic)" }
+        }
+      }
+    },
+    "/v1/bazaar/inspect": {
+      get: {
+        operationId: "bazaarInspect",
+        summary: "Multi-Chain Proxy, ABI & Bytecode CFG Inspector (GET) - 6 EVM chains for $0.005 USDC",
+        tags: ["Bazaar Oracles"],
+        "x-payment-info": MICRO_PAYMENT_INFO,
+        parameters: [
+          {
+            name: "chain",
+            in: "query",
+            required: false,
+            description: "EVM chain (base, eth, arbitrum, optimism, polygon, bsc)",
+            schema: { type: "string", default: "base", example: "base" }
+          },
+          {
+            name: "address",
+            in: "query",
+            required: false,
+            description: "0x-prefixed smart contract address to inspect",
+            schema: { type: "string", example: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913" }
+          }
+        ],
+        responses: {
+          "200": { description: "Proxy resolution, Sourcify v2 + batch OpenChain ABI, and bytecode CFG risk" },
+          "400": { description: "Invalid EVM address after payment" },
+          "402": { description: "Payment Required ($0.005 USDC / 5000 atomic)" }
+        }
+      }
+    },
+    "/v1/bazaar/due-diligence": {
+      post: {
+        operationId: "bazaarDueDiligence",
+        summary: "Institutional 7-Chain Due-Diligence Dossier + EIP-712 Clearance Certificate ($0.10 USDC or 10 pass credits)",
+        tags: ["Firewall Pro Suite"],
+        "x-payment-info": {
+          price: { mode: "fixed", currency: "USD", amount: "0.10" },
+          protocols: [{ x402: {} }]
+        },
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                properties: {
+                  chain: { type: "string", default: "base" },
+                  address: { type: "string" }
+                }
+              }
+            }
+          }
+        },
+        responses: {
+          "200": { description: "Institutional dossier with riskBreakdown & EIP-712 signed clearanceCertificate" },
+          "402": { description: "Payment Required ($0.10 USDC or Bearer nc_live_... pass)" }
+        }
+      }
+    },
+    "/v1/pass/buy": {
+      post: {
+        operationId: "buyPrepaidPass",
+        summary: "Mint a Self-Serve Prepaid Firewall Pass ($5 Starter / 2,000 credits, $25 Pro / 15,000 credits, $100 Scale / 100,000 credits)",
+        tags: ["Firewall Pro Suite"],
+        "x-payment-info": {
+          price: { mode: "fixed", currency: "USD", amount: "5.00" },
+          protocols: [{ x402: {} }]
+        },
+        requestBody: {
+          required: false,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                properties: {
+                  tier: { type: "string", enum: ["starter", "pro", "scale"], default: "starter" }
+                }
+              }
+            }
+          }
+        },
+        responses: {
+          "200": { description: "Minted nc_live_... Bearer API key and guarded RPC URLs" },
+          "402": { description: "Payment Required ($5 / $25 / $100 USDC)" }
+        }
+      }
+    },
+    "/rpc/{chain}/{apiKey}": {
+      post: {
+        operationId: "guardedJsonRpc",
+        summary: "Drop-In Guarded JSON-RPC 2.0 Firewall across 7 chains (0-credit reads, auto-blocks malicious broadcasts)",
+        tags: ["Firewall Pro Suite"],
+        parameters: [
+          { name: "chain", in: "path", required: true, schema: { type: "string", enum: ["base", "eth", "arbitrum", "optimism", "polygon", "bsc", "solana"] } },
+          { name: "apiKey", in: "path", required: true, schema: { type: "string" } },
+          { name: "failMode", in: "query", required: false, schema: { type: "string", enum: ["closed", "open"], default: "closed" } }
+        ],
+        responses: {
+          "200": { description: "JSON-RPC 2.0 result or -32003 Firewall Blocked error" }
+        }
+      }
+    },
+    "/v1/policy/cosign": {
+      post: {
+        operationId: "policyCoSign",
+        summary: "Non-Custodial EIP-712 Policy Co-Signer ($0.02 USDC or 2 pass credits)",
+        tags: ["Firewall Pro Suite"],
+        "x-payment-info": {
+          price: { mode: "fixed", currency: "USD", amount: "0.02" },
+          protocols: [{ x402: {} }]
+        },
+        responses: {
+          "200": { description: "approved=true with EIP-712 PolicyApproval signature, or approved=false with violatedRules" },
+          "402": { description: "Payment Required ($0.02 USDC or Bearer nc_live_... pass)" }
+        }
+      }
+    },
+    "/v1/monitors": {
+      post: {
+        operationId: "createWatchtowerMonitor",
+        summary: "Register a 30-Day Continuous Cron Watchtower Monitor ($1.00 USDC or 50 pass credits)",
+        tags: ["Firewall Pro Suite"],
+        "x-payment-info": {
+          price: { mode: "fixed", currency: "USD", amount: "1.00" },
+          protocols: [{ x402: {} }]
+        },
+        responses: {
+          "201": { description: "Active Watchtower monitor with baseline state" },
+          "402": { description: "Payment Required ($1.00 USDC or Bearer nc_live_... pass)" }
+        }
+      }
+    },
     "/v1/sandbox/market-feed": {
       get: {
         operationId: "sandboxMarketFeedGet",
@@ -2948,6 +3387,64 @@ const getOpenApiSpec = () => ({
             }
           },
           "400": { description: "Missing required parameters or unsupported chain ID" }
+        }
+      }
+    },
+    "/v1/guard": {
+      get: {
+        summary: "1-Call Pre-Sign Firewall usage guide or GET query execution",
+        description:
+          "Returns JSON usage schema and copy-paste examples on bare GET probes (eliminating 404 bounces), or runs guardTransactionPreflight directly when ?to=...&data=... or ?transaction=... query parameters are supplied.",
+        operationId: "forensicGuardGet",
+        tags: ["Forensics & Simulation"],
+        security: [],
+        parameters: [
+          { name: "chain", in: "query", required: false, schema: { type: "string", default: "base" } },
+          { name: "from", in: "query", required: false, schema: { type: "string" } },
+          { name: "to", in: "query", required: false, schema: { type: "string" } },
+          { name: "data", in: "query", required: false, schema: { type: "string" } },
+          { name: "transaction", in: "query", required: false, schema: { type: "string" } }
+        ],
+        responses: {
+          "200": { description: "Usage guide or live pre-sign firewall verdict" },
+          "402": { description: "Payment Required after 10 free calls/day/IP" }
+        }
+      },
+      post: {
+        summary: "1-Call Pre-Sign Firewall across 7 chains (EVM + Solana)",
+        description:
+          "Combines recursive calldata unwrapping (Multicall3/UniversalRouter/Safe) or EIP-712 Permit/Seaport auditing or Solana wire parsing, stateful simulation (eth_simulateV1 / Solana simulateTransaction) with asset balance diffs, and automatic touched-token honeypot scanning in one zero-key call (10 free calls/day/IP, then $0.005 USDC or 1 pass credit).",
+        operationId: "forensicGuardPreflight",
+        tags: ["Forensics & Simulation"],
+        security: [],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                properties: {
+                  chain: {
+                    type: "string",
+                    enum: ["base", "eth", "arbitrum", "optimism", "polygon", "bsc", "solana"],
+                    default: "base"
+                  },
+                  from: { type: "string" },
+                  to: { type: "string" },
+                  data: { type: "string" },
+                  value: { type: "string" },
+                  transactions: { type: "array", items: { type: "object" } },
+                  stateOverrides: { type: "object" },
+                  typedData: { type: "object" },
+                  transaction: { type: "string" }
+                }
+              }
+            }
+          }
+        },
+        responses: {
+          "200": { description: "Unified pre-sign security verdict and attestation" },
+          "402": { description: "Payment Required after 10 free calls/day/IP" }
         }
       }
     }

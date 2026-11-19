@@ -15,6 +15,10 @@ import { proxyRouter, handleUrlProxyRequest } from "./routes/proxy.js";
 import { gatewaysRouter, gatewayProxyRouter } from "./routes/gateways.js";
 import { radarRouter } from "./routes/radar.js";
 import { forensicsRouter } from "./routes/forensics.js";
+import { passesRouter } from "./routes/passes.js";
+import { rpcFirewallRouter } from "./routes/rpc-firewall.js";
+import { policyRouter } from "./routes/policy.js";
+import { monitorsRouter, runWatchtowerCronTick } from "./routes/monitors.js";
 import { telemetryMiddleware, telemetryRouter } from "./middleware/telemetry.js";
 import { buildNullClearMetadata } from "./middleware/free-tier.js";
 import { runEcosystemCrawlAndAudit } from "./services/ecosystem-crawler.js";
@@ -48,6 +52,8 @@ app.use(
       "X-NullClear-Verified-KYA",
       "X-NullClear-KYA-Signature",
       "x-nullclear-free-trial",
+      "X-NullClear-Key",
+      "x-nullclear-key",
       "x-mcp-session",
       "mcp-session-id"
     ],
@@ -66,7 +72,10 @@ app.use(
       "X-NullClear-KYA-Signature",
       "X-NullClear-Receipt-Id",
       "X-NullClear-Gateway",
+      "X-NullClear-Firewall",
       "x-nullclear-tier",
+      "x-nullclear-pass-tier",
+      "x-nullclear-credits-remaining",
       "x-nullclear-remaining-free-calls"
     ]
   })
@@ -161,6 +170,12 @@ app.route("/v1/gateways", gatewaysRouter);
 app.route("/g", gatewayProxyRouter);
 app.route("/v1/radar", radarRouter);
 
+// Firewall Pro Suite: Prepaid Passes, Drop-In Guarded JSON-RPC, EIP-712 Policy Co-Signer & Continuous Watchtower
+app.route("/v1/pass", passesRouter);
+app.route("/rpc", rpcFirewallRouter);
+app.route("/v1/policy", policyRouter);
+app.route("/v1/monitors", monitorsRouter);
+
 // A2A & x402 Route mountings (preserving both /v1/clear and /v1/escrow)
 app.route("/v1/sandbox", sandboxRouter);
 app.route("/v1/bazaar", bazaarRouter);
@@ -172,7 +187,7 @@ app.route("/mcp", mcpHttpRouter);
 app.route("/a2a", a2aRouter);
 app.route("/", discoveryRouter);
 
-// Scheduled Cron Handler for 15-Minute Trending Token Scanner + IndexNow, Ecosystem Crawler & Base EIP-3009 Indexer
+// Scheduled Cron Handler for 15-Minute Trending Token Scanner + Watchtower Monitors + IndexNow, Ecosystem Crawler & Base EIP-3009 Indexer
 export async function scheduled(
   _event: any,
   env: Env["Bindings"],
@@ -180,6 +195,7 @@ export async function scheduled(
 ): Promise<void> {
   const task = Promise.all([
     runTrendingTokenCronScan(env),
+    runWatchtowerCronTick(env),
     runEcosystemCrawlAndAudit(env),
     syncBaseEip3009Logs(env)
   ]);

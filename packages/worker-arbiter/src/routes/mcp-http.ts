@@ -19,12 +19,14 @@ import {
   inspectContractAbiAndProxy,
   decodeCalldataOrTx,
   simulateTransactionPreflight,
+  guardTransactionPreflight,
   readUrlCleanMarkdown
 } from "../services/forensics-engine.js";
 
 export const mcpHttpRouter = new Hono<Env>();
 
 export const TOOL_DISPATCH_ALIASES: Record<string, string> = {
+  nullclear_preflight_guard: "guard_transaction_preflight",
   nullclear_scan_token: "scan_token_forensics",
   nullclear_inspect_contract: "inspect_contract_abi_and_proxy",
   nullclear_decode_calldata: "decode_calldata_or_failed_tx",
@@ -44,9 +46,9 @@ export const MCP_TOOLS = [
   {
     name: "nullclear_scan_token",
     description:
-      "Perform a free multi-chain (Base, Ethereum, Solana) token security, EIP-1967 proxy resolution, honeypot, and buy/sell tax audit. Use this as the primary pre-trade check for any token or contract (100 free calls/day/IP, zero API key; then $0.005 USDC). Returns score, verdict, recommendedAgentAction, proxy implementation, tax percentages, LP USD, and provenance block number (<400 tokens). Do NOT use for low-level 4-byte selector disassembly on non-token contracts (use nullclear_inspect_contract) or when an EIP-712 Bazaar payment receipt is explicitly required on Base ERC-20 tokens (use nullclear_audit_paid_token).",
+      "Perform a free multi-chain (Base, Ethereum, Arbitrum, Optimism, Polygon, BSC, Solana) token security, proxy resolution, Token-2022 extension/mint/freeze authority audit, honeypot, and buy/sell tax audit (10 free calls/day/IP, zero API key; then $0.005 USDC). Returns score, verdict, recommendedAgentAction, proxy implementation, tax percentages, LP USD, and provenance block number (<400 tokens). Do NOT use for low-level 4-byte selector disassembly on non-token contracts (use nullclear_inspect_contract).",
     annotations: {
-      title: "Multi-Chain Token Security & Proxy Scanner (Free)",
+      title: "7-Chain Token Security, Token-2022 & Proxy Scanner (Free)",
       readOnlyHint: true,
       destructiveHint: false,
       idempotentHint: true,
@@ -58,13 +60,13 @@ export const MCP_TOOLS = [
       properties: {
         address: {
           type: "string",
-          description: "Token or contract address (0x-prefixed 42-char EVM hex for Base/ETH, or Base58 mint address for Solana)",
+          description: "Token or contract address (0x-prefixed 42-char EVM hex, or Base58 mint address for Solana)",
           default: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
         },
         chain: {
           type: "string",
-          enum: ["base", "eth", "solana"],
-          description: "Target blockchain network ('base', 'eth', or 'solana'); auto-detects if address exists on an alternate supported chain",
+          enum: ["base", "eth", "arbitrum", "optimism", "polygon", "bsc", "solana"],
+          description: "Target blockchain network; auto-detects if address exists on an alternate supported chain",
           default: "base"
         }
       }
@@ -73,9 +75,9 @@ export const MCP_TOOLS = [
   {
     name: "nullclear_inspect_contract",
     description:
-      "Disassemble deployed EVM bytecode on Base or Ethereum to resolve EIP-1967/1822/1167 proxies and extract decoded 4-byte PUSH4 function selectors without an Etherscan key. Use this for arbitrary smart contracts (vaults, routers, pools) to inspect proxy admin/implementation slots and SELFDESTRUCT/DELEGATECALL opcodes (100 free calls/day/IP). Returns isProxy, proxyType, implementationAddress, decodedFunctions, and dangerousSelectorsFound. Do NOT use for token market liquidity/honeypot tax audits (use nullclear_scan_token).",
+      "Disassemble deployed EVM bytecode across Base, Ethereum, Arbitrum, Optimism, Polygon, or BSC to resolve EIP-1967/1822/1167/Beacon/Diamond/Safe proxies, query Sourcify v2 verified ABIs, batch-resolve PUSH4 selectors via OpenChain, and analyze control-flow opcode risks (tx.origin, mutable DELEGATECALL, unguarded SELFDESTRUCT) without an Etherscan key (10 free calls/day/IP).",
     annotations: {
-      title: "EVM Proxy Slot & Bytecode Selector Disassembler (Free)",
+      title: "EVM Proxy, Sourcify ABI & Bytecode Inspector (Free)",
       readOnlyHint: true,
       destructiveHint: false,
       idempotentHint: true,
@@ -87,13 +89,13 @@ export const MCP_TOOLS = [
       properties: {
         address: {
           type: "string",
-          description: "0x-prefixed 42-char EVM smart contract address on Base or Ethereum",
+          description: "0x-prefixed 42-char EVM smart contract address",
           default: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
         },
         chain: {
           type: "string",
-          enum: ["base", "eth"],
-          description: "Target EVM chain ('base' for Base Mainnet 8453 or 'eth' for Ethereum Mainnet 1)",
+          enum: ["base", "eth", "arbitrum", "optimism", "polygon", "bsc"],
+          description: "Target EVM chain (default 'base')",
           default: "base"
         }
       }
@@ -102,9 +104,9 @@ export const MCP_TOOLS = [
   {
     name: "nullclear_decode_calldata",
     description:
-      "Decode existing hex calldata, custom Solidity revert bytes, or a mined transaction hash to explain historical failures and flag malicious approvals. Use this AFTER a transaction failed or when auditing opaque 0x calldata bytes before signing (100 free calls/day/IP). Returns decoded 4-byte function signature, argument breakdown, revert reason, and approval-drainer warnings. Do NOT use to dry-run an unsigned transaction against live chain state (use nullclear_simulate_transaction instead).",
+      "Decode EVM calldata (recursively unwrapping Multicall3, Uniswap Universal Router, Safe execTransaction), EIP-712 typed-data signatures (Permit, Permit2, Seaport), Solana wire transactions (Base64/Base58), custom Solidity revert bytes, or mined tx hashes with verified-router spender trust classification (10 free calls/day/IP).",
     annotations: {
-      title: "Historical Calldata, Revert & Failed Tx Decoder (Free)",
+      title: "Recursive Calldata, EIP-712, Solana Wire & Revert Decoder (Free)",
       readOnlyHint: true,
       destructiveHint: false,
       idempotentHint: true,
@@ -112,16 +114,19 @@ export const MCP_TOOLS = [
     },
     inputSchema: {
       type: "object",
-      required: ["input"],
       properties: {
         input: {
           type: "string",
-          description: "0x-prefixed raw hex calldata/revert bytes OR a 66-character mined transaction hash to replay"
+          description: "0x-prefixed hex calldata/revert bytes, 66-char tx hash, or Base64/Base58 Solana transaction"
+        },
+        typedData: {
+          type: "object",
+          description: "Optional EIP-712 typedData JSON (Permit, Permit2, Seaport, SafeTx)"
         },
         chain: {
           type: "string",
-          enum: ["base", "eth"],
-          description: "Target EVM chain ('base' or 'eth', default 'base')",
+          enum: ["base", "eth", "arbitrum", "optimism", "polygon", "bsc", "solana"],
+          description: "Target network (default 'base')",
           default: "base"
         }
       }
@@ -130,9 +135,9 @@ export const MCP_TOOLS = [
   {
     name: "nullclear_simulate_transaction",
     description:
-      "Execute a live eth_call and eth_estimateGas dry-run on Base or Ethereum BEFORE signing or broadcasting an unsigned transaction. Use this immediately before wallet execution when you have target `to` + `data` and need to confirm whether the call will succeed, estimate gas, and verify allowance safety (100 free calls/day/IP). Returns simulation success, gas estimate, decoded revert reason if any, and recommendedAgentAction. Do NOT use for standalone hex bytes without `to` or past mined tx hashes (use nullclear_decode_calldata).",
+      "Execute stateful pre-flight simulation across EVM (eth_simulateV1 with stateOverrides, multi-tx bundles, and Transfer/Approval net asset diffs; fallback eth_call + eth_estimateGas) and Solana (simulateTransaction + wire instruction audit) BEFORE signing (10 free calls/day/IP).",
     annotations: {
-      title: "Pre-Flight EVM eth_call Transaction Simulator (Free)",
+      title: "Stateful EVM & Solana Pre-Flight Simulator (Free)",
       readOnlyHint: true,
       destructiveHint: false,
       idempotentHint: true,
@@ -140,31 +145,42 @@ export const MCP_TOOLS = [
     },
     inputSchema: {
       type: "object",
-      required: ["to"],
       properties: {
         chain: {
           type: "string",
-          enum: ["base", "eth"],
-          description: "Target EVM chain ('base' or 'eth', default 'base')",
+          enum: ["base", "eth", "arbitrum", "optimism", "polygon", "bsc", "solana"],
+          description: "Target network (default 'base')",
           default: "base"
         },
         from: {
           type: "string",
-          description: "Sender 0x EVM address whose balance/allowance context will be simulated"
+          description: "Sender 0x EVM address"
         },
         to: {
           type: "string",
-          description: "Destination 0x smart contract or recipient address"
+          description: "Destination 0x smart contract address (required for single EVM call)"
         },
         data: {
           type: "string",
-          description: "0x-prefixed hex calldata payload for the simulated call",
+          description: "0x-prefixed hex calldata payload",
           default: "0x"
         },
         value: {
           type: "string",
           description: "Native wei amount as hex ('0x0') or decimal string",
           default: "0x0"
+        },
+        transactions: {
+          type: "array",
+          description: "Optional ordered multi-tx EVM bundle [{ to, data, value }]"
+        },
+        stateOverrides: {
+          type: "object",
+          description: "Optional EVM stateOverrides map"
+        },
+        transaction: {
+          type: "string",
+          description: "Base64/Base58 serialized Solana transaction when chain='solana'"
         }
       }
     }
@@ -172,7 +188,7 @@ export const MCP_TOOLS = [
   {
     name: "nullclear_read_markdown",
     description:
-      "Fetch and convert any public web documentation URL or HTML article into clean, stripped Markdown (<400 tokens) with a SHA-256 content hash. Use this when reading documentation, blog posts, or web pages while minimizing context-window noise (100 free calls/day/IP). Returns markdown body and provenance hash. Do NOT use for JSON REST APIs or schema-enforced x402 data endpoints needing LLM-refusal/5xx protection (use nullclear_fetch_guarded or nullclear_execute_escrow).",
+      "Fetch and convert any public web documentation URL or HTML article into clean, stripped Markdown (<400 tokens) with a SHA-256 content hash. Use this when reading documentation, blog posts, or web pages while minimizing context-window noise (10 free calls/day/IP). Returns markdown body and provenance hash. Do NOT use for JSON REST APIs or schema-enforced x402 data endpoints needing LLM-refusal/5xx protection (use nullclear_fetch_guarded or nullclear_execute_escrow).",
     annotations: {
       title: "HTML Documentation to Clean Markdown Reader (Free)",
       readOnlyHint: true,
@@ -187,6 +203,49 @@ export const MCP_TOOLS = [
         url: {
           type: "string",
           description: "Public HTTPS webpage or documentation URL to extract into clean Markdown"
+        }
+      }
+    }
+  },
+  {
+    name: "nullclear_preflight_guard",
+    description:
+      "All-in-one 1-call Pre-Sign Firewall across Base, Ethereum, Arbitrum, Optimism, Polygon, BSC, and Solana (10 free calls/day/IP). In one pass, recursively unwraps Multicall3/Uniswap Universal Router/Safe calldata or EIP-712 Permits or Solana wire txs, runs stateful eth_simulateV1 / Solana simulateTransaction with asset balance diffs, and automatically scans all touched token contracts for honeypots, taxes, and Token-2022 permanent delegates. Returns one deterministic recommendedAgentAction (EXECUTE_SAFE / CAUTION_HIGH_RISK / ABORT_*).",
+    annotations: {
+      title: "1-Call Multi-Chain Pre-Sign Firewall (Free)",
+      readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: true
+    },
+    inputSchema: {
+      type: "object",
+      properties: {
+        chain: {
+          type: "string",
+          enum: ["base", "eth", "arbitrum", "optimism", "polygon", "bsc", "solana"],
+          description: "Target network (default 'base')",
+          default: "base"
+        },
+        from: { type: "string", description: "Sender 0x EVM address" },
+        to: { type: "string", description: "Target contract 0x address or Solana mint" },
+        data: { type: "string", description: "0x-prefixed EVM calldata" },
+        value: { type: "string", description: "Native wei amount ('0x0')" },
+        transactions: {
+          type: "array",
+          description: "Optional ordered multi-tx bundle [{ to, data, value }]"
+        },
+        stateOverrides: {
+          type: "object",
+          description: "Optional EVM eth_simulateV1/eth_call stateOverrides map"
+        },
+        typedData: {
+          type: "object",
+          description: "Optional EIP-712 typedData object (Permit, Permit2, Seaport, SafeTx) to audit before signing"
+        },
+        transaction: {
+          type: "string",
+          description: "Optional Base64/Base58 serialized Solana transaction to decode and simulate"
         }
       }
     }
@@ -234,7 +293,7 @@ export const MCP_TOOLS = [
   {
     name: "nullclear_audit_paid_token",
     description:
-      "Run NullClear's x402 Bazaar paid oracle for Base Mainnet (8453) ERC-20 tokens returning a cryptographically signed clearing receipt (10 free trial calls/day, then $0.005 USDC). Use this ONLY when you specifically require a Base Bazaar EIP-712/keccak256 settlement receipt alongside token LP and bytecode verification. For free (100/day) multi-chain Base/ETH/Solana token & proxy scanning, use nullclear_scan_token instead.",
+      "Run NullClear's x402 Bazaar paid oracle for Base Mainnet (8453) ERC-20 tokens returning a cryptographically signed clearing receipt (10 free trial calls/day, then $0.005 USDC). Use this ONLY when you specifically require a Base Bazaar EIP-712/keccak256 settlement receipt alongside token LP and bytecode verification. For free (10/day) multi-chain Base/ETH/Solana token & proxy scanning, use nullclear_scan_token instead.",
     annotations: {
       title: "Base Token x402 Bazaar Attested Audit ($0.005)",
       readOnlyHint: true,
@@ -556,7 +615,7 @@ mcpHttpRouter.post("/", async (c) => {
             {
               uri,
               mimeType: "text/markdown",
-              text: `# NullClear Arbiter Quickstart\n\nNullClear is the autonomous deferred clearing and reputation protocol for AI agent commerce on Base Mainnet.\n\n### Zero-Config Free Trial\nAll MCP tools work out-of-the-box with **10 free calls per day** (100/day for zero-key forensics)—no wallet or private key required to start.\n\n### Canonical Tool Suite\n- \`nullclear_scan_token\`: Free Base/ETH/Solana token & proxy security scan.\n- \`nullclear_inspect_contract\`: Free EVM proxy slot & selector disassembler.\n- \`nullclear_decode_calldata\`: Free calldata/revert & failed tx decoder.\n- \`nullclear_simulate_transaction\`: Free pre-flight eth_call & gas simulator.\n- \`nullclear_read_markdown\`: Free HTML docs-to-Markdown reader.\n- \`nullclear_audit_paid_token\`: Paid ($0.005) Base token audit with signed Bazaar receipt.\n- \`nullclear_score_wallet\`: Check any 0x wallet for sanctions, Sybil wash-trading, and balances.\n- \`nullclear_fetch_spot_price\`: Multi-exchange spread-verified price feed (ETH, BTC, SOL).\n- \`nullclear_fetch_guarded\`: Drop-in URL fetcher with Canonical LLM Refusal Guard & crash protection.\n- \`nullclear_execute_escrow\`: Execute deferred schema escrow with numeric bounds and LLM refusal guards.\n- \`nullclear_check_reputation\`: Check an ERC-8004 agent's Sybil trust score (0-100).\n- \`nullclear_verify_mandate\`: Verify an agent's corporate entity backing and spending limits.\n`
+              text: `# NullClear Arbiter Quickstart\n\nNullClear is the autonomous deferred clearing and reputation protocol for AI agent commerce on Base Mainnet.\n\n### Zero-Config Free Trial\nAll MCP tools work out-of-the-box with **10 free calls per day** across zero-key forensics &amp; x402 MCP tools (or unlimited via \`NULLCLEAR_API_KEY\` Prepaid Pass / \`NULLCLEAR_PRIVATE_KEY\`)—no wallet or private key required to start.\n\n### Canonical Tool Suite\n- \`nullclear_scan_token\`: Free Base/ETH/Solana token & proxy security scan.\n- \`nullclear_inspect_contract\`: Free EVM proxy slot & selector disassembler.\n- \`nullclear_decode_calldata\`: Free calldata/revert & failed tx decoder.\n- \`nullclear_simulate_transaction\`: Free pre-flight eth_call & gas simulator.\n- \`nullclear_read_markdown\`: Free HTML docs-to-Markdown reader.\n- \`nullclear_audit_paid_token\`: Paid ($0.005) Base token audit with signed Bazaar receipt.\n- \`nullclear_score_wallet\`: Check any 0x wallet for sanctions, Sybil wash-trading, and balances.\n- \`nullclear_fetch_spot_price\`: Multi-exchange spread-verified price feed (ETH, BTC, SOL).\n- \`nullclear_fetch_guarded\`: Drop-in URL fetcher with Canonical LLM Refusal Guard & crash protection.\n- \`nullclear_execute_escrow\`: Execute deferred schema escrow with numeric bounds and LLM refusal guards.\n- \`nullclear_check_reputation\`: Check an ERC-8004 agent's Sybil trust score (0-100).\n- \`nullclear_verify_mandate\`: Verify an agent's corporate entity backing and spending limits.\n`
             }
           ]
         }
@@ -684,6 +743,41 @@ mcpHttpRouter.post("/", async (c) => {
         });
       }
 
+      // Zero-Key Tool 0: guard_transaction_preflight (1-Call Pre-Sign Firewall)
+      if (toolName === "guard_transaction_preflight") {
+        const freeTier = await consumeForensicFreeCall(c, FORENSIC_FREE_TIER_DAILY_LIMIT);
+        c.header("x-nullclear-tier", freeTier.allowed ? "forensic-free" : "forensic-rate-limited");
+        c.header("x-nullclear-remaining-free-calls", String(freeTier.remaining));
+
+        const guard = await guardTransactionPreflight(
+          {
+            chain: String(args.chain || "base"),
+            from: args.from ? String(args.from) : undefined,
+            to: args.to ? String(args.to) : undefined,
+            data: args.data ? String(args.data) : undefined,
+            value: args.value ? String(args.value) : undefined,
+            transactions: Array.isArray(args.transactions) ? args.transactions : undefined,
+            stateOverrides: args.stateOverrides as Record<string, any> | undefined,
+            typedData: args.typedData,
+            transaction: args.transaction ? String(args.transaction) : undefined
+          },
+          c.env
+        );
+
+        return c.json({
+          jsonrpc: "2.0",
+          id,
+          result: {
+            content: [
+              {
+                type: "text",
+                text: JSON.stringify(guard)
+              }
+            ]
+          }
+        });
+      }
+
       // Zero-Key Tool 2: inspect_contract_abi_and_proxy
       if (toolName === "inspect_contract_abi_and_proxy") {
         const freeTier = await consumeForensicFreeCall(c, FORENSIC_FREE_TIER_DAILY_LIMIT);
@@ -707,8 +801,12 @@ mcpHttpRouter.post("/", async (c) => {
           hasSelfDestruct: inspection.hasSelfDestruct,
           hasDelegateCall: inspection.hasDelegateCall,
           selectorsCount: inspection.selectorsCount,
-          decodedFunctions: inspection.decodedFunctions.slice(0, 12),
-          dangerousSelectorsFound: inspection.dangerousSelectorsFound
+          decodedFunctions: inspection.decodedFunctions.slice(0, 15),
+          dangerousSelectorsFound: inspection.dangerousSelectorsFound,
+          ...((inspection as any).controlFlowRisks
+            ? { controlFlowRisks: (inspection as any).controlFlowRisks }
+            : {}),
+          ...((inspection as any).sourcify ? { sourcify: (inspection as any).sourcify } : {})
         };
 
         return c.json({
@@ -730,9 +828,11 @@ mcpHttpRouter.post("/", async (c) => {
         const freeTier = await consumeForensicFreeCall(c, FORENSIC_FREE_TIER_DAILY_LIMIT);
         c.header("x-nullclear-remaining-free-calls", String(freeTier.remaining));
 
-        const input = String(args.input || args.calldata || args.txHash || "0x");
+        const input = String(args.input || args.calldata || args.txHash || args.transaction || "");
         const chain = String(args.chain || "base");
-        const decoded = await decodeCalldataOrTx(input, chain, c.env);
+        const decoded = await decodeCalldataOrTx(input, chain, c.env, {
+          typedData: args.typedData
+        });
 
         return c.json({
           jsonrpc: "2.0",
@@ -757,9 +857,12 @@ mcpHttpRouter.post("/", async (c) => {
           {
             chain: String(args.chain || "base"),
             from: args.from ? String(args.from) : undefined,
-            to: String(args.to || "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"),
+            to: args.to ? String(args.to) : "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
             data: args.data ? String(args.data) : "0x",
-            value: args.value ? String(args.value) : "0x0"
+            value: args.value ? String(args.value) : "0x0",
+            transactions: Array.isArray(args.transactions) ? args.transactions : undefined,
+            stateOverrides: args.stateOverrides as Record<string, any> | undefined,
+            transaction: args.transaction ? String(args.transaction) : undefined
           },
           c.env
         );

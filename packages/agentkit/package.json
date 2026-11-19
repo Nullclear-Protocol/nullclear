@@ -1,7 +1,7 @@
 {
   "name": "@nullclear/agentkit",
-  "version": "1.0.0",
-  "description": "Coinbase AgentKit ActionProvider and pre-swap security firewall powered by NullClear (Base, Ethereum, Solana)",
+  "version": "1.1.0",
+  "description": "Coinbase AgentKit ActionProvider, 7-chain 1-Call Pre-Sign Firewall & Drop-In Guarded JSON-RPC powered by NullClear (Base, ETH, Arb, OP, Polygon, BSC, Solana)",
   "license": "MIT",
   "homepage": "https://nullclear.dev",
   "repository": {

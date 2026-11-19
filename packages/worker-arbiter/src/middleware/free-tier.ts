@@ -2,7 +2,8 @@ import type { Context, Next } from "hono";
 import { getArbiterStore, type Env } from "../env.js";
 
 export const FREE_TIER_DAILY_LIMIT = 10;
-export const FORENSIC_FREE_TIER_DAILY_LIMIT = 100;
+export const BAZAAR_FREE_TIER_DAILY_LIMIT = 2;
+export const FORENSIC_FREE_TIER_DAILY_LIMIT = 10;
 
 export interface NullClearMetadata {
   verified: boolean;

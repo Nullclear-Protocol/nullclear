@@ -11,15 +11,16 @@ import {
 import { NullClearClient, createNullClearFetch, NullClearEscrowAbortedError } from "@nullclear/x402-arbiter";
 
 const ARBITER_URL = (process.env.ARBITER_URL || "https://api.nullclear.dev").replace(/\/$/, "");
+const CONFIGURED_API_KEY = (process.env.NULLCLEAR_API_KEY || "").trim() || undefined;
 const CONFIGURED_PRIVATE_KEY = (process.env.NULLCLEAR_PRIVATE_KEY || process.env.BUYER_PRIVATE_KEY) as `0x${string}` | undefined;
 const MCP_SESSION_ID = `mcp_stdio_${process.pid}_${Math.random().toString(36).slice(2, 8)}`;
 
-const client = new NullClearClient({ arbiterUrl: ARBITER_URL });
+const client = new NullClearClient({ arbiterUrl: ARBITER_URL, apiKey: CONFIGURED_API_KEY });
 
 const server = new Server(
   {
     name: "nullclear-mcp-server",
-    version: "1.5.1"
+    version: "1.6.0"
   },
   {
     capabilities: {
@@ -31,6 +32,7 @@ const server = new Server(
 );
 
 const TOOL_DISPATCH_ALIASES: Record<string, string> = {
+  nullclear_preflight_guard: "guard_transaction_preflight",
   nullclear_scan_token: "scan_token_forensics",
   nullclear_inspect_contract: "inspect_contract_abi_and_proxy",
   nullclear_decode_calldata: "decode_calldata_or_failed_tx",
@@ -53,8 +55,12 @@ async function callBazaarOrProxyWithFreeTrialFirst(
 ): Promise<{ status: number; data: any; tier: string; remainingFreeCalls: string | null; receipt: string | null }> {
   const headers: Record<string, string> = {
     Accept: "application/json",
-    "x-nullclear-free-trial": "true",
-    "x-mcp-session": MCP_SESSION_ID
+    ...(CONFIGURED_API_KEY
+      ? { Authorization: `Bearer ${CONFIGURED_API_KEY}` }
+      : {
+          "x-nullclear-free-trial": "true",
+          "x-mcp-session": MCP_SESSION_ID
+        })
   };
   if (body !== undefined && method !== "GET") {
     headers["Content-Type"] = "application/json";
@@ -129,9 +135,9 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       {
         name: "nullclear_scan_token",
         description:
-          "Perform a free multi-chain (Base, Ethereum, Solana) token security, EIP-1967 proxy resolution, honeypot, and buy/sell tax audit. Use this as the primary pre-trade check for any token or contract (100 free calls/day/IP, zero API key; then $0.005 USDC). Returns score, verdict, recommendedAgentAction, proxy implementation, tax percentages, LP USD, and provenance block number (<400 tokens). Do NOT use for low-level 4-byte selector disassembly on non-token contracts (use nullclear_inspect_contract) or when an EIP-712 Bazaar payment receipt is explicitly required on Base ERC-20 tokens (use nullclear_audit_paid_token).",
+          "Perform a free 7-chain (Base, Ethereum, Arbitrum, Optimism, Polygon, BSC, Solana) token security, proxy resolution, Token-2022 extension/mint/freeze authority audit, honeypot, and buy/sell tax audit (100 free calls/day/IP, zero API key; then $0.005 USDC). Do NOT use for low-level bytecode inspection (use nullclear_inspect_contract).",
         annotations: {
-          title: "Multi-Chain Token Security & Proxy Scanner (Free)",
+          title: "7-Chain Token Security, Token-2022 & Proxy Scanner (Free)",
           readOnlyHint: true,
           destructiveHint: false,
           idempotentHint: true,
@@ -143,13 +149,13 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           properties: {
             address: {
               type: "string",
-              description: "Token or contract address (0x-prefixed 42-char EVM hex for Base/ETH, or Base58 mint address for Solana)",
+              description: "Token or contract address (0x-prefixed EVM hex or Base58 Solana mint)",
               default: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
             },
             chain: {
               type: "string",
-              enum: ["base", "eth", "solana"],
-              description: "Target blockchain network ('base', 'eth', or 'solana'); auto-detects if address exists on an alternate supported chain",
+              enum: ["base", "eth", "arbitrum", "optimism", "polygon", "bsc", "solana"],
+              description: "Target blockchain network; auto-detects alternate supported chains",
               default: "base"
             }
           }
@@ -158,9 +164,9 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       {
         name: "nullclear_inspect_contract",
         description:
-          "Disassemble deployed EVM bytecode on Base or Ethereum to resolve EIP-1967/1822/1167 proxies and extract decoded 4-byte PUSH4 function selectors without an Etherscan key. Use this for arbitrary smart contracts (vaults, routers, pools) to inspect proxy admin/implementation slots and SELFDESTRUCT/DELEGATECALL opcodes (100 free calls/day/IP). Returns isProxy, proxyType, implementationAddress, decodedFunctions, and dangerousSelectorsFound. Do NOT use for token market liquidity/honeypot tax audits (use nullclear_scan_token).",
+          "Disassemble deployed EVM bytecode across Base, Ethereum, Arbitrum, Optimism, Polygon, or BSC to resolve proxies (EIP-1967/1822/1167/Beacon/Diamond/Safe), query Sourcify v2 verified ABIs, batch-resolve PUSH4 selectors via OpenChain, and detect control-flow opcode risks (100 free calls/day/IP).",
         annotations: {
-          title: "EVM Proxy Slot & Bytecode Selector Disassembler (Free)",
+          title: "EVM Proxy, Sourcify ABI & Bytecode Inspector (Free)",
           readOnlyHint: true,
           destructiveHint: false,
           idempotentHint: true,
@@ -172,13 +178,13 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           properties: {
             address: {
               type: "string",
-              description: "0x-prefixed 42-char EVM smart contract address on Base or Ethereum",
+              description: "0x-prefixed 42-char EVM smart contract address",
               default: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
             },
             chain: {
               type: "string",
-              enum: ["base", "eth"],
-              description: "Target EVM chain ('base' for Base Mainnet 8453 or 'eth' for Ethereum Mainnet 1)",
+              enum: ["base", "eth", "arbitrum", "optimism", "polygon", "bsc"],
+              description: "Target EVM chain (default 'base')",
               default: "base"
             }
           }
@@ -187,9 +193,9 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       {
         name: "nullclear_decode_calldata",
         description:
-          "Decode existing hex calldata, custom Solidity revert bytes, or a mined transaction hash to explain historical failures and flag malicious approvals. Use this AFTER a transaction failed or when auditing opaque 0x calldata bytes before signing (100 free calls/day/IP). Returns decoded 4-byte function signature, argument breakdown, revert reason, and approval-drainer warnings. Do NOT use to dry-run an unsigned transaction against live chain state (use nullclear_simulate_transaction instead).",
+          "Decode EVM calldata (recursively unwrapping Multicall3, Uniswap Universal Router, Safe execTransaction), EIP-712 typed-data signatures (Permit, Permit2, Seaport), Solana wire txs, custom Solidity revert bytes, or mined tx hashes (100 free calls/day/IP).",
         annotations: {
-          title: "Historical Calldata, Revert & Failed Tx Decoder (Free)",
+          title: "Recursive Calldata, EIP-712, Solana Wire & Revert Decoder (Free)",
           readOnlyHint: true,
           destructiveHint: false,
           idempotentHint: true,
@@ -197,16 +203,19 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
         },
         inputSchema: {
           type: "object",
-          required: ["input"],
           properties: {
             input: {
               type: "string",
-              description: "0x-prefixed raw hex calldata/revert bytes OR a 66-character mined transaction hash to replay"
+              description: "0x-prefixed hex calldata/revert bytes, 66-char tx hash, or Base64/Base58 Solana tx"
+            },
+            typedData: {
+              type: "object",
+              description: "Optional EIP-712 typedData JSON (Permit, Permit2, Seaport, SafeTx)"
             },
             chain: {
               type: "string",
-              enum: ["base", "eth"],
-              description: "Target EVM chain ('base' or 'eth', default 'base')",
+              enum: ["base", "eth", "arbitrum", "optimism", "polygon", "bsc", "solana"],
+              description: "Target network (default 'base')",
               default: "base"
             }
           }
@@ -215,9 +224,9 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       {
         name: "nullclear_simulate_transaction",
         description:
-          "Execute a live eth_call and eth_estimateGas dry-run on Base or Ethereum BEFORE signing or broadcasting an unsigned transaction. Use this immediately before wallet execution when you have target `to` + `data` and need to confirm whether the call will succeed, estimate gas, and verify allowance safety (100 free calls/day/IP). Returns simulation success, gas estimate, decoded revert reason if any, and recommendedAgentAction. Do NOT use for standalone hex bytes without `to` or past mined tx hashes (use nullclear_decode_calldata).",
+          "Execute stateful pre-flight simulation across EVM (eth_simulateV1 with stateOverrides, multi-tx bundles, and Transfer/Approval net asset diffs; fallback eth_call + eth_estimateGas) and Solana (simulateTransaction + wire instruction audit) BEFORE signing (100 free calls/day/IP).",
         annotations: {
-          title: "Pre-Flight EVM eth_call Transaction Simulator (Free)",
+          title: "Stateful EVM & Solana Pre-Flight Simulator (Free)",
           readOnlyHint: true,
           destructiveHint: false,
           idempotentHint: true,
@@ -225,32 +234,20 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
         },
         inputSchema: {
           type: "object",
-          required: ["to"],
           properties: {
             chain: {
               type: "string",
-              enum: ["base", "eth"],
-              description: "Target EVM chain ('base' or 'eth', default 'base')",
+              enum: ["base", "eth", "arbitrum", "optimism", "polygon", "bsc", "solana"],
+              description: "Target network (default 'base')",
               default: "base"
             },
-            from: {
-              type: "string",
-              description: "Sender 0x EVM address whose balance/allowance context will be simulated"
-            },
-            to: {
-              type: "string",
-              description: "Destination 0x smart contract or recipient address"
-            },
-            data: {
-              type: "string",
-              description: "0x-prefixed hex calldata payload for the simulated call",
-              default: "0x"
-            },
-            value: {
-              type: "string",
-              description: "Native wei amount as hex ('0x0') or decimal string",
-              default: "0x0"
-            }
+            from: { type: "string", description: "Sender 0x EVM address" },
+            to: { type: "string", description: "Destination 0x smart contract address" },
+            data: { type: "string", description: "0x-prefixed hex calldata", default: "0x" },
+            value: { type: "string", description: "Native wei amount ('0x0')", default: "0x0" },
+            transactions: { type: "array", description: "Optional ordered multi-tx EVM bundle" },
+            stateOverrides: { type: "object", description: "Optional EVM stateOverrides" },
+            transaction: { type: "string", description: "Base64/Base58 Solana tx when chain='solana'" }
           }
         }
       },
@@ -273,6 +270,37 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
               type: "string",
               description: "Public HTTPS webpage or documentation URL to extract into clean Markdown"
             }
+          }
+        }
+      },
+      {
+        name: "nullclear_preflight_guard",
+        description:
+          "All-in-one 1-call Pre-Sign Firewall across Base, Ethereum, Arbitrum, Optimism, Polygon, BSC, and Solana (100 free calls/day/IP). Unwraps nested Multicall3/Universal Router/Safe calldata or EIP-712 Permits or Solana wire txs, runs stateful eth_simulateV1 / Solana simulateTransaction with asset diffs, and scans touched tokens.",
+        annotations: {
+          title: "1-Call Multi-Chain Pre-Sign Firewall (Free)",
+          readOnlyHint: true,
+          destructiveHint: false,
+          idempotentHint: true,
+          openWorldHint: true
+        },
+        inputSchema: {
+          type: "object",
+          properties: {
+            chain: {
+              type: "string",
+              enum: ["base", "eth", "arbitrum", "optimism", "polygon", "bsc", "solana"],
+              description: "Target network (default 'base')",
+              default: "base"
+            },
+            from: { type: "string", description: "Sender 0x EVM address" },
+            to: { type: "string", description: "Target contract 0x address or Solana mint" },
+            data: { type: "string", description: "0x-prefixed EVM calldata" },
+            value: { type: "string", description: "Native wei amount ('0x0')" },
+            transactions: { type: "array", description: "Optional ordered multi-tx bundle" },
+            stateOverrides: { type: "object", description: "Optional EVM stateOverrides" },
+            typedData: { type: "object", description: "Optional EIP-712 typedData JSON" },
+            transaction: { type: "string", description: "Optional Base64/Base58 Solana serialized tx" }
           }
         }
       },
@@ -746,6 +774,29 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   const name = TOOL_DISPATCH_ALIASES[rawName] ?? rawName;
 
   try {
+    if (name === "guard_transaction_preflight") {
+      const url = `${ARBITER_URL}/v1/guard`;
+      const res = await callBazaarOrProxyWithFreeTrialFirst(url, "POST", {
+        chain: String(args?.chain || "base"),
+        from: args?.from ? String(args.from) : undefined,
+        to: args?.to ? String(args.to) : undefined,
+        data: args?.data ? String(args.data) : undefined,
+        value: args?.value ? String(args.value) : undefined,
+        transactions: Array.isArray(args?.transactions) ? args.transactions : undefined,
+        stateOverrides: args?.stateOverrides,
+        typedData: args?.typedData,
+        transaction: args?.transaction ? String(args.transaction) : undefined
+      });
+      return {
+        content: [
+          {
+            type: "text",
+            text: typeof res.data === "string" ? res.data : JSON.stringify(res.data)
+          }
+        ]
+      };
+    }
+
     if (name === "scan_token_forensics") {
       const chain = encodeURIComponent(String(args?.chain || "base"));
       const address = encodeURIComponent(
@@ -783,8 +834,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     if (name === "decode_calldata_or_failed_tx") {
       const url = `${ARBITER_URL}/v1/decode`;
       const res = await callBazaarOrProxyWithFreeTrialFirst(url, "POST", {
-        input: String(args?.input || "0x"),
-        chain: String(args?.chain || "base")
+        input: String(args?.input || args?.transaction || "0x"),
+        chain: String(args?.chain || "base"),
+        ...(args?.typedData ? { typedData: args.typedData } : {})
       });
       return {
         content: [
@@ -801,9 +853,12 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       const res = await callBazaarOrProxyWithFreeTrialFirst(url, "POST", {
         chain: String(args?.chain || "base"),
         from: args?.from ? String(args.from) : undefined,
-        to: String(args?.to || "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"),
+        to: args?.to ? String(args.to) : "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
         data: args?.data ? String(args.data) : "0x",
-        value: args?.value ? String(args.value) : "0x0"
+        value: args?.value ? String(args.value) : "0x0",
+        ...(Array.isArray(args?.transactions) ? { transactions: args.transactions } : {}),
+        ...(args?.stateOverrides ? { stateOverrides: args.stateOverrides } : {}),
+        ...(args?.transaction ? { transaction: String(args.transaction) } : {})
       });
       return {
         content: [

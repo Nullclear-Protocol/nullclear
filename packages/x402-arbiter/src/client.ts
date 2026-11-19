@@ -10,8 +10,10 @@ import {
 import { signX402Payment, type SignerInput } from "./signer.js";
 import {
   assertSafeSecurityVerdict,
+  createNullClearRpcUrl,
   normalizeForensicTarget,
-  type ForensicChain
+  type ForensicChain,
+  type NullClearRpcOptions
 } from "./firewall.js";
 
 export interface NullClearClientConfig {
@@ -19,6 +21,8 @@ export interface NullClearClientConfig {
   defaultChainId?: number;
   fetch?: typeof fetch;
   signer?: SignerInput;
+  /** Optional Prepaid Pass Bearer API key (`nc_live_...`) for <5ms auth without per-call x402 latency */
+  apiKey?: string;
   timeoutMs?: number;
 }
 
@@ -67,6 +71,7 @@ export class NullClearClient {
   private defaultChainId: number;
   private customFetch: typeof fetch;
   private signer?: SignerInput;
+  private apiKey?: string;
   private timeoutMs: number;
 
   constructor(config: NullClearClientConfig = {}) {
@@ -74,6 +79,7 @@ export class NullClearClient {
     this.defaultChainId = config.defaultChainId || 8453;
     this.customFetch = config.fetch || fetch;
     this.signer = config.signer;
+    this.apiKey = config.apiKey;
     this.timeoutMs = config.timeoutMs ?? 15000;
   }
 
@@ -88,6 +94,9 @@ export class NullClearClient {
         ? (rawHeaders as Record<string, string>)
         : {})
     };
+    if (this.apiKey && !headers.Authorization && !headers.authorization) {
+      headers.Authorization = `Bearer ${this.apiKey}`;
+    }
     if (paymentSignatureHeader) {
       headers["PAYMENT-SIGNATURE"] = paymentSignatureHeader;
     }
@@ -354,10 +363,10 @@ export class NullClearClient {
   }
 
   /**
-   * Zero-key EIP-1967/1822 proxy resolution and bytecode selector extraction.
+   * Zero-key proxy resolution, Sourcify ABI, and bytecode selector extraction.
    */
   async inspectContract(
-    chain: "base" | "eth",
+    chain: Exclude<ForensicChain, "solana">,
     address: string,
     paymentSignatureHeader?: string
   ): Promise<any> {
@@ -367,30 +376,36 @@ export class NullClearClient {
   }
 
   /**
-   * Decode calldata, revert reasons, or flag unlimited drainer approvals before signing.
+   * Decode calldata (with recursive Multicall3/UniversalRouter/Safe unwrapping), EIP-712 typedData,
+   * Solana wire txs, or revert reasons.
    */
   async decodeCalldata(
     input: string,
-    chain: "base" | "eth" = "base",
-    paymentSignatureHeader?: string
+    chain: ForensicChain = "base",
+    paymentSignatureHeader?: string,
+    options?: { typedData?: Record<string, unknown> }
   ): Promise<any> {
     return this.requestJsonWithAutoX402("/v1/decode", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       paymentSignatureHeader,
-      body: JSON.stringify({ input, chain })
+      body: JSON.stringify({ input, chain, ...(options?.typedData ? { typedData: options.typedData } : {}) })
     });
   }
 
   /**
-   * Pre-flight eth_call simulation & revert decoding on Base or Ethereum.
+   * Stateful pre-flight simulation across EVM (eth_simulateV1 + stateOverrides + multi-tx bundles)
+   * and Solana (simulateTransaction + wire parser).
    */
   async simulateTx(params: {
-    to: string;
+    to?: string;
     data?: string;
     from?: string;
     value?: string;
-    chain?: "base" | "eth";
+    chain?: ForensicChain;
+    transactions?: Array<{ to: string; data?: string; value?: string }>;
+    stateOverrides?: Record<string, unknown>;
+    transaction?: string;
     paymentSignatureHeader?: string;
   }): Promise<any> {
     return this.requestJsonWithAutoX402("/v1/simulate", {
@@ -402,8 +417,122 @@ export class NullClearClient {
         data: params.data,
         from: params.from,
         value: params.value,
-        chain: params.chain || "base"
+        chain: params.chain || "base",
+        ...(params.transactions ? { transactions: params.transactions } : {}),
+        ...(params.stateOverrides ? { stateOverrides: params.stateOverrides } : {}),
+        ...(params.transaction ? { transaction: params.transaction } : {})
       })
+    });
+  }
+
+  /**
+   * Composite 1-call Pre-Sign Firewall (`POST /v1/guard`): decodes nested calldata / EIP-712 / Solana tx,
+   * simulates stateful asset diffs, and automatically scans all touched token contracts.
+   */
+  async guard(params: {
+    chain?: ForensicChain;
+    from?: string;
+    to?: string;
+    data?: string;
+    value?: string;
+    transactions?: Array<{ to: string; data?: string; value?: string }>;
+    stateOverrides?: Record<string, unknown>;
+    typedData?: Record<string, unknown>;
+    transaction?: string;
+    paymentSignatureHeader?: string;
+  }): Promise<any> {
+    return this.requestJsonWithAutoX402("/v1/guard", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      paymentSignatureHeader: params.paymentSignatureHeader,
+      body: JSON.stringify({
+        chain: params.chain || "base",
+        from: params.from,
+        to: params.to,
+        data: params.data,
+        value: params.value,
+        transactions: params.transactions,
+        stateOverrides: params.stateOverrides,
+        typedData: params.typedData,
+        transaction: params.transaction
+      })
+    });
+  }
+
+  /**
+   * Builds a Drop-In Guarded JSON-RPC URL (`https://api.nullclear.dev/rpc/:chain/:apiKey`).
+   */
+  guardedRpcUrl(
+    chain: ForensicChain,
+    options?: Omit<NullClearRpcOptions, "chain" | "apiKey" | "apiBaseUrl"> & { apiKey?: string }
+  ): string {
+    const key = options?.apiKey || this.apiKey;
+    if (!key) {
+      throw new Error("NullClear Prepaid Pass apiKey (`nc_live_...`) required to build a Guarded RPC URL.");
+    }
+    return createNullClearRpcUrl({
+      chain,
+      apiKey: key,
+      apiBaseUrl: this.arbiterUrl,
+      failMode: options?.failMode,
+      timeoutMs: options?.timeoutMs,
+      blockCaution: options?.blockCaution
+    });
+  }
+
+  /**
+   * Institutional 7-chain Token & Contract Due-Diligence Dossier ($0.10 USDC or 10 Prepaid Pass credits).
+   */
+  async dueDiligence(
+    chain: ForensicChain,
+    address: string,
+    paymentSignatureHeader?: string
+  ): Promise<any> {
+    const target = normalizeForensicTarget(address, chain);
+    return this.requestJsonWithAutoX402("/v1/bazaar/due-diligence", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      paymentSignatureHeader,
+      body: JSON.stringify({ chain: target.chain, address: target.address })
+    });
+  }
+
+  /**
+   * Cryptographic Non-Custodial Policy Co-Signer ($0.02 USDC or 2 Prepaid Pass credits).
+   */
+  async cosign(params: {
+    policyId?: string;
+    policy?: Record<string, unknown>;
+    chain?: ForensicChain;
+    from?: string;
+    to?: string;
+    data?: string;
+    value?: string;
+    typedData?: Record<string, unknown>;
+    transaction?: string;
+    paymentSignatureHeader?: string;
+  }): Promise<any> {
+    const { paymentSignatureHeader, ...body } = params;
+    return this.requestJsonWithAutoX402("/v1/policy/cosign", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      paymentSignatureHeader,
+      body: JSON.stringify(body)
+    });
+  }
+
+  /**
+   * Mint a Prepaid Firewall Pass ($5 Starter / $25 Pro / $100 Scale) via x402 EIP-3009 USDC.
+   */
+  async buyPass(
+    tier: "starter" | "pro" | "scale" = "starter",
+    paymentSignatureHeader?: string
+  ): Promise<any> {
+    return this.requestJsonWithAutoX402("/v1/pass/buy", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      paymentSignatureHeader,
+      body: JSON.stringify({ tier })
     });
   }
 }

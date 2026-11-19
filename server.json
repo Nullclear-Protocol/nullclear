@@ -1,9 +1,9 @@
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.Nullclear-Protocol/nullclear",
-  "title": "NullClear Arbiter",
-  "description": "Zero-key EVM/Solana token forensics, tx simulator, calldata decoder & x402 escrow arbiter",
-  "version": "1.5.1",
+  "title": "NullClear Pre-Execution Firewall & Arbiter",
+  "description": "7-chain EVM/Solana 1-call Pre-Sign Firewall, Guarded RPC, Proxy/ABI Inspector & x402 Escrow",
+  "version": "1.6.0",
   "websiteUrl": "https://nullclear.dev",
   "repository": {
     "url": "https://github.com/Nullclear-Protocol/nullclear",
@@ -14,7 +14,7 @@
     {
       "registryType": "npm",
       "identifier": "@nullclear/mcp",
-      "version": "1.5.1",
+      "version": "1.6.0",
       "transport": {
         "type": "stdio"
       }

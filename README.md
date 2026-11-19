@@ -1,6 +1,6 @@
 # NullClear (`nullclear.dev` / `nullclear.com`)
 
-> **Autonomous Non-Custodial Clearing & Reputation Protocol for x402 AI Agents**
+> **The Autonomous Pre-Execution Firewall for On-Chain Agents (`Check → Enforce → Monitor`) + Non-Custodial x402 Clearinghouse**
 
 <p align="left">
   <a href="https://glama.ai/mcp/servers/Nullclear-Protocol/nullclear"><img src="https://glama.ai/mcp/servers/Nullclear-Protocol/nullclear/badges/score.svg" alt="NullClear Arbiter MCP server – quality and maintenance score on Glama" /></a>
@@ -55,10 +55,10 @@ NullClear eliminates payment risk in Agent-to-Agent (A2A) commerce. In standard 
 |---|---|---|
 | [`@nullclear/shared`](./packages/shared) | `packages/shared` | Core constants (Base Mainnet 8453, Sepolia 84532), ERC-8004 ABIs, x402 V2 types, EIP-3009 & KYA EIP-712 schemas. |
 | [`@nullclear/worker-arbiter`](./packages/worker-arbiter) | `packages/worker-arbiter` | Cloudflare Worker Hono app handling deferred escrow clearing (`/v1/clear`), Sybil-resistant trust scores (`/v1/score`), KYA mandates (`/v1/kya`), and machine discovery honeypots (`/llms.txt`, `/.well-known/*`, `/openapi.json`). |
-| [`@nullclear/x402-arbiter`](./packages/x402-arbiter) | `packages/x402-arbiter` | Agent SDK providing `createNullClearFetch` with automatic HTTP 402 interception, EIP-3009 authorization signing, Zod/JSON schema protection, `scanBatch`, and swap firewall guards. |
-| [`@nullclear/agentkit`](./packages/agentkit) | `packages/agentkit` | Coinbase AgentKit `ActionProvider` (`nullclearActionProvider`) & `createNullClearWalletGuard` for Base, Ethereum, and Solana pre-swap token & calldata safety. |
-| [`@nullclear/plugin-eliza`](./packages/plugin-eliza) | `packages/plugin-eliza` | ElizaOS trading firewall plugin (`NULLCLEAR_SCAN_TOKEN`, `NULLCLEAR_SCAN_BATCH`, `NULLCLEAR_GUARD_CALLDATA`, plus real-time context provider). |
-| [`@nullclear/mcp`](./packages/mcp-server) | `packages/mcp-server` | Model Context Protocol server (STDIO + Streamable HTTP at `https://api.nullclear.dev/mcp`) exposing 13 forensic, token-audit, clean-markdown, ERC-8004 reputation, KYA mandate, and x402 escrow tools to autonomous agents. |
+| [`@nullclear/x402-arbiter`](./packages/x402-arbiter) | `packages/x402-arbiter` | Agent SDK (`v1.7.0`) providing `createNullClearRpcUrl`, `createNullClearPassClient`, `NullClearClient` (7-chain `guard`, `dueDiligence`, `cosign`, `buyPass`), and `createNullClearFetch` deferred x402 escrow. |
+| [`@nullclear/agentkit`](./packages/agentkit) | `packages/agentkit` | Coinbase AgentKit `ActionProvider` (`nullclearActionProvider` `v1.1.0`), `nullclear_preflight_guard`, `createNullClearWalletGuard`, and Guarded JSON-RPC across 7 EVM/Solana chains. |
+| [`@nullclear/plugin-eliza`](./packages/plugin-eliza) | `packages/plugin-eliza` | ElizaOS 7-chain firewall plugin (`v1.1.0`: `NULLCLEAR_SCAN_TOKEN`, `NULLCLEAR_SCAN_BATCH`, `NULLCLEAR_GUARD_CALLDATA`, `NULLCLEAR_API_KEY` + real-time context provider). |
+| [`@nullclear/mcp`](./packages/mcp-server) | `packages/mcp-server` | Model Context Protocol server (`v1.6.0`, STDIO + Streamable HTTP at `https://api.nullclear.dev/mcp`) exposing **14 tools** (`nullclear_preflight_guard`, 7-chain forensics, ERC-8004 reputation, KYA mandate, and x402 escrow). |
 | [`@nullclear/e2e-simulator`](./packages/e2e-simulator) | `packages/e2e-simulator` | Self-contained local simulator validating honest sellers, hallucination voids, 500 crash voids, and Sybil wash-trade detection. |
 
 ---
@@ -71,6 +71,13 @@ NullClear eliminates payment risk in Agent-to-Agent (A2A) commerce. In standard 
 4. **Machine Discovery & Self-Describing Agents:** Complete `llms.txt`, `/.well-known/agent.json`, `/.well-known/x402.json`, `/.well-known/mcp.json`, and OpenAPI 3.1.0 specifications.
 
 ---
+
+## What's New in v1.7.0 (Autonomous Pre-Execution Firewall Pro Suite)
+- **Self-Serve x402 Prepaid Passes (`POST /v1/pass/buy`, `$5 / $25 / $100 USDC`) & `<5ms` Edge KV Auth:** Autonomous agents and teams can mint `nc_live_...` Bearer API keys with 2,000–100,000 credits via EIP-3009 USDC settlement, eliminating 1.5s per-call settlement overhead.
+- **Drop-In Guarded JSON-RPC Safety Rail (`POST /rpc/:chain/:apiKey`):** Built for Autonomous AI Agents (`AgentKit`, `ElizaOS`, `Virtuals`, `Rig`) and Safe/DAO treasuries. Swap one `RPC_URL` env var across 7 chains — reads pass through via edge KV (`0` credits); every broadcast is pre-screened via `guardTransactionPreflight` with configurable `failMode=closed|open` and `timeoutMs` race budgets.
+- **Cryptographic EIP-712 Policy Co-Signer (`POST /v1/policy/register`, `/v1/policy/cosign`):** Evaluates programmable spend/tax/drainer policies and emits on-chain-verifiable EIP-712 `PolicyApproval` co-signatures only when all invariants pass.
+- **30-Day Continuous Cron Watchtower (`POST /v1/monitors`) & Institutional Due-Diligence (`POST /v1/bazaar/due-diligence`, `$0.10`):** Scheduled diffs on proxy slots, sell taxes, LP drops, and Solana mint/freeze authorities firing signed webhooks + signed clearance certificates.
+- **7-Chain 1-Call Pre-Sign Firewall (`POST /v1/guard` & `/v1/bazaar/guard`) & Package Upgrades:** Added `arbitrum`, `optimism`, `polygon`, `bsc` alongside `base`, `eth`, `solana`, recursive Multicall3/UniversalRouter/Safe unwrapping, EIP-712 Permit2/Seaport audits, Solana Token-2022 checks, stateful `eth_simulateV1` asset diffs, and published SDK updates (`@nullclear/x402-arbiter@1.7.0`, `@nullclear/mcp@1.6.0`, `@nullclear/agentkit@1.1.0`, `@nullclear/plugin-eliza@1.1.0`).
 
 ## What's New in v1.6.0
 - **Dual-Facilitator Discovery (Coinbase CDP Bazaar + PayAI + 402index.io):** Added Coinbase CDP EdDSA/ES256 JWT auth (`?facilitator=cdp` / `X-NullClear-Facilitator: cdp`) and `402index.io` domain verification (`/.well-known/402index-verify.txt`), getting all **7 / 7** `/v1/bazaar/*` endpoints indexed live across Coinbase CDP Bazaar, 402index.io, and PayAI Discovery.

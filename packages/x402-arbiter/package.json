@@ -1,7 +1,7 @@
 {
   "name": "@nullclear/x402-arbiter",
-  "version": "1.6.0",
-  "description": "NullClear Developer and Agent SDK for safe x402 calls with deferred schema escrow",
+  "version": "1.7.0",
+  "description": "NullClear SDK v1.7.0: Drop-in Guarded JSON-RPC, Prepaid Passes ($5-$100), 1-Call Pre-Sign Firewall, Policy Co-Signer, Watchtower & x402 Schema Escrow",
   "license": "MIT",
   "homepage": "https://nullclear.dev",
   "repository": {

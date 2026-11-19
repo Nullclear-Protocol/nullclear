@@ -148,20 +148,21 @@ npx -y @nullclear/mcp@1.5.0
 }
 ```
 
-### Exposed MCP Tools (13 Tools, v1.5.0)
-1. **`scan_token_forensics`**: Free-tier multi-oracle Base/ETH/Solana token & rug-pull audit (`GET /v1/scan/:chain/:address`).
-2. **`inspect_contract_abi_and_proxy`**: EVM proxy slot (`EIP-1967`/`EIP-1822`) and bytecode function selector extractor (`GET /v1/inspect/:chain/:address`).
-3. **`decode_calldata_or_failed_tx`**: Decode hex calldata and detect drainer approvals (`POST /v1/decode`).
-4. **`simulate_transaction_preflight`**: Dry-run `eth_call` & gas estimation before signing (`POST /v1/simulate`).
-5. **`read_url_clean_markdown`**: Token-efficient HTML-to-Markdown readability scraper (`GET /v1/clean-markdown`).
-6. **`nullclear_discover_verified_x402_apis`**: Query live x402 API directory & trust ratings (`GET /v1/bazaar/directory`).
-7. **`nullclear_token_security_audit`**: Paid `$0.005` x402 Bazaar real-time token audit (`GET /v1/bazaar/token-security`).
+### Exposed MCP Tools (14 Tools, v1.6.0+)
+0. **`nullclear_preflight_guard`** *(1-Call Kill-Shot)*: Composite pre-sign firewall (`POST /v1/guard`) — recursively unwraps Multicall3/Universal Router/Safe calldata or EIP-712 Permits or Solana wire txs, runs stateful `eth_simulateV1` / Solana `simulateTransaction` with asset balance diffs, and scans all touched tokens across 7 chains.
+1. **`nullclear_scan_token`**: Free-tier 7-chain (`base`, `eth`, `arbitrum`, `optimism`, `polygon`, `bsc`, `solana`) token, Token-2022 extension, and rug-pull audit (`GET /v1/scan/:chain/:address`).
+2. **`nullclear_inspect_contract`**: EVM proxy slot (`EIP-1967`/`1822`/`Beacon`/`Diamond`/`Safe`), Sourcify v2 ABI, batch OpenChain selector, and bytecode CFG risk analyzer (`GET /v1/inspect/:chain/:address`).
+3. **`nullclear_decode_calldata`**: Recursive calldata, EIP-712 typed-data, Solana wire tx, custom revert, and verified-router spender trust decoder (`POST /v1/decode`).
+4. **`nullclear_simulate_transaction`**: Stateful `eth_simulateV1` (`stateOverrides`, multi-tx bundles, `Transfer`/`Approval` asset diffs) & Solana `simulateTransaction` (`POST /v1/simulate`).
+5. **`nullclear_read_markdown`**: Token-efficient HTML-to-Markdown readability scraper (`GET /v1/clean-markdown`).
+6. **`nullclear_discover_apis`**: Query live x402 API directory & trust ratings (`GET /v1/bazaar/directory`).
+7. **`nullclear_audit_paid_token`**: Paid `$0.005` x402 Bazaar real-time token audit (`GET /v1/bazaar/token-security`).
 8. **`nullclear_wallet_risk_score`**: Paid `$0.005` x402 Bazaar wallet risk & wash-trade screen (`GET /v1/bazaar/wallet-risk`).
-9. **`nullclear_crypto_market_oracle`**: Paid `$0.01` x402 Bazaar live price/liquidity oracle (`GET /v1/bazaar/market-oracle`).
+9. **`nullclear_crypto_market_oracle`**: Paid `$0.005` x402 Bazaar live price/liquidity oracle (`GET /v1/bazaar/market-oracle`).
 10. **`nullclear_safe_fetch`**: Paid `$0.005` x402 Bazaar JSON-verified clean web fetch (`GET /v1/bazaar/verified-fetch`).
-11. **`nullclear_escrow_x402_call`**: Execute any external x402 paid API via NullClear escrow & schema refund protection.
+11. **`nullclear_execute_escrow`**: Execute any external x402 paid API via NullClear escrow & schema refund protection.
 12. **`nullclear_check_reputation`**: Look up an AI agent's ERC-8004 reputation score & grade (`GET /v1/score/:chainId/:agentId`).
-13. **`nullclear_verify_kya_mandate`**: Verify an agent's KYA EIP-712 corporate spending mandate (`POST /v1/kya/verify`).
+13. **`nullclear_verify_mandate`**: Verify an agent's KYA EIP-712 corporate spending mandate (`POST /v1/kya/verify`).
 
 ---
 
@@ -186,18 +187,50 @@ This script:
 
 ## 6. NPM Publishing Guide
 
-To publish all three public packages to npmjs.com:
+To publish all public packages to npmjs.com in topological order:
 
 ```bash
-# 1. Login to npm
 npm login
-
-# 2. Build and verify all packages
 pnpm build
 pnpm test
 
-# 3. Publish packages in topological order
 cd packages/shared && npm publish --access public
 cd ../x402-arbiter && npm publish --access public
 cd ../mcp-server && npm publish --access public
+cd ../agentkit && npm publish --access public
+cd ../plugin-eliza && npm publish --access public
+```
+
+---
+
+## 7. High-Intent Developer Registry Submissions (Where Buyers Live)
+
+### A. ElizaOS Plugin Registry (`elizaos-plugins/registry`)
+Add entry to `index.json`:
+```json
+{
+  "@nullclear/plugin-eliza": "github:Nullclear-Protocol/nullclear#packages/plugin-eliza"
+}
+```
+PR Title:
+`feat(registry): add @nullclear/plugin-eliza — 7-chain Pre-Execution Firewall & Guarded RPC`
+
+PR Description Snippet:
+> Adds `@nullclear/plugin-eliza` — 7-chain (`solana`, `base`, `eth`, `arbitrum`, `optimism`, `polygon`, `bsc`) pre-execution firewall for ElizaOS agents (including Solana Token-2022 PermanentDelegate/TransferFee/Mint/Freeze checks + `simulateTransaction`, recursive Multicall3/Universal Router/Safe unwrapping, and 1-line Guarded JSON-RPC `https://api.nullclear.dev/rpc/<chain>/<nc_live_key>`). Works out of the box with zero API keys (10 free calls/day/IP, or `$5/$25/$100` Prepaid Passes & x402). Live sandbox: https://nullclear.dev/firewall
+
+### B. Coinbase AgentKit (`coinbase/agentkit`)
+Community `ActionProvider` listing / PR Title:
+`feat(agentkit): add NullClearActionProvider & Guarded RPC Safety Rail (@nullclear/agentkit)`
+
+Community `ActionProvider` listing / PR snippet:
+```markdown
+- **NullClear Pre-Execution Firewall (`@nullclear/agentkit`)**: Drop-in `nullclearActionProvider()`, `createNullClearWalletGuard(walletProvider)`, and 1-line `BASE_RPC_URL=https://api.nullclear.dev/rpc/base/<nc_live_key>` safety rail that blocks honeypots, hidden sell taxes, nested Multicall3/Universal Router approvals, and EIP-712 Permit drainers across Base, Ethereum, Arbitrum, Optimism, Polygon, BSC, and Solana before mempool broadcast. Zero API key required (10 free/day, then $0.005 x402 USDC or $5/$25/$100 Prepaid Passes).
+```
+
+### C. `awesome-mcp-servers` / `modelcontextprotocol/servers`
+PR Title:
+`Add NullClear Arbiter MCP — 7-Chain Pre-Sign Transaction Firewall & x402 Clearinghouse`
+
+```markdown
+- [NullClear Arbiter MCP](https://github.com/Nullclear-Protocol/nullclear/tree/main/packages/mcp-server) (`npx -y @nullclear/mcp@latest` or `https://api.nullclear.dev/mcp`) — Zero-key 7-chain EVM + Solana pre-sign firewall (`nullclear_preflight_guard`), recursive Multicall3/Universal Router/EIP-712/Solana wire decoder, stateful `eth_simulateV1` & Solana `simulateTransaction` asset-diff simulator, Token-2022 & Sourcify bytecode inspector, Drop-in Guarded RPC, and non-custodial x402 deferred schema-escrow arbiter.
 ```

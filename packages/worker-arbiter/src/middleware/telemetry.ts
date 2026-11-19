@@ -150,8 +150,13 @@ export async function telemetryMiddleware(c: Context<Env>, next: Next) {
 
   await next();
 
+  const rawUa = c.req.header("user-agent") || "";
+  const sanitizedUa = rawUa.replace(/[\u0000-\u001f\u007f]/g, "").trim().slice(0, 160);
+  const resTier = (c.res?.headers?.get("x-nullclear-tier") || "").toLowerCase();
+  const isFreeTrial = resTier === "free-trial" || resTier === "zero-key-free";
+
   const actorType = classifyActorType(
-    c.req.header("user-agent"),
+    rawUa,
     c.req.raw.headers,
     path,
     method
@@ -174,7 +179,9 @@ export async function telemetryMiddleware(c: Context<Env>, next: Next) {
     toolName,
     country,
     asn,
-    referer
+    referer,
+    userAgent: sanitizedUa || null,
+    isFreeTrial
   };
 
   const store = getArbiterStore(c.env);

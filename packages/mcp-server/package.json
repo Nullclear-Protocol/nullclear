@@ -1,8 +1,8 @@
 {
   "name": "@nullclear/mcp",
-  "version": "1.5.1",
+  "version": "1.6.0",
   "mcpName": "io.github.Nullclear-Protocol/nullclear",
-  "description": "Model Context Protocol server for autonomous agents using NullClear",
+  "description": "Model Context Protocol server for 7-chain Pre-Sign Transaction Firewall, Guarded RPC, Forensics & x402 Escrow",
   "license": "MIT",
   "author": "NullClear Protocol <contact@nullclear.dev>",
   "homepage": "https://nullclear.dev",

@@ -3,13 +3,15 @@ import {
   NullClearClient,
   NullClearSecurityBlockError,
   assertSafeSecurityVerdict,
+  createNullClearRpcUrl,
   formatBatchVerdictText,
   formatSecurityVerdictText,
   type ForensicChain,
+  type NullClearRpcOptions,
   type SignerInput
 } from "@nullclear/x402-arbiter";
 
-export { NullClearSecurityBlockError };
+export { NullClearSecurityBlockError, createNullClearRpcUrl };
 
 /**
  * Structural subset matching Coinbase AgentKit Network metadata (`@coinbase/agentkit`).
@@ -43,6 +45,8 @@ export interface AgentKitActionLike<TActionSchema extends z.ZodTypeAny = z.ZodTy
 export interface NullClearActionProviderConfig {
   /** NullClear API endpoint (defaults to https://api.nullclear.dev) */
   arbiterUrl?: string;
+  /** Optional Prepaid Pass Bearer API key (`nc_live_...`) for <5ms auth & Guarded RPC */
+  apiKey?: string;
   /** Default EVM chain for 0x addresses when omitted by caller/wallet */
   defaultChain?: ForensicChain;
   /** Treat CAUTION_HIGH_RISK verdicts as fatal in swap guard helpers */
@@ -55,12 +59,32 @@ export interface NullClearActionProviderConfig {
   timeoutMs?: number;
 }
 
+const ALL_CHAINS_ENUM = z.enum([
+  "base",
+  "eth",
+  "arbitrum",
+  "optimism",
+  "polygon",
+  "bsc",
+  "solana"
+]);
+const EVM_CHAINS_ENUM = z.enum(["base", "eth", "arbitrum", "optimism", "polygon", "bsc"]);
+
+const GuardTxSchema = z.object({
+  chain: ALL_CHAINS_ENUM.default("base").describe(
+    "Target chain ('base', 'eth', 'arbitrum', 'optimism', 'polygon', 'bsc', or 'solana')"
+  ),
+  to: z.string().optional().describe("Target EVM contract address"),
+  from: z.string().optional().describe("Sender EVM wallet address (defaults to connected wallet)"),
+  data: z.string().optional().describe("Hex calldata (0x...) — recursively unwraps Multicall3/UniversalRouter/Safe"),
+  value: z.string().optional().describe("Wei value in decimal or hex"),
+  typedData: z.record(z.any()).optional().describe("Optional EIP-712 typedData JSON (Permit / Permit2 / Seaport)"),
+  transaction: z.string().optional().describe("Optional Base64-encoded Solana wire transaction")
+});
+
 const ScanTokenSchema = z.object({
-  address: z.string().min(20).describe("Token or contract address (0x... for Base/Ethereum, base58 mint for Solana)"),
-  chain: z
-    .enum(["base", "eth", "solana"])
-    .optional()
-    .describe("Optional chain override ('base', 'eth', or 'solana'). Auto-detected if omitted.")
+  address: z.string().min(20).describe("Token or contract address (0x... for EVM chains, base58 mint for Solana)"),
+  chain: ALL_CHAINS_ENUM.optional().describe("Optional chain override. Auto-detected if omitted.")
 });
 
 const ScanBatchSchema = z.object({
@@ -70,17 +94,14 @@ const ScanBatchSchema = z.object({
         z.string().min(20),
         z.object({
           address: z.string().min(20),
-          chain: z.enum(["base", "eth", "solana"]).optional()
+          chain: ALL_CHAINS_ENUM.optional()
         })
       ])
     )
     .min(1)
     .max(15)
-    .describe("1 to 15 token addresses or { chain, address } entries across Base, Ethereum, or Solana"),
-  chain: z
-    .enum(["base", "eth", "solana"])
-    .optional()
-    .describe("Default chain for string entries ('base', 'eth', or 'solana')")
+    .describe("1 to 15 token addresses or { chain, address } entries across Base, ETH, Arb, OP, Polygon, BSC, or Solana"),
+  chain: ALL_CHAINS_ENUM.optional().describe("Default chain for string entries")
 });
 
 const DecodeCalldataSchema = z.object({
@@ -88,7 +109,7 @@ const DecodeCalldataSchema = z.object({
     .string()
     .min(10)
     .describe("Hex calldata payload (0x...) or custom revert data to inspect for infinite approvals or drainer selectors"),
-  chain: z.enum(["base", "eth"]).default("base").describe("EVM network ('base' or 'eth')")
+  chain: EVM_CHAINS_ENUM.default("base").describe("EVM network")
 });
 
 const SimulateTxSchema = z.object({
@@ -96,7 +117,7 @@ const SimulateTxSchema = z.object({
   data: z.string().optional().describe("Hex calldata to simulate"),
   from: z.string().optional().describe("Sender wallet address (defaults to connected wallet)"),
   value: z.string().optional().describe("Wei value in decimal or hex"),
-  chain: z.enum(["base", "eth"]).default("base").describe("EVM network ('base' or 'eth')")
+  chain: EVM_CHAINS_ENUM.default("base").describe("EVM network")
 });
 
 function inferChainFromNetwork(
@@ -161,6 +182,7 @@ export class NullClearActionProvider<
   private createClient(walletProvider?: TWalletProvider): NullClearClient {
     return new NullClearClient({
       arbiterUrl: this.config.arbiterUrl,
+      apiKey: this.config.apiKey,
       fetch: this.config.fetch,
       timeoutMs: this.config.timeoutMs,
       signer: resolveWalletSigner(walletProvider, this.config.signer)
@@ -174,6 +196,29 @@ export class NullClearActionProvider<
       this.config.defaultChain || "base"
     );
     const walletAddr = walletProvider?.getAddress?.();
+
+    const preflightGuardAction: AgentKitActionLike = {
+      name: "nullclear_preflight_guard",
+      description:
+        "1-Call Pre-Sign Firewall across 7 chains (Base, ETH, Arb, OP, Polygon, BSC, Solana): recursively unwraps Multicall3/UniversalRouter/Safe calldata, audits EIP-712 Permits, simulates stateful asset diffs & scans all touched tokens. Never sign unless recommendedAgentAction is EXECUTE_SAFE.",
+      schema: GuardTxSchema,
+      invoke: async (rawArgs) => {
+        const args = GuardTxSchema.parse(rawArgs);
+        const from =
+          args.from ||
+          (walletAddr && /^0x[a-fA-F0-9]{40}$/.test(walletAddr) ? walletAddr : undefined);
+        const result = await client.guard({
+          chain: args.chain || walletChain,
+          from,
+          to: args.to,
+          data: args.data,
+          value: args.value,
+          typedData: args.typedData,
+          transaction: args.transaction
+        });
+        return JSON.stringify(result, null, 2);
+      }
+    };
 
     const scanTokenAction: AgentKitActionLike = {
       name: "nullclear_scan_token",
@@ -259,8 +304,12 @@ export class NullClearActionProvider<
       }
     };
 
-    return [scanTokenAction, scanBatchAction, decodeCalldataAction, simulateTxAction];
+    return [preflightGuardAction, scanTokenAction, scanBatchAction, decodeCalldataAction, simulateTxAction];
   }
+}
+
+export function buildAgentKitGuardedRpcUrl(options: NullClearRpcOptions): string {
+  return createNullClearRpcUrl(options);
 }
 
 /**
@@ -282,6 +331,7 @@ export async function assertSafeSwap(
 ): Promise<any> {
   const client = new NullClearClient({
     arbiterUrl: options.arbiterUrl,
+    apiKey: options.apiKey,
     fetch: options.fetch,
     timeoutMs: options.timeoutMs,
     signer: options.signer
@@ -293,7 +343,8 @@ export async function assertSafeSwap(
 
 /**
  * Wraps an AgentKit WalletProvider's `sendTransaction` so every outgoing EVM transaction runs
- * pre-flight NullClear calldata drainer decoding + eth_call simulation BEFORE signing or sending.
+ * NullClear's 1-call Pre-Sign Guard (recursive calldata decode + stateful simulation + touched tokens)
+ * BEFORE signing or sending.
  */
 export function createNullClearWalletGuard<TWallet extends AgentKitWalletProviderLike>(
   walletProvider: TWallet,
@@ -306,6 +357,7 @@ export function createNullClearWalletGuard<TWallet extends AgentKitWalletProvide
 
   const client = new NullClearClient({
     arbiterUrl: config.arbiterUrl,
+    apiKey: config.apiKey,
     fetch: config.fetch,
     timeoutMs: config.timeoutMs,
     signer: resolveWalletSigner(walletProvider, config.signer)
@@ -316,30 +368,19 @@ export function createNullClearWalletGuard<TWallet extends AgentKitWalletProvide
       if (prop === "sendTransaction") {
         return async (tx: { to: `0x${string}`; data?: `0x${string}`; value?: bigint | string }) => {
           const walletChain = inferChainFromNetwork(target.getNetwork?.(), config.defaultChain || "base");
-          const evmChain: "base" | "eth" = walletChain === "eth" ? "eth" : "base";
-
-          if (tx.data && tx.data.length >= 10) {
-            const decoded = await client.decodeCalldata(tx.data, evmChain);
-            assertSafeSecurityVerdict(decoded, {
-              strict: config.strict,
-              targetLabel: tx.to
-            });
-          }
-
-          if (config.simulateBeforeSend !== false) {
-            const from = target.getAddress?.();
-            const sim = await client.simulateTx({
-              to: tx.to,
-              data: tx.data,
-              from: from && /^0x[a-fA-F0-9]{40}$/.test(from) ? from : undefined,
-              value: tx.value !== undefined ? String(tx.value) : undefined,
-              chain: evmChain
-            });
-            assertSafeSecurityVerdict(sim, {
-              strict: config.strict,
-              targetLabel: tx.to
-            });
-          }
+          const evmChain = walletChain === "solana" ? "base" : walletChain;
+          const from = target.getAddress?.();
+          const guardRes = await client.guard({
+            chain: evmChain,
+            from: from && /^0x[a-fA-F0-9]{40}$/.test(from) ? from : undefined,
+            to: tx.to,
+            data: tx.data,
+            value: tx.value !== undefined ? String(tx.value) : undefined
+          });
+          assertSafeSecurityVerdict(guardRes, {
+            strict: config.strict,
+            targetLabel: tx.to
+          });
 
           return sendTransaction.call(target, tx);
         };

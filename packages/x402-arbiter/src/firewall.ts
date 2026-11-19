@@ -1,4 +1,11 @@
-export type ForensicChain = "base" | "eth" | "solana";
+export type ForensicChain =
+  | "base"
+  | "eth"
+  | "arbitrum"
+  | "optimism"
+  | "polygon"
+  | "bsc"
+  | "solana";
 
 export type SecurityRecommendedAction =
   | "EXECUTE_SAFE"
@@ -48,7 +55,7 @@ export function normalizeForensicTarget(
 ): { chain: ForensicChain; address: string } {
   const trimmed = (rawAddress || "").trim();
   if (isEvmAddressFormat(trimmed)) {
-    const evmChain: ForensicChain = defaultChain === "eth" ? "eth" : "base";
+    const evmChain: ForensicChain = defaultChain === "solana" ? "base" : defaultChain;
     return { chain: evmChain, address: trimmed.toLowerCase() };
   }
   if (isSolanaAddressFormat(trimmed)) {
@@ -155,4 +162,84 @@ export function formatBatchVerdictText(batch: any): string {
     : [];
   const header = `[NullClear Batch] ${batch.recommendedAgentAction} (${batch.batchVerdict}) | Evaluated: ${s.uniqueEvaluated ?? "?"} | Safe: ${s.safeCount ?? 0} | Caution: ${s.cautionCount ?? 0} | Critical Traps: ${s.criticalTrapCount ?? 0} | Cache Hits: ${s.cacheHits ?? 0}`;
   return flagged.length > 0 ? `${header} | Flagged: ${flagged.join(", ")}` : header;
+}
+
+export const DEFAULT_NULLCLEAR_API_BASE = "https://api.nullclear.dev";
+
+export interface NullClearRpcOptions {
+  chain: "base" | "eth" | "arbitrum" | "optimism" | "polygon" | "bsc" | "solana";
+  apiKey: string;
+  apiBaseUrl?: string;
+  failMode?: "closed" | "open";
+  timeoutMs?: number;
+  blockCaution?: boolean;
+}
+
+/**
+ * Builds a drop-in Guarded JSON-RPC Safety Rail URL for autonomous AI agents (Coinbase AgentKit,
+ * ElizaOS, Virtuals, Rig, MCP wallets) and Safe / DAO treasuries using viem, ethers, Foundry, or Solana Web3.js.
+ * Read methods pass through via edge KV auth at 0 credits; broadcast methods are audited before mempool broadcast.
+ */
+export function createNullClearRpcUrl(options: NullClearRpcOptions): string {
+  const base = (options.apiBaseUrl || DEFAULT_NULLCLEAR_API_BASE).replace(/\/+$/, "");
+  const params = new URLSearchParams();
+  if (options.failMode) params.set("failMode", options.failMode);
+  if (typeof options.timeoutMs === "number") params.set("timeoutMs", String(Math.floor(options.timeoutMs)));
+  if (options.blockCaution) params.set("blockCaution", "true");
+  const qs = params.toString();
+  return `${base}/rpc/${options.chain}/${options.apiKey}${qs ? `?${qs}` : ""}`;
+}
+
+/**
+ * Lightweight Prepaid Pass client for low-latency (<10ms auth) Guard, Policy Co-Signer,
+ * Watchtower Monitor, and Institutional Due-Diligence calls without per-call x402 overhead.
+ */
+export function createNullClearPassClient(apiKey: string, apiBaseUrl = DEFAULT_NULLCLEAR_API_BASE) {
+  const base = apiBaseUrl.replace(/\/+$/, "");
+  const headers = {
+    "Content-Type": "application/json",
+    Authorization: `Bearer ${apiKey}`
+  };
+  return {
+    rpcUrl: (
+      chain: NullClearRpcOptions["chain"],
+      opts?: { failMode?: "closed" | "open"; blockCaution?: boolean }
+    ) => createNullClearRpcUrl({ chain, apiKey, apiBaseUrl: base, ...opts }),
+    status: async () => {
+      const res = await fetch(`${base}/v1/pass/status`, { headers: { Authorization: `Bearer ${apiKey}` } });
+      return res.json();
+    },
+    guard: async (payload: Record<string, unknown>) => {
+      const res = await fetch(`${base}/v1/bazaar/guard`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify(payload)
+      });
+      return res.json();
+    },
+    dueDiligence: async (chain: string, address: string) => {
+      const res = await fetch(`${base}/v1/bazaar/due-diligence`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ chain, address })
+      });
+      return res.json();
+    },
+    cosign: async (payload: Record<string, unknown>) => {
+      const res = await fetch(`${base}/v1/policy/cosign`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify(payload)
+      });
+      return res.json();
+    },
+    createMonitor: async (payload: Record<string, unknown>) => {
+      const res = await fetch(`${base}/v1/monitors`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify(payload)
+      });
+      return res.json();
+    }
+  };
 }

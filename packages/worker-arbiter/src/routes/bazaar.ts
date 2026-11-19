@@ -1,5 +1,6 @@
 import { Hono, type Context } from "hono";
 import { keccak256, stringToHex, formatEther, formatUnits } from "viem";
+import { privateKeyToAccount } from "viem/accounts";
 import {
   encodeBase64Json,
   decodeBase64Json,
@@ -13,6 +14,8 @@ import { settleTransfer } from "../services/facilitator.js";
 import { validateTargetUrl } from "../services/ssrf-guard.js";
 import {
   scanTokenForensics,
+  inspectContractAbiAndProxy,
+  guardTransactionPreflight,
   normalizeChain,
   isEvmAddress,
   isSolanaAddress,
@@ -26,10 +29,13 @@ import {
 } from "../services/validator.js";
 import { signClearingReceipt, type SignedAttestationReceipt } from "../services/attestation.js";
 import {
+  BAZAAR_FREE_TIER_DAILY_LIMIT,
   buildNullClearMetadata,
   consumeSponsoredFreeCall,
   shouldUseFreeTierForBazaar
 } from "../middleware/free-tier.js";
+import { authenticateAndDebitPass, PASS_TIERS } from "../middleware/pass-auth.js";
+import { handleBuyPassRequest, buildBuyPassBazaarExtension } from "./passes.js";
 import {
   extractPaymentAuthorization,
   attachDualX402Headers
@@ -40,6 +46,45 @@ export const bazaarRouter = new Hono<Env>();
 export const MAX_BATCH_TOKENS = 15;
 const BATCH_CHUNK_SIZE = 5;
 const FORENSIC_CACHE_TTL_MS = 5 * 60 * 1000;
+const FALLBACK_DEV_ARBITER_KEY =
+  "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80" as `0x${string}`;
+
+const BAZAAR_RELATED_ENDPOINTS = {
+  prepaidPass: {
+    method: "POST",
+    url: "https://api.nullclear.dev/v1/pass/buy",
+    priceUsdc: "5.00 - 100.00",
+    description:
+      "Mint an instant Bearer API key (nc_live_...) with 2,000-100,000 low-latency credits + Drop-in Guarded JSON-RPC (/rpc/:chain/:key) + Policy Co-Signer + Watchtower"
+  },
+  preflightGuard: {
+    method: "POST",
+    url: "https://api.nullclear.dev/v1/bazaar/guard",
+    priceUsdc: "0.005",
+    description:
+      "1-call pre-sign firewall: nested Multicall3/Universal Router/Safe decode, EIP-712 Permit audit, Solana wire tx & stateful eth_simulateV1 asset diffs"
+  },
+  dueDiligence: {
+    method: "POST",
+    url: "https://api.nullclear.dev/v1/bazaar/due-diligence",
+    priceUsdc: "0.10",
+    description:
+      "Institutional 7-chain due-diligence dossier (forensics + proxy/ABI/CFG + deployer/history synthesis + EIP-712 signed clearance certificate)"
+  },
+  contractInspect: {
+    method: "GET",
+    url: "https://api.nullclear.dev/v1/bazaar/inspect",
+    priceUsdc: "0.005",
+    description:
+      "7-chain proxy resolution (EIP-1967/1822/Beacon/Diamond/Safe), Sourcify v2 + batch OpenChain ABI & bytecode CFG risk"
+  },
+  batchScan: {
+    method: "POST",
+    url: "https://api.nullclear.dev/v1/bazaar/scan-batch",
+    priceUsdc: "0.025",
+    description: "Scan up to 15 tokens across 7 chains (Base/ETH/Arb/OP/Poly/BSC/Solana) in 1 call"
+  }
+} as const;
 
 function sanitizeParamString(val: unknown, maxLen = 256): string | undefined {
   if (typeof val !== "string") return undefined;
@@ -90,7 +135,7 @@ function normalizeBatchTokenEntry(
 
   const requestedChain = normalizeChain(rawChain);
   if (isEvmAddress(rawAddr)) {
-    const chain: SupportedForensicChain = requestedChain === "eth" ? "eth" : "base";
+    const chain: SupportedForensicChain = requestedChain === "solana" ? "base" : requestedChain;
     return { target: { chain, address: rawAddr.toLowerCase() } };
   }
   if (isSolanaAddress(rawAddr)) {
@@ -264,6 +309,86 @@ async function extractBazaarClearingParams(
     };
   }
 
+  if (resourcePath === "/v1/bazaar/guard") {
+    const rawTo = sanitizeParamString(c.req.query("to") || body.to, 128);
+    const rawTx = sanitizeParamString(c.req.query("transaction") || body.transaction, 128);
+    const rawChain = sanitizeParamString(
+      c.req.query("chain") || c.req.query("network") || body.chain || body.network,
+      32
+    );
+    const typedContract = sanitizeParamString(body.typedData?.domain?.verifyingContract, 128);
+    const isBundle = Array.isArray(body.transactions) && body.transactions.length > 0;
+    const inferredChain = rawTx && !rawTo && !body.typedData
+      ? "solana"
+      : normalizeChain(rawChain || "base");
+    const targetAddr = rawTo
+      ? (isEvmAddress(rawTo) ? rawTo.toLowerCase() : rawTo)
+      : typedContract
+        ? (isEvmAddress(typedContract) ? typedContract.toLowerCase() : typedContract)
+        : rawTx
+          ? "solana:wire"
+          : isBundle
+            ? `bundle:${body.transactions.length}`
+            : "guard:empty";
+    const queryType = body.typedData
+      ? "guard:eip712"
+      : rawTx && !rawTo
+        ? "guard:solana"
+        : isBundle
+          ? `guard:bundle:${body.transactions.length}`
+          : rawTo
+            ? "guard:evm"
+            : "guard:empty";
+    return {
+      targetAddress: targetAddr,
+      targetChain: inferredChain,
+      queryType
+    };
+  }
+
+  if (resourcePath === "/v1/bazaar/inspect") {
+    const rawAddr = sanitizeParamString(
+      c.req.query("address") ||
+        c.req.query("contract") ||
+        body.address ||
+        body.contract,
+      128
+    );
+    const rawChain = sanitizeParamString(
+      c.req.query("chain") || c.req.query("network") || body.chain || body.network,
+      32
+    );
+    const addr = rawAddr || "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913";
+    return {
+      targetAddress: isEvmAddress(addr) ? addr.toLowerCase() : addr,
+      targetChain: normalizeChain(rawChain || "base"),
+      queryType: rawAddr ? "inspect:explicit" : "inspect:default"
+    };
+  }
+
+  if (resourcePath === "/v1/bazaar/due-diligence") {
+    const rawAddr = sanitizeParamString(
+      c.req.query("address") ||
+        c.req.query("token") ||
+        c.req.query("tokenAddress") ||
+        body.address ||
+        body.token ||
+        body.tokenAddress,
+      128
+    );
+    const rawChain = sanitizeParamString(
+      c.req.query("chain") || c.req.query("network") || body.chain || body.network,
+      32
+    );
+    const addr = rawAddr || "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913";
+    const chain = isSolanaAddress(addr) && !isEvmAddress(addr) ? "solana" : normalizeChain(rawChain || "base");
+    return {
+      targetAddress: isEvmAddress(addr) ? addr.toLowerCase() : addr,
+      targetChain: chain,
+      queryType: rawAddr ? "due-diligence:explicit" : "due-diligence:default"
+    };
+  }
+
   if (resourcePath === "/v1/bazaar/audit" || resourcePath === "/v1/bazaar/verify") {
     const rawId = sanitizeParamString(c.req.query("agentId") || body.agentId, 64);
     const slug = resourcePath.endsWith("/audit") ? "audit" : "verify";
@@ -357,12 +482,13 @@ const BAZAAR_MARKET_ORACLE_EXTENSION = {
 const BAZAAR_TOKEN_SECURITY_EXTENSION = {
   discoverable: true,
   description:
-    "Live Base Mainnet (eip155:8453) ERC-20 token security, contract bytecode verification, liquidity & honeypot risk scanner for AI trading agents.",
+    "7-chain (Base, Ethereum, Arbitrum, Optimism, Polygon, BSC, Solana + Token-2022) token security, proxy resolution, buy/sell tax, liquidity & honeypot scanner for AI trading agents.",
   info: {
     input: {
       type: "http",
       method: "GET",
       queryParams: {
+        chain: "base",
         address: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
       }
     },
@@ -370,6 +496,7 @@ const BAZAAR_TOKEN_SECURITY_EXTENSION = {
       type: "json",
       example: {
         tokenAddress: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+        chain: "base",
         symbol: "USDC",
         name: "USD Coin",
         decimals: 6,
@@ -382,6 +509,7 @@ const BAZAAR_TOKEN_SECURITY_EXTENSION = {
         x402Compatible: true,
         securityScore: 99,
         riskLevel: "low",
+        recommendedAgentAction: "EXECUTE_SAFE",
         timestamp: 1729045678901
       }
     }
@@ -401,9 +529,13 @@ const BAZAAR_TOKEN_SECURITY_EXTENSION = {
           queryParams: {
             type: "object",
             properties: {
+              chain: {
+                type: "string",
+                description: "Target chain: base, eth, arbitrum, optimism, polygon, bsc, or solana"
+              },
               address: {
                 type: "string",
-                description: "Base ERC-20 token contract address"
+                description: "EVM ERC-20 contract address or Solana SPL/Token-2022 mint address"
               }
             }
           }
@@ -528,7 +660,7 @@ const BAZAAR_WALLET_RISK_EXTENSION = {
 const BAZAAR_VERIFIED_FETCH_EXTENSION = {
   discoverable: true,
   description:
-    "Schema-verified HTTP fetch & anti-hallucination proxy: fetches any public JSON/web URL, enforces numeric invariants and LLM-refusal guards, and returns attested data.",
+    "Anti-hallucination HTTP fetch & invariant proxy (GET or POST with JSON Schema + numeric invariants): fetches any public JSON/web URL, blocks LLM refusals, verifies deterministic numeric bounds, and returns signed Keccak256 attestations.",
   info: {
     input: {
       type: "http",
@@ -680,7 +812,7 @@ const BAZAAR_AUDIT_EXTENSION = {
 const BAZAAR_SCAN_BATCH_EXTENSION = {
   discoverable: true,
   description:
-    "Multi-chain batch token pre-flight security firewall (Base, Ethereum, Solana; up to 15 unique tokens per $0.025 call). Checks D1 cache first, disassembles EVM bytecode, detects honeypots/taxes/rugs, and returns an aggregated EXECUTE_SAFE or ABORT_CRITICAL_TRAP verdict.",
+    "7-chain batch token pre-flight security firewall (Base, Ethereum, Arbitrum, Optimism, Polygon, BSC, Solana + Token-2022; up to 15 unique tokens per $0.025 call). Checks D1 cache first, disassembles EVM bytecode, detects honeypots/taxes/rugs, and returns an aggregated EXECUTE_SAFE or ABORT_CRITICAL_TRAP verdict.",
   info: {
     input: {
       type: "http",
@@ -847,6 +979,270 @@ const BAZAAR_VERIFY_EXTENSION = {
   }
 };
 
+// 8. 1-Call Pre-Sign Firewall Extension Schema ($0.005 USDC / 5000 atomic)
+const BAZAAR_GUARD_EXTENSION = {
+  discoverable: true,
+  description:
+    "1-Call Pre-Sign Transaction Firewall across 7 chains (Base, Ethereum, Arbitrum, Optimism, Polygon, BSC, Solana): recursively unwraps Multicall3/Universal Router/Safe calldata, audits EIP-712 Permits & Seaport signatures, parses Solana wire txs, runs stateful eth_simulateV1/Solana simulation with Transfer/Approval net asset diffs, and scans touched tokens for honeypots & Token-2022 traps.",
+  info: {
+    input: {
+      type: "http",
+      method: "POST",
+      bodyType: "json",
+      body: {
+        chain: "base",
+        from: "0xfd74fF802EA0E735514C070AF04E0D6528deD145",
+        to: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+        data: "0x095ea7b3000000000000000000000000deadbeefdeadbeefdeadbeefdeadbeefdeadbeefffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+        value: "0x0"
+      }
+    },
+    output: {
+      type: "json",
+      example: {
+        guardType: "EVM_TX_GUARD",
+        chain: "base",
+        recommendedAgentAction: "ABORT_DRAINER_APPROVAL",
+        riskScore: 10,
+        riskLevel: "CRITICAL",
+        alerts: ["Unlimited ERC-20 approve() to unverified spender 0xdeadbeef..."],
+        assetDiffs: [],
+        touchedTokenVerdicts: [
+          {
+            address: "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913",
+            symbol: "USDC",
+            verdict: "VERIFIED CLEAR"
+          }
+        ],
+        attestation: "0xabc123",
+        timestamp: 1729045678901
+      }
+    }
+  },
+  schema: {
+    $schema: "https://json-schema.org/draft/2020-12/schema",
+    type: "object",
+    required: ["input"],
+    properties: {
+      input: {
+        type: "object",
+        required: ["type", "method", "bodyType", "body"],
+        additionalProperties: false,
+        properties: {
+          type: { type: "string", const: "http" },
+          method: { type: "string", enum: ["POST", "PUT", "PATCH"] },
+          bodyType: { type: "string", enum: ["json", "form-data", "text"] },
+          body: {
+            type: "object",
+            properties: {
+              chain: {
+                type: "string",
+                description: "Target chain: base, eth, arbitrum, optimism, polygon, bsc, or solana"
+              },
+              from: { type: "string", description: "Sender wallet address (EVM)" },
+              to: { type: "string", description: "Target contract address (EVM)" },
+              data: { type: "string", description: "0x-prefixed hex calldata (supports nested Multicall3/Universal Router/Safe)" },
+              value: { type: "string", description: "Optional wei value (hex or decimal)" },
+              typedData: { type: "object", description: "Optional EIP-712 typedData JSON for Permit/Permit2/Seaport audit" },
+              transaction: { type: "string", description: "Optional Base64-encoded Solana wire transaction" },
+              transactions: { type: "array", description: "Optional multi-tx EVM bundle for eth_simulateV1" },
+              stateOverrides: { type: "object", description: "Optional EVM stateOverrides map" }
+            }
+          }
+        }
+      },
+      output: {
+        type: "object",
+        required: ["type"],
+        properties: {
+          type: { type: "string", const: "json" },
+          example: {
+            type: "object",
+            required: ["guardType", "recommendedAgentAction", "riskScore", "riskLevel", "alerts"],
+            properties: {
+              guardType: { type: "string" },
+              chain: { type: "string" },
+              recommendedAgentAction: { type: "string" },
+              riskScore: { type: "integer" },
+              riskLevel: { type: "string" },
+              alerts: { type: "array", items: { type: "string" } },
+              assetDiffs: { type: "array" },
+              touchedTokenVerdicts: { type: "array" },
+              attestation: { type: "string" },
+              timestamp: { type: "integer" }
+            }
+          }
+        }
+      }
+    }
+  }
+};
+
+// 9. Contract Proxy, ABI & Bytecode CFG Inspector Extension Schema ($0.005 USDC / 5000 atomic)
+const BAZAAR_INSPECT_EXTENSION = {
+  discoverable: true,
+  description:
+    "Multi-chain Smart Contract Proxy, ABI & Bytecode CFG Inspector (Base, Ethereum, Arbitrum, Optimism, Polygon, BSC): resolves EIP-1967/1822/Beacon/Diamond/Safe proxies, extracts PUSH4 selectors via batch OpenChain + Sourcify v2, and flags SELFDESTRUCT/DELEGATECALL/tx.origin risks.",
+  info: {
+    input: {
+      type: "http",
+      method: "GET",
+      queryParams: {
+        chain: "base",
+        address: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
+      }
+    },
+    output: {
+      type: "json",
+      example: {
+        chain: "base",
+        address: "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913",
+        isContract: true,
+        isProxy: true,
+        proxyType: "EIP-1967",
+        implementationAddress: "0x2ce6311ddae708829bc0784c967b7d87d19fd789",
+        sourcifyVerified: true,
+        functionCount: 38,
+        attestation: "0xabc123",
+        timestamp: 1729045678901
+      }
+    }
+  },
+  schema: {
+    $schema: "https://json-schema.org/draft/2020-12/schema",
+    type: "object",
+    required: ["input"],
+    properties: {
+      input: {
+        type: "object",
+        required: ["type", "method"],
+        additionalProperties: false,
+        properties: {
+          type: { type: "string", const: "http" },
+          method: { type: "string", enum: ["GET", "HEAD", "DELETE"] },
+          queryParams: {
+            type: "object",
+            properties: {
+              chain: {
+                type: "string",
+                description: "EVM chain: base, eth, arbitrum, optimism, polygon, or bsc"
+              },
+              address: {
+                type: "string",
+                description: "0x-prefixed smart contract address to inspect"
+              }
+            }
+          }
+        }
+      },
+      output: {
+        type: "object",
+        required: ["type"],
+        properties: {
+          type: { type: "string", const: "json" },
+          example: {
+            type: "object",
+            required: ["chain", "address", "isContract", "isProxy"],
+            properties: {
+              chain: { type: "string" },
+              address: { type: "string" },
+              isContract: { type: "boolean" },
+              isProxy: { type: "boolean" },
+              proxyType: { type: "string" },
+              implementationAddress: { type: "string" },
+              sourcifyVerified: { type: "boolean" },
+              attestation: { type: "string" },
+              timestamp: { type: "integer" }
+            }
+          }
+        }
+      }
+    }
+  }
+};
+
+// 10. Institutional Due-Diligence Dossier Extension Schema ($0.10 USDC / 100000 atomic)
+const BAZAAR_DUE_DILIGENCE_EXTENSION = {
+  discoverable: true,
+  description:
+    "Institutional 7-chain Token & Contract Due-Diligence Dossier ($0.10 USDC or 10 prepaid credits): combines multi-oracle honeypot/tax/liquidity forensics, EIP-1967/1822/Beacon/Diamond/Safe proxy + Sourcify v2 + batch OpenChain ABI & bytecode CFG risk, D1 historical risk synthesis, and an on-chain-verifiable EIP-712 signed Clearance Certificate.",
+  info: {
+    input: {
+      type: "http",
+      method: "POST",
+      bodyType: "json",
+      body: {
+        chain: "base",
+        address: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
+      }
+    },
+    output: {
+      type: "json",
+      example: {
+        chain: "base",
+        address: "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913",
+        symbol: "USDC",
+        verdict: "VERIFIED CLEAR",
+        score: 99,
+        recommendedAgentAction: "EXECUTE_SAFE",
+        riskBreakdown: {
+          honeypotRisk: "NONE",
+          proxyUpgradeRisk: "CONTROLLED_VERIFIED",
+          bytecodeCfgRisk: "LOW",
+          liquidityDepthTier: "INSTITUTIONAL"
+        },
+        clearanceCertificate: {
+          signer: "0xfd74fF802EA0E735514C070AF04E0D6528deD145",
+          signature: "0x...",
+          issuedAt: 1729045678,
+          expiresAt: 1729049278
+        }
+      }
+    }
+  },
+  schema: {
+    $schema: "https://json-schema.org/draft/2020-12/schema",
+    type: "object",
+    required: ["input"],
+    properties: {
+      input: {
+        type: "object",
+        required: ["type", "method", "bodyType", "body"],
+        additionalProperties: false,
+        properties: {
+          type: { type: "string", const: "http" },
+          method: { type: "string", enum: ["POST", "PUT", "PATCH"] },
+          bodyType: { type: "string", enum: ["json"] },
+          body: {
+            type: "object",
+            properties: {
+              chain: {
+                type: "string",
+                description: "base, eth, arbitrum, optimism, polygon, bsc, or solana"
+              },
+              address: {
+                type: "string",
+                description: "EVM contract address or Solana SPL/Token-2022 mint"
+              }
+            }
+          }
+        }
+      },
+      output: {
+        type: "object",
+        required: ["type"],
+        properties: {
+          type: { type: "string", const: "json" },
+          example: {
+            type: "object",
+            required: ["chain", "address", "verdict", "score", "recommendedAgentAction", "clearanceCertificate"]
+          }
+        }
+      }
+    }
+  }
+};
+
 function createPaymentRequiredHeader(
   resourcePath: string,
   description: string,
@@ -888,8 +1284,9 @@ interface SettlementResult {
   settled: boolean;
   payer?: `0x${string}`;
   transaction?: `0x${string}`;
-  tier?: "free-trial" | "paid" | "escrow";
+  tier?: "free-trial" | "paid" | "escrow" | "prepaid-pass";
   freeTrialRemaining?: number;
+  creditsRemaining?: number;
   executionReceipt?: SignedAttestationReceipt;
   errorResponse?: Response;
 }
@@ -900,11 +1297,59 @@ async function handleBazaarPayment(
   description: string,
   bazaarExtension: any,
   amountAtomic = "10000",
-  options?: { allowFreeTier?: boolean }
+  options?: { allowFreeTier?: boolean; passCreditCost?: number }
 ): Promise<SettlementResult> {
   const numericAmount = Number(amountAtomic);
   const priceUsd = (numericAmount / 1_000_000).toFixed(numericAmount % 10000 === 0 ? 2 : 3);
   const allowFreeTier = options?.allowFreeTier ?? true;
+  const passCreditCost = options?.passCreditCost ?? Math.max(1, Math.round(numericAmount / 5000));
+
+  // Always expose x402 payment challenge, Prepaid Pass, and Free Tier headers
+  c.header(
+    "Access-Control-Expose-Headers",
+    "PAYMENT-REQUIRED, Payment-Required, X-Payment-Required, X-Payment-Response, Pay-To, PAYMENT-RESPONSE, X-NullClear-Attestation, X-NullClear-Verified, x-nullclear-tier, x-nullclear-pass-tier, x-nullclear-credits-remaining, x-nullclear-remaining-free-calls"
+  );
+  c.header("Pay-To", NULLCLEAR_TREASURY_ADDRESS);
+
+  // Fast Path (<5ms): NullClear Prepaid Pass Bearer key (`Authorization: Bearer nc_live_...` or `X-NullClear-Key`)
+  const passAuth = await authenticateAndDebitPass(c, passCreditCost);
+  if (passAuth.hasKey) {
+    if (passAuth.authenticated && passAuth.pass) {
+      const responseHash = keccak256(
+        stringToHex(`prepaid_pass:${passAuth.pass.id}:${resourcePath}:${Date.now()}`)
+      );
+      return {
+        settled: true,
+        tier: "prepaid-pass",
+        creditsRemaining: passAuth.creditsRemaining,
+        transaction: responseHash,
+        payer: passAuth.pass.ownerAddress as `0x${string}`
+      };
+    }
+    const paymentReqHeader = createPaymentRequiredHeader(
+      resourcePath,
+      description,
+      bazaarExtension,
+      amountAtomic
+    );
+    c.header("PAYMENT-REQUIRED", paymentReqHeader);
+    c.header("X-Payment-Required", paymentReqHeader);
+    return {
+      settled: false,
+      errorResponse: c.json(
+        {
+          error: passAuth.pass ? "Payment Required" : "Unauthorized",
+          message: passAuth.errorReason || "Invalid or exhausted Prepaid Pass key",
+          prepaidPassOption: {
+            buyUrl: "POST https://api.nullclear.dev/v1/pass/buy",
+            tiers: "starter ($5 / 2,000 credits), pro ($25 / 15,000 credits), scale ($100 / 100,000 credits)"
+          }
+        },
+        passAuth.pass ? 402 : 401
+      )
+    };
+  }
+
   const rawPaymentHeader =
     c.req.header("payment-signature") ||
     c.req.header("x-payment") ||
@@ -921,16 +1366,10 @@ async function handleBazaarPayment(
     c.req.header("x-nullclear-escrow-hold") === "true" ||
     c.req.header("x-nullclear-verified-escrow");
 
-  // Always expose x402 payment challenge and Free Tier headers
-  c.header(
-    "Access-Control-Expose-Headers",
-    "PAYMENT-REQUIRED, Payment-Required, X-Payment-Required, X-Payment-Response, Pay-To, PAYMENT-RESPONSE, X-NullClear-Attestation, X-NullClear-Verified, x-nullclear-tier, x-nullclear-remaining-free-calls"
-  );
-  c.header("Pay-To", NULLCLEAR_TREASURY_ADDRESS);
-
-  // Sponsored Free Tier: up to 10 free calls per day per client IP / MCP session without requiring X-Payment
+  // Sponsored Free Tier: tightened to 2 free trial calls/day per IP/session on Bazaar routes
+  // so exploratory callers can verify the response format and seamlessly upgrade to $0.005 x402
   if (allowFreeTier && !paymentHeader && !isEscrowPassThrough && shouldUseFreeTierForBazaar(c)) {
-    const freeTier = await consumeSponsoredFreeCall(c);
+    const freeTier = await consumeSponsoredFreeCall(c, BAZAAR_FREE_TIER_DAILY_LIMIT);
     if (freeTier.allowed) {
       const clearingId = `free_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
       const responseHash = keccak256(stringToHex(`free_trial:${resourcePath}:${Date.now()}`));
@@ -957,7 +1396,7 @@ async function handleBazaarPayment(
       };
     }
 
-    // Free tier exhausted (10/10 daily calls used) -> return 402 guiding to NULLCLEAR_PRIVATE_KEY
+    // Free tier exhausted -> return 402 guiding to NULLCLEAR_PRIVATE_KEY / X-Payment
     const paymentReqHeader = createPaymentRequiredHeader(
       resourcePath,
       description,
@@ -972,7 +1411,7 @@ async function handleBazaarPayment(
         {
           error: "Payment Required",
           message:
-            `Daily Sponsored Free Tier limit (10/10 free calls) reached. Configure NULLCLEAR_PRIVATE_KEY or include an X-Payment EIP-3009 header ($${priceUsd} USDC on Base Mainnet) to continue.`,
+            `Daily Bazaar Sponsored Free Trial limit (${BAZAAR_FREE_TIER_DAILY_LIMIT}/${BAZAAR_FREE_TIER_DAILY_LIMIT} free calls) reached. Configure NULLCLEAR_PRIVATE_KEY or include an X-Payment EIP-3009 header ($${priceUsd} USDC on Base Mainnet) to continue.`,
           tier: "free-trial-exhausted",
           freeTrialRemaining: 0,
           x402Version: 2,
@@ -1332,9 +1771,10 @@ bazaarRouter.all("/market-oracle", async (c) => {
     settlementTransaction: result.transaction,
     timestamp,
     executionReceipt: result.executionReceipt,
+    relatedEndpoints: BAZAAR_RELATED_ENDPOINTS,
     _nullclear: buildNullClearMetadata({
       verified: true,
-      freeTrialRemaining: result.freeTrialRemaining ?? 9
+      freeTrialRemaining: result.freeTrialRemaining ?? 0
     })
   });
 });
@@ -1344,7 +1784,7 @@ bazaarRouter.all("/token-security", async (c) => {
   const result = await handleBazaarPayment(
     c,
     "/v1/bazaar/token-security",
-    "Live Base Mainnet (eip155:8453) ERC-20 token security, contract bytecode verification, liquidity & honeypot risk scanner for AI trading agents.",
+    BAZAAR_TOKEN_SECURITY_EXTENSION.description,
     BAZAAR_TOKEN_SECURITY_EXTENSION,
     "5000"
   );
@@ -1386,12 +1826,16 @@ bazaarRouter.all("/token-security", async (c) => {
   const isEthUsdc =
     scan.chain === "eth" && scan.address === "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48";
   const decimals = scan.chain === "solana" ? 9 : isBaseUsdc || isEthUsdc ? 6 : 18;
-  const networkId =
-    scan.chain === "solana"
-      ? "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp"
-      : scan.chain === "eth"
-        ? "eip155:1"
-        : "eip155:8453";
+  const networkIdMap: Record<SupportedForensicChain, string> = {
+    base: "eip155:8453",
+    eth: "eip155:1",
+    arbitrum: "eip155:42161",
+    optimism: "eip155:10",
+    polygon: "eip155:137",
+    bsc: "eip155:56",
+    solana: "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp"
+  };
+  const networkId = networkIdMap[scan.chain] || "eip155:8453";
   const riskLevel =
     scan.verdict === "VERIFIED CLEAR"
       ? "low"
@@ -1432,9 +1876,10 @@ bazaarRouter.all("/token-security", async (c) => {
     settlementTransaction: result.transaction,
     timestamp,
     executionReceipt: result.executionReceipt,
+    relatedEndpoints: BAZAAR_RELATED_ENDPOINTS,
     _nullclear: buildNullClearMetadata({
       verified: true,
-      freeTrialRemaining: result.freeTrialRemaining ?? 9
+      freeTrialRemaining: result.freeTrialRemaining ?? 0
     })
   });
 });
@@ -1628,9 +2073,10 @@ bazaarRouter.all("/scan-batch", async (c) => {
     settlementTransaction: result.transaction,
     timestamp,
     executionReceipt: result.executionReceipt,
+    relatedEndpoints: BAZAAR_RELATED_ENDPOINTS,
     _nullclear: buildNullClearMetadata({
       verified: true,
-      freeTrialRemaining: result.freeTrialRemaining ?? 9
+      freeTrialRemaining: result.freeTrialRemaining ?? 0
     })
   });
 });
@@ -1749,9 +2195,10 @@ bazaarRouter.all("/wallet-risk", async (c) => {
     settlementTransaction: result.transaction,
     timestamp,
     executionReceipt: result.executionReceipt,
+    relatedEndpoints: BAZAAR_RELATED_ENDPOINTS,
     _nullclear: buildNullClearMetadata({
       verified: true,
-      freeTrialRemaining: result.freeTrialRemaining ?? 9
+      freeTrialRemaining: result.freeTrialRemaining ?? 0
     })
   });
 });
@@ -1761,7 +2208,7 @@ bazaarRouter.all("/verified-fetch", async (c) => {
   const result = await handleBazaarPayment(
     c,
     "/v1/bazaar/verified-fetch",
-    "Schema-verified HTTP fetch & anti-hallucination proxy: fetches any public JSON/web URL, enforces numeric invariants and LLM-refusal guards, and returns attested data.",
+    BAZAAR_VERIFIED_FETCH_EXTENSION.description,
     BAZAAR_VERIFIED_FETCH_EXTENSION,
     "5000"
   );
@@ -1862,9 +2309,10 @@ bazaarRouter.all("/verified-fetch", async (c) => {
     settlementTransaction: result.transaction,
     timestamp,
     executionReceipt: result.executionReceipt,
+    relatedEndpoints: BAZAAR_RELATED_ENDPOINTS,
     _nullclear: buildNullClearMetadata({
       verified: true,
-      freeTrialRemaining: result.freeTrialRemaining ?? 9
+      freeTrialRemaining: result.freeTrialRemaining ?? 0
     })
   });
 });
@@ -1916,9 +2364,10 @@ bazaarRouter.all("/audit", async (c) => {
     arbiterAddress: scoreResult.arbiterAddress,
     timestamp,
     executionReceipt: result.executionReceipt,
+    relatedEndpoints: BAZAAR_RELATED_ENDPOINTS,
     _nullclear: buildNullClearMetadata({
       verified: true,
-      freeTrialRemaining: result.freeTrialRemaining ?? 9
+      freeTrialRemaining: result.freeTrialRemaining ?? 0
     })
   });
 });
@@ -1963,12 +2412,292 @@ bazaarRouter.all("/verify", async (c) => {
     ],
     timestamp,
     executionReceipt: result.executionReceipt,
+    relatedEndpoints: BAZAAR_RELATED_ENDPOINTS,
     _nullclear: buildNullClearMetadata({
       verified: true,
-      freeTrialRemaining: result.freeTrialRemaining ?? 9
+      freeTrialRemaining: result.freeTrialRemaining ?? 0
     })
   });
 });
+
+// 6b. POST & GET /v1/bazaar/guard ($0.005 USDC / 5000 atomic — 1-Call Pre-Sign Firewall)
+bazaarRouter.all("/guard", async (c) => {
+  const result = await handleBazaarPayment(
+    c,
+    "/v1/bazaar/guard",
+    BAZAAR_GUARD_EXTENSION.description,
+    BAZAAR_GUARD_EXTENSION,
+    "5000",
+    { allowFreeTier: false }
+  );
+  if (!result.settled) {
+    return result.errorResponse!;
+  }
+
+  const body = await parseJsonBodySafe(c);
+  const to = sanitizeParamString(body.to || c.req.query("to"), 128);
+  const from = sanitizeParamString(body.from || c.req.query("from"), 128);
+  const data = sanitizeParamString(body.data || c.req.query("data"), 32768);
+  const value = sanitizeParamString(body.value || c.req.query("value"), 128);
+  const transaction = sanitizeParamString(body.transaction || c.req.query("transaction"), 32768);
+  const typedData = body.typedData;
+  const transactions = Array.isArray(body.transactions) ? body.transactions : undefined;
+  const stateOverrides = body.stateOverrides;
+  const chain =
+    sanitizeParamString(body.chain || body.network || c.req.query("chain") || c.req.query("network"), 32) ||
+    (transaction && !to && !typedData ? "solana" : "base");
+
+  if (!to && !typedData && !transaction && (!transactions || transactions.length === 0)) {
+    return c.json(
+      {
+        error: "Invalid guard payload",
+        message:
+          "Provide EVM tx ({ chain, from, to, data, value }), EIP-712 { typedData }, or Solana { chain: 'solana', transaction }.",
+        example: BAZAAR_GUARD_EXTENSION.info.input.body
+      },
+      400
+    );
+  }
+
+  const guardResult = await guardTransactionPreflight(
+    {
+      chain,
+      from,
+      to,
+      data,
+      value,
+      transactions,
+      stateOverrides,
+      typedData,
+      transaction
+    },
+    c.env
+  );
+
+  const attestation = guardResult.provenance.attestationSha256;
+  c.header("X-NullClear-Attestation", attestation);
+
+  return c.json({
+    ...guardResult,
+    attestation,
+    settlementTransaction: result.transaction,
+    timestamp: Date.now(),
+    executionReceipt: result.executionReceipt,
+    relatedEndpoints: BAZAAR_RELATED_ENDPOINTS,
+    _nullclear: buildNullClearMetadata({
+      verified: true,
+      freeTrialRemaining: result.freeTrialRemaining ?? 0
+    })
+  });
+});
+
+// 6c. GET & POST /v1/bazaar/inspect ($0.005 USDC / 5000 atomic — Multi-Chain Proxy, ABI & CFG Inspector)
+bazaarRouter.all("/inspect", async (c) => {
+  const result = await handleBazaarPayment(
+    c,
+    "/v1/bazaar/inspect",
+    BAZAAR_INSPECT_EXTENSION.description,
+    BAZAAR_INSPECT_EXTENSION,
+    "5000",
+    { allowFreeTier: false }
+  );
+  if (!result.settled) {
+    return result.errorResponse!;
+  }
+
+  const body = await parseJsonBodySafe(c);
+  const rawAddr = sanitizeParamString(
+    c.req.query("address") || c.req.query("contract") || body.address || body.contract,
+    128
+  );
+  const rawChain = sanitizeParamString(
+    c.req.query("chain") || c.req.query("network") || body.chain || body.network,
+    32
+  );
+
+  if (rawAddr && !isEvmAddress(rawAddr)) {
+    return c.json(
+      {
+        error: "Invalid EVM contract address",
+        message: "Provide a valid 0x-prefixed EVM smart contract address (base, eth, arbitrum, optimism, polygon, or bsc)."
+      },
+      400
+    );
+  }
+
+  const targetAddress = rawAddr || "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913";
+  const chain = normalizeChain(rawChain || "base");
+  const inspection = await inspectContractAbiAndProxy(chain, targetAddress, c.env);
+
+  const attestation = inspection.provenance.attestationSha256;
+  c.header("X-NullClear-Attestation", attestation);
+
+  return c.json({
+    ...inspection,
+    attestation,
+    settlementTransaction: result.transaction,
+    timestamp: Date.now(),
+    executionReceipt: result.executionReceipt,
+    relatedEndpoints: BAZAAR_RELATED_ENDPOINTS,
+    _nullclear: buildNullClearMetadata({
+      verified: true,
+      freeTrialRemaining: result.freeTrialRemaining ?? 0
+    })
+  });
+});
+
+// 6d. POST & GET /v1/bazaar/due-diligence ($0.10 USDC / 100000 atomic or 10 Prepaid Pass credits)
+bazaarRouter.all("/due-diligence", async (c) => {
+  const result = await handleBazaarPayment(
+    c,
+    "/v1/bazaar/due-diligence",
+    BAZAAR_DUE_DILIGENCE_EXTENSION.description,
+    BAZAAR_DUE_DILIGENCE_EXTENSION,
+    "100000",
+    { allowFreeTier: false, passCreditCost: 10 }
+  );
+  if (!result.settled) {
+    return result.errorResponse!;
+  }
+
+  const body = await parseJsonBodySafe(c);
+  const rawAddr = sanitizeParamString(
+    c.req.query("address") ||
+      c.req.query("token") ||
+      c.req.query("tokenAddress") ||
+      body.address ||
+      body.token ||
+      body.tokenAddress,
+    128
+  );
+  const rawChain = sanitizeParamString(
+    c.req.query("chain") || c.req.query("network") || body.chain || body.network,
+    32
+  );
+
+  if (rawAddr && !isEvmAddress(rawAddr) && !isSolanaAddress(rawAddr)) {
+    return c.json(
+      {
+        error: "Invalid token or contract address",
+        message: "Provide a valid EVM (0x...) or Solana base58 address."
+      },
+      400
+    );
+  }
+
+  const targetAddress = rawAddr || "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913";
+  const inferredChain =
+    isSolanaAddress(targetAddress) && !isEvmAddress(targetAddress)
+      ? "solana"
+      : normalizeChain(rawChain || "base");
+
+  const store = getArbiterStore(c.env);
+  const [scan, inspection, priorScan] = await Promise.all([
+    scanTokenForensics(inferredChain, targetAddress, c.env),
+    inferredChain !== "solana" && isEvmAddress(targetAddress)
+      ? inspectContractAbiAndProxy(inferredChain, targetAddress, c.env).catch(() => null)
+      : Promise.resolve(null),
+    store.getForensicScan(inferredChain, targetAddress).catch(() => null)
+  ]);
+
+  const liquidityUsd = Number(scan.evidence.liquidityUsd || 0);
+  const liquidityDepthTier =
+    liquidityUsd >= 500_000
+      ? "INSTITUTIONAL"
+      : liquidityUsd >= 50_000
+        ? "MODERATE"
+        : liquidityUsd >= 5_000
+          ? "THIN"
+          : "CRITICAL_LOW";
+  const cfgRisks = (inspection as any)?.bytecodeRisks || (scan.evidence as any)?.bytecodeRisks || {};
+  const hasHighCfgRisk = Boolean(
+    cfgRisks?.hasUnguardedSelfDestruct || cfgRisks?.hasMutableDelegateCall || cfgRisks?.hasTxOriginAuth
+  );
+  const isProxy = Boolean(inspection?.isProxy ?? scan.evidence.isProxy);
+  const proxyUpgradeRisk = !isProxy
+    ? "IMMUTABLE"
+    : Boolean((inspection as any)?.sourcifyVerified || (inspection as any)?.sourcify?.verified) ||
+        scan.verdict === "VERIFIED CLEAR"
+      ? "CONTROLLED_VERIFIED"
+      : "UNVERIFIED_UPGRADEABLE";
+
+  const issuedAt = Math.floor(Date.now() / 1000);
+  const expiresAt = issuedAt + 3600;
+  const certPayload = {
+    protocol: "NullClear Institutional Due-Diligence V1",
+    chain: scan.chain,
+    address: scan.address,
+    symbol: scan.symbol,
+    verdict: scan.verdict,
+    score: scan.score,
+    recommendedAgentAction: scan.recommendedAgentAction,
+    isProxy,
+    implementationAddress: inspection?.implementationAddress || scan.evidence.implementationAddress || null,
+    issuedAt,
+    expiresAt
+  };
+  const certHash = keccak256(stringToHex(JSON.stringify(certPayload)));
+  const key = (
+    c.env?.ARBITER_PRIVATE_KEY &&
+    c.env.ARBITER_PRIVATE_KEY.startsWith("0x") &&
+    c.env.ARBITER_PRIVATE_KEY.length === 66
+      ? c.env.ARBITER_PRIVATE_KEY
+      : FALLBACK_DEV_ARBITER_KEY
+  ) as `0x${string}`;
+  const signer = privateKeyToAccount(key);
+  const certSignature = await signer.signMessage({ message: certHash });
+
+  c.header("X-NullClear-Attestation", certHash);
+
+  return c.json({
+    chain: scan.chain,
+    address: scan.address,
+    symbol: scan.symbol,
+    name: scan.name,
+    verdict: scan.verdict,
+    score: scan.score,
+    recommendedAgentAction: scan.recommendedAgentAction,
+    riskBreakdown: {
+      honeypotRisk: scan.evidence.isHoneypot ? "CRITICAL" : "NONE",
+      taxProfile: {
+        buyTaxPercent: scan.evidence.buyTaxPercent || 0,
+        sellTaxPercent: scan.evidence.sellTaxPercent || 0
+      },
+      proxyUpgradeRisk,
+      bytecodeCfgRisk: hasHighCfgRisk ? "HIGH" : "LOW",
+      liquidityDepthTier,
+      liquidityUsd,
+      historicalSighting: priorScan
+        ? {
+            previouslyScannedAt: priorScan.scannedAt,
+            previousVerdict: priorScan.verdict,
+            previousScore: priorScan.score,
+            scoreDelta: scan.score - priorScan.score
+          }
+        : null
+    },
+    forensics: scan,
+    contractInspection: inspection,
+    clearanceCertificate: {
+      ...certPayload,
+      certificateHash: certHash,
+      signer: signer.address,
+      signature: certSignature
+    },
+    attestation: certHash,
+    settlementTransaction: result.transaction,
+    timestamp: Date.now(),
+    executionReceipt: result.executionReceipt,
+    relatedEndpoints: BAZAAR_RELATED_ENDPOINTS,
+    _nullclear: buildNullClearMetadata({
+      verified: true,
+      freeTrialRemaining: result.freeTrialRemaining ?? 0
+    })
+  });
+});
+
+// 6e. POST & GET /v1/bazaar/buy-pass — Bazaar alias for $5/$25/$100 Prepaid Firewall Passes
+bazaarRouter.all("/buy-pass", (c) => handleBuyPassRequest(c, "/v1/bazaar/buy-pass"));
 
 // 7. GET /v1/bazaar/directory - Machine-Readable x402 & ERC-8004 Ecosystem Directory
 bazaarRouter.get("/directory", async (c) => {
@@ -2045,16 +2774,52 @@ bazaarRouter.get("/", async (c) => {
 
   const nativeResources = [
     {
-      id: "bazaar-market-oracle",
-      slug: "market-oracle",
-      path: "/v1/bazaar/market-oracle",
-      url: "https://api.nullclear.dev/v1/bazaar/market-oracle",
+      id: "bazaar-guard",
+      slug: "guard",
+      path: "/v1/bazaar/guard",
+      url: "https://api.nullclear.dev/v1/bazaar/guard",
+      method: "POST",
+      priceAtomic: "5000",
+      priceUsdc: "0.005",
+      sellerAddress: NULLCLEAR_TREASURY_ADDRESS,
+      category: "security",
+      description: BAZAAR_GUARD_EXTENSION.description
+    },
+    {
+      id: "bazaar-inspect",
+      slug: "inspect",
+      path: "/v1/bazaar/inspect",
+      url: "https://api.nullclear.dev/v1/bazaar/inspect",
       method: "GET",
       priceAtomic: "5000",
       priceUsdc: "0.005",
       sellerAddress: NULLCLEAR_TREASURY_ADDRESS,
-      category: "oracle",
-      description: BAZAAR_MARKET_ORACLE_EXTENSION.description
+      category: "security",
+      description: BAZAAR_INSPECT_EXTENSION.description
+    },
+    {
+      id: "bazaar-due-diligence",
+      slug: "due-diligence",
+      path: "/v1/bazaar/due-diligence",
+      url: "https://api.nullclear.dev/v1/bazaar/due-diligence",
+      method: "POST",
+      priceAtomic: "100000",
+      priceUsdc: "0.10",
+      sellerAddress: NULLCLEAR_TREASURY_ADDRESS,
+      category: "security",
+      description: BAZAAR_DUE_DILIGENCE_EXTENSION.description
+    },
+    {
+      id: "bazaar-buy-pass",
+      slug: "buy-pass",
+      path: "/v1/bazaar/buy-pass",
+      url: "https://api.nullclear.dev/v1/bazaar/buy-pass",
+      method: "POST",
+      priceAtomic: PASS_TIERS.starter.priceAtomic,
+      priceUsdc: PASS_TIERS.starter.priceUsdc,
+      sellerAddress: NULLCLEAR_TREASURY_ADDRESS,
+      category: "security",
+      description: buildBuyPassBazaarExtension(PASS_TIERS.starter).description
     },
     {
       id: "bazaar-token-security",
@@ -2067,6 +2832,30 @@ bazaarRouter.get("/", async (c) => {
       sellerAddress: NULLCLEAR_TREASURY_ADDRESS,
       category: "security",
       description: BAZAAR_TOKEN_SECURITY_EXTENSION.description
+    },
+    {
+      id: "bazaar-scan-batch",
+      slug: "scan-batch",
+      path: "/v1/bazaar/scan-batch",
+      url: "https://api.nullclear.dev/v1/bazaar/scan-batch",
+      method: "POST",
+      priceAtomic: "25000",
+      priceUsdc: "0.025",
+      sellerAddress: NULLCLEAR_TREASURY_ADDRESS,
+      category: "security",
+      description: BAZAAR_SCAN_BATCH_EXTENSION.description
+    },
+    {
+      id: "bazaar-market-oracle",
+      slug: "market-oracle",
+      path: "/v1/bazaar/market-oracle",
+      url: "https://api.nullclear.dev/v1/bazaar/market-oracle",
+      method: "GET",
+      priceAtomic: "5000",
+      priceUsdc: "0.005",
+      sellerAddress: NULLCLEAR_TREASURY_ADDRESS,
+      category: "oracle",
+      description: BAZAAR_MARKET_ORACLE_EXTENSION.description
     },
     {
       id: "bazaar-wallet-risk",
@@ -2115,18 +2904,6 @@ bazaarRouter.get("/", async (c) => {
       sellerAddress: NULLCLEAR_TREASURY_ADDRESS,
       category: "ai",
       description: BAZAAR_VERIFY_EXTENSION.description
-    },
-    {
-      id: "bazaar-scan-batch",
-      slug: "scan-batch",
-      path: "/v1/bazaar/scan-batch",
-      url: "https://api.nullclear.dev/v1/bazaar/scan-batch",
-      method: "POST",
-      priceAtomic: "25000",
-      priceUsdc: "0.025",
-      sellerAddress: NULLCLEAR_TREASURY_ADDRESS,
-      category: "security",
-      description: BAZAAR_SCAN_BATCH_EXTENSION.description
     }
   ];
 
@@ -2148,7 +2925,7 @@ bazaarRouter.get("/", async (c) => {
   return c.json({
     service: "NullClear x402 Bazaar & Seller Gateway Catalog",
     network: "eip155:8453",
-    freeTierDailyLimit: 10,
+    freeTierDailyLimit: BAZAAR_FREE_TIER_DAILY_LIMIT,
     resources: [...nativeResources, ...gatewayResources],
     gateways: gatewayResources,
     indexedEndpointsCount: indexedEndpoints.length,

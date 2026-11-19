@@ -160,14 +160,18 @@ export interface TrafficEventRecord {
   country?: string | null;
   asn?: string | null;
   referer?: string | null;
+  userAgent?: string | null;
+  isFreeTrial?: boolean;
 }
 
 export interface TelemetryFunnelWindow {
   windowLabel: string;
   totalInvocations: number;
+  freeTrialCalls: number;
   byActorType: Record<TrafficActorType, number>;
   byHost: Record<string, number>;
   topPaths: Array<{ path: string; count: number }>;
+  topUserAgents: Array<{ userAgent: string; count: number }>;
   mcp: {
     toolsListed: number;
     toolsCalled: number;
@@ -442,6 +446,47 @@ export interface ProtocolStats {
   }>;
 }
 
+export interface ApiPassRecord {
+  id: string;
+  keyHash: string;
+  keyPrefix: string;
+  ownerAddress: string;
+  tier: "starter" | "pro" | "scale";
+  creditsTotal: number;
+  creditsRemaining: number;
+  priceAtomic: string;
+  settlementTx?: string | null;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface SignerPolicyRecord {
+  id: string;
+  ownerAddress: string;
+  passId?: string | null;
+  name: string;
+  policyJson: string;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface WatchtowerMonitorRecord {
+  id: string;
+  ownerAddress: string;
+  passId?: string | null;
+  chain: string;
+  targetAddress: string;
+  webhookUrl: string;
+  alertRulesJson: string;
+  lastStateJson?: string | null;
+  lastCheckedAt: number;
+  lastAlertAt: number;
+  alertCount: number;
+  active: boolean;
+  expiresAt: number;
+  createdAt: number;
+}
+
 export interface IArbiterStore {
   hasUsedNonce(network: string, buyerAddress: string, nonce: string): Promise<boolean>;
   getAgentStats(agentId: string): Promise<AgentStats>;
@@ -480,6 +525,30 @@ export interface IArbiterStore {
   getForensicScansBatch(targets: Array<{ chain: string; address: string }>): Promise<Map<string, ForensicScanRecord>>;
   listRecentClearings(limit?: number): Promise<ClearingRecord[]>;
   listForensicScans(chain?: string, limit?: number): Promise<ForensicScanRecord[]>;
+  createApiPass(pass: ApiPassRecord): Promise<void>;
+  getApiPassByHash(keyHash: string): Promise<ApiPassRecord | null>;
+  consumeApiPassCredit(
+    keyHash: string,
+    costCredits?: number
+  ): Promise<{ allowed: boolean; pass: ApiPassRecord | null; creditsRemaining: number }>;
+  upsertSignerPolicy(policy: SignerPolicyRecord): Promise<void>;
+  getSignerPolicy(policyId: string): Promise<SignerPolicyRecord | null>;
+  listSignerPoliciesByOwner(ownerAddress: string): Promise<SignerPolicyRecord[]>;
+  createWatchtowerMonitor(monitor: WatchtowerMonitorRecord): Promise<void>;
+  getWatchtowerMonitor(monitorId: string): Promise<WatchtowerMonitorRecord | null>;
+  listActiveWatchtowerMonitors(limit?: number): Promise<WatchtowerMonitorRecord[]>;
+  listWatchtowerMonitorsByOwner(ownerAddress: string): Promise<WatchtowerMonitorRecord[]>;
+  updateWatchtowerMonitorState(
+    monitorId: string,
+    patch: {
+      lastStateJson?: string | null;
+      lastCheckedAt?: number;
+      lastAlertAt?: number;
+      incrementAlerts?: boolean;
+      active?: boolean;
+    }
+  ): Promise<void>;
+  deleteWatchtowerMonitor(monitorId: string, ownerAddress?: string): Promise<boolean>;
   reset(): void;
 }
 
@@ -503,6 +572,9 @@ export class MemoryArbiterStore implements IArbiterStore {
   private onchainTransfers = new Map<string, OnchainEip3009TransferRecord>();
   private counterpartyProfiles = new Map<string, OnchainCounterpartyProfileRecord>();
   private forensicScans = new Map<string, ForensicScanRecord>();
+  private apiPassesByHash = new Map<string, ApiPassRecord>();
+  private signerPolicies = new Map<string, SignerPolicyRecord>();
+  private watchtowerMonitors = new Map<string, WatchtowerMonitorRecord>();
 
   constructor() {
     this.seedDefaults();
@@ -530,6 +602,9 @@ export class MemoryArbiterStore implements IArbiterStore {
     this.onchainTransfers.clear();
     this.counterpartyProfiles.clear();
     this.forensicScans.clear();
+    this.apiPassesByHash.clear();
+    this.signerPolicies.clear();
+    this.watchtowerMonitors.clear();
     this.seedDefaults();
   }
 
@@ -894,6 +969,106 @@ export class MemoryArbiterStore implements IArbiterStore {
   async listRecentClearings(limit = 20): Promise<ClearingRecord[]> {
     return this.clearings.slice(-limit).reverse().map((r) => ({ ...r }));
   }
+
+  async createApiPass(pass: ApiPassRecord): Promise<void> {
+    this.apiPassesByHash.set(pass.keyHash, { ...pass });
+  }
+
+  async getApiPassByHash(keyHash: string): Promise<ApiPassRecord | null> {
+    const found = this.apiPassesByHash.get(keyHash);
+    return found ? { ...found } : null;
+  }
+
+  async consumeApiPassCredit(
+    keyHash: string,
+    costCredits = 1
+  ): Promise<{ allowed: boolean; pass: ApiPassRecord | null; creditsRemaining: number }> {
+    const found = this.apiPassesByHash.get(keyHash);
+    if (!found) {
+      return { allowed: false, pass: null, creditsRemaining: 0 };
+    }
+    const cost = Math.max(0, Math.floor(costCredits));
+    if (found.creditsRemaining < cost) {
+      return { allowed: false, pass: { ...found }, creditsRemaining: found.creditsRemaining };
+    }
+    found.creditsRemaining -= cost;
+    found.updatedAt = Date.now();
+    this.apiPassesByHash.set(keyHash, found);
+    return { allowed: true, pass: { ...found }, creditsRemaining: found.creditsRemaining };
+  }
+
+  async upsertSignerPolicy(policy: SignerPolicyRecord): Promise<void> {
+    this.signerPolicies.set(policy.id, { ...policy });
+  }
+
+  async getSignerPolicy(policyId: string): Promise<SignerPolicyRecord | null> {
+    const found = this.signerPolicies.get(policyId);
+    return found ? { ...found } : null;
+  }
+
+  async listSignerPoliciesByOwner(ownerAddress: string): Promise<SignerPolicyRecord[]> {
+    const target = ownerAddress.toLowerCase();
+    return Array.from(this.signerPolicies.values())
+      .filter((p) => p.ownerAddress.toLowerCase() === target)
+      .sort((a, b) => b.updatedAt - a.updatedAt)
+      .map((p) => ({ ...p }));
+  }
+
+  async createWatchtowerMonitor(monitor: WatchtowerMonitorRecord): Promise<void> {
+    this.watchtowerMonitors.set(monitor.id, { ...monitor });
+  }
+
+  async getWatchtowerMonitor(monitorId: string): Promise<WatchtowerMonitorRecord | null> {
+    const found = this.watchtowerMonitors.get(monitorId);
+    return found ? { ...found } : null;
+  }
+
+  async listActiveWatchtowerMonitors(limit = 10): Promise<WatchtowerMonitorRecord[]> {
+    const now = Date.now();
+    return Array.from(this.watchtowerMonitors.values())
+      .filter((m) => m.active && m.expiresAt > now)
+      .sort((a, b) => a.lastCheckedAt - b.lastCheckedAt)
+      .slice(0, limit)
+      .map((m) => ({ ...m }));
+  }
+
+  async listWatchtowerMonitorsByOwner(ownerAddress: string): Promise<WatchtowerMonitorRecord[]> {
+    const target = ownerAddress.toLowerCase();
+    return Array.from(this.watchtowerMonitors.values())
+      .filter((m) => m.ownerAddress.toLowerCase() === target)
+      .sort((a, b) => b.createdAt - a.createdAt)
+      .map((m) => ({ ...m }));
+  }
+
+  async updateWatchtowerMonitorState(
+    monitorId: string,
+    patch: {
+      lastStateJson?: string | null;
+      lastCheckedAt?: number;
+      lastAlertAt?: number;
+      incrementAlerts?: boolean;
+      active?: boolean;
+    }
+  ): Promise<void> {
+    const found = this.watchtowerMonitors.get(monitorId);
+    if (!found) return;
+    if (patch.lastStateJson !== undefined) found.lastStateJson = patch.lastStateJson;
+    if (patch.lastCheckedAt !== undefined) found.lastCheckedAt = patch.lastCheckedAt;
+    if (patch.lastAlertAt !== undefined) found.lastAlertAt = patch.lastAlertAt;
+    if (patch.incrementAlerts) found.alertCount += 1;
+    if (patch.active !== undefined) found.active = patch.active;
+    this.watchtowerMonitors.set(monitorId, found);
+  }
+
+  async deleteWatchtowerMonitor(monitorId: string, ownerAddress?: string): Promise<boolean> {
+    const found = this.watchtowerMonitors.get(monitorId);
+    if (!found) return false;
+    if (ownerAddress && found.ownerAddress.toLowerCase() !== ownerAddress.toLowerCase()) {
+      return false;
+    }
+    this.watchtowerMonitors.delete(monitorId);
+    return true;
+  }
 }
 
 export function filterAndSortIndexedEndpoints(
@@ -964,6 +1139,7 @@ function buildTelemetryWindow(
   const byHost: Record<string, number> = {};
   const pathCounts = new Map<string, number>();
   const toolCounts = new Map<string, number>();
+  const uaCounts = new Map<string, number>();
   const methodsBreakdown: Record<string, number> = {};
 
   let toolsListed = 0;
@@ -971,6 +1147,7 @@ function buildTelemetryWindow(
   let discovery = 0;
   let mcpHandshake = 0;
   let freeOrSandboxCall = 0;
+  let freeTrialCalls = 0;
   let realX402Settlement = passedClearingsCount;
 
   for (const ev of events) {
@@ -978,6 +1155,14 @@ function buildTelemetryWindow(
       byActorType[ev.actorType] += 1;
     } else {
       byActorType.BOT_SCANNER += 1;
+    }
+
+    if (ev.isFreeTrial) {
+      freeTrialCalls += 1;
+    }
+
+    if (ev.userAgent) {
+      uaCounts.set(ev.userAgent, (uaCounts.get(ev.userAgent) || 0) + 1);
     }
 
     const hostKey = ev.host || "unknown";
@@ -1035,15 +1220,22 @@ function buildTelemetryWindow(
     .sort((a, b) => b.count - a.count)
     .slice(0, 15);
 
+  const topUserAgents = Array.from(uaCounts.entries())
+    .map(([userAgent, count]) => ({ userAgent, count }))
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 15);
+
   const conversionRatePct =
     toolsListed > 0 ? Math.round((toolsCalled / toolsListed) * 10000) / 100 : 0;
 
   return {
     windowLabel,
     totalInvocations: events.length,
+    freeTrialCalls,
     byActorType,
     byHost,
     topPaths,
+    topUserAgents,
     mcp: {
       toolsListed,
       toolsCalled,
@@ -1615,7 +1807,9 @@ export class D1ArbiterStore implements IArbiterStore {
           tool_name TEXT,
           country TEXT,
           asn TEXT,
-          referer TEXT
+          referer TEXT,
+          user_agent TEXT,
+          is_free_trial INTEGER DEFAULT 0
         )`
       ),
       this.db.prepare(
@@ -1652,27 +1846,58 @@ export class D1ArbiterStore implements IArbiterStore {
 
   async recordTrafficEvent(event: TrafficEventRecord): Promise<void> {
     await this.ensureTelemetryAndFreeTierTables();
-    await this.db
-      .prepare(
-        `INSERT INTO traffic_events (
-          id, timestamp, host, path, method, status, actor_type, mcp_method, tool_name, country, asn, referer
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-      )
-      .bind(
-        event.id,
-        event.timestamp,
-        event.host,
-        event.path,
-        event.method,
-        event.status,
-        event.actorType,
-        event.mcpMethod || null,
-        event.toolName || null,
-        event.country || null,
-        event.asn || null,
-        event.referer || null
-      )
-      .run();
+    try {
+      await this.db
+        .prepare(
+          `INSERT INTO traffic_events (
+            id, timestamp, host, path, method, status, actor_type, mcp_method, tool_name, country, asn, referer, user_agent, is_free_trial
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        )
+        .bind(
+          event.id,
+          event.timestamp,
+          event.host,
+          event.path,
+          event.method,
+          event.status,
+          event.actorType,
+          event.mcpMethod || null,
+          event.toolName || null,
+          event.country || null,
+          event.asn || null,
+          event.referer || null,
+          event.userAgent || null,
+          event.isFreeTrial ? 1 : 0
+        )
+        .run();
+    } catch (err: any) {
+      const msg = String(err?.message || err || "");
+      if (msg.includes("no such column") || msg.includes("has no column")) {
+        await this.db
+          .prepare(
+            `INSERT INTO traffic_events (
+              id, timestamp, host, path, method, status, actor_type, mcp_method, tool_name, country, asn, referer
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+          )
+          .bind(
+            event.id,
+            event.timestamp,
+            event.host,
+            event.path,
+            event.method,
+            event.status,
+            event.actorType,
+            event.mcpMethod || null,
+            event.toolName || null,
+            event.country || null,
+            event.asn || null,
+            event.referer || null
+          )
+          .run();
+        return;
+      }
+      throw err;
+    }
   }
 
   async getTelemetryFunnel(): Promise<TelemetryFunnelReport> {
@@ -1708,7 +1933,9 @@ export class D1ArbiterStore implements IArbiterStore {
       toolName: r.tool_name,
       country: r.country,
       asn: r.asn,
-      referer: r.referer
+      referer: r.referer,
+      userAgent: r.user_agent ?? null,
+      isFreeTrial: Boolean(r.is_free_trial)
     }));
 
     const events24h = events7d.filter((e) => e.timestamp >= cutoff24h);
@@ -2385,6 +2612,317 @@ export class D1ArbiterStore implements IArbiterStore {
       queryType: row.query_type || undefined,
       createdAt: Number(row.created_at || 0)
     }));
+  }
+
+  private async ensureFirewallProTables(): Promise<void> {
+    await this.db.batch([
+      this.db.prepare(
+        `CREATE TABLE IF NOT EXISTS api_passes (
+          id TEXT PRIMARY KEY,
+          key_hash TEXT UNIQUE NOT NULL,
+          key_prefix TEXT NOT NULL,
+          owner_address TEXT NOT NULL,
+          tier TEXT NOT NULL,
+          credits_total INTEGER NOT NULL,
+          credits_remaining INTEGER NOT NULL,
+          price_atomic TEXT NOT NULL,
+          settlement_tx TEXT,
+          created_at INTEGER NOT NULL,
+          updated_at INTEGER NOT NULL
+        )`
+      ),
+      this.db.prepare(
+        `CREATE TABLE IF NOT EXISTS signer_policies (
+          id TEXT PRIMARY KEY,
+          owner_address TEXT NOT NULL,
+          pass_id TEXT,
+          name TEXT NOT NULL,
+          policy_json TEXT NOT NULL,
+          created_at INTEGER NOT NULL,
+          updated_at INTEGER NOT NULL
+        )`
+      ),
+      this.db.prepare(
+        `CREATE TABLE IF NOT EXISTS watchtower_monitors (
+          id TEXT PRIMARY KEY,
+          owner_address TEXT NOT NULL,
+          pass_id TEXT,
+          chain TEXT NOT NULL,
+          target_address TEXT NOT NULL,
+          webhook_url TEXT NOT NULL,
+          alert_rules_json TEXT NOT NULL,
+          last_state_json TEXT,
+          last_checked_at INTEGER DEFAULT 0,
+          last_alert_at INTEGER DEFAULT 0,
+          alert_count INTEGER DEFAULT 0,
+          active INTEGER DEFAULT 1,
+          expires_at INTEGER NOT NULL,
+          created_at INTEGER NOT NULL
+        )`
+      )
+    ]);
+  }
+
+  private mapApiPassRow(row: any): ApiPassRecord {
+    return {
+      id: row.id,
+      keyHash: row.key_hash,
+      keyPrefix: row.key_prefix,
+      ownerAddress: row.owner_address,
+      tier: row.tier as ApiPassRecord["tier"],
+      creditsTotal: Number(row.credits_total || 0),
+      creditsRemaining: Number(row.credits_remaining || 0),
+      priceAtomic: String(row.price_atomic || "0"),
+      settlementTx: row.settlement_tx || null,
+      createdAt: Number(row.created_at || 0),
+      updatedAt: Number(row.updated_at || 0)
+    };
+  }
+
+  private mapMonitorRow(row: any): WatchtowerMonitorRecord {
+    return {
+      id: row.id,
+      ownerAddress: row.owner_address,
+      passId: row.pass_id || null,
+      chain: row.chain,
+      targetAddress: row.target_address,
+      webhookUrl: row.webhook_url,
+      alertRulesJson: row.alert_rules_json || "{}",
+      lastStateJson: row.last_state_json || null,
+      lastCheckedAt: Number(row.last_checked_at || 0),
+      lastAlertAt: Number(row.last_alert_at || 0),
+      alertCount: Number(row.alert_count || 0),
+      active: Boolean(row.active),
+      expiresAt: Number(row.expires_at || 0),
+      createdAt: Number(row.created_at || 0)
+    };
+  }
+
+  async createApiPass(pass: ApiPassRecord): Promise<void> {
+    await this.ensureFirewallProTables();
+    await this.db
+      .prepare(
+        `INSERT INTO api_passes (
+          id, key_hash, key_prefix, owner_address, tier, credits_total, credits_remaining, price_atomic, settlement_tx, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      )
+      .bind(
+        pass.id,
+        pass.keyHash,
+        pass.keyPrefix,
+        pass.ownerAddress.toLowerCase(),
+        pass.tier,
+        pass.creditsTotal,
+        pass.creditsRemaining,
+        pass.priceAtomic,
+        pass.settlementTx || null,
+        pass.createdAt,
+        pass.updatedAt
+      )
+      .run();
+  }
+
+  async getApiPassByHash(keyHash: string): Promise<ApiPassRecord | null> {
+    await this.ensureFirewallProTables();
+    const row = await this.db
+      .prepare("SELECT * FROM api_passes WHERE key_hash = ? LIMIT 1")
+      .bind(keyHash)
+      .first<any>();
+    return row ? this.mapApiPassRow(row) : null;
+  }
+
+  async consumeApiPassCredit(
+    keyHash: string,
+    costCredits = 1
+  ): Promise<{ allowed: boolean; pass: ApiPassRecord | null; creditsRemaining: number }> {
+    await this.ensureFirewallProTables();
+    const cost = Math.max(0, Math.floor(costCredits));
+    const now = Date.now();
+    if (cost > 0) {
+      const updateRes = await this.db
+        .prepare(
+          `UPDATE api_passes
+           SET credits_remaining = credits_remaining - ?, updated_at = ?
+           WHERE key_hash = ? AND credits_remaining >= ?`
+        )
+        .bind(cost, now, keyHash, cost)
+        .run();
+      const changed = Number((updateRes as any)?.meta?.changes || 0);
+      const current = await this.getApiPassByHash(keyHash);
+      if (!current) {
+        return { allowed: false, pass: null, creditsRemaining: 0 };
+      }
+      if (changed === 0) {
+        return { allowed: false, pass: current, creditsRemaining: current.creditsRemaining };
+      }
+      return { allowed: true, pass: current, creditsRemaining: current.creditsRemaining };
+    }
+    const current = await this.getApiPassByHash(keyHash);
+    if (!current) return { allowed: false, pass: null, creditsRemaining: 0 };
+    return { allowed: true, pass: current, creditsRemaining: current.creditsRemaining };
+  }
+
+  async upsertSignerPolicy(policy: SignerPolicyRecord): Promise<void> {
+    await this.ensureFirewallProTables();
+    await this.db
+      .prepare(
+        `INSERT INTO signer_policies (id, owner_address, pass_id, name, policy_json, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT(id) DO UPDATE SET
+           name = excluded.name,
+           policy_json = excluded.policy_json,
+           updated_at = excluded.updated_at`
+      )
+      .bind(
+        policy.id,
+        policy.ownerAddress.toLowerCase(),
+        policy.passId || null,
+        policy.name,
+        policy.policyJson,
+        policy.createdAt,
+        policy.updatedAt
+      )
+      .run();
+  }
+
+  async getSignerPolicy(policyId: string): Promise<SignerPolicyRecord | null> {
+    await this.ensureFirewallProTables();
+    const row = await this.db
+      .prepare("SELECT * FROM signer_policies WHERE id = ? LIMIT 1")
+      .bind(policyId)
+      .first<any>();
+    if (!row) return null;
+    return {
+      id: row.id,
+      ownerAddress: row.owner_address,
+      passId: row.pass_id || null,
+      name: row.name,
+      policyJson: row.policy_json,
+      createdAt: Number(row.created_at || 0),
+      updatedAt: Number(row.updated_at || 0)
+    };
+  }
+
+  async listSignerPoliciesByOwner(ownerAddress: string): Promise<SignerPolicyRecord[]> {
+    await this.ensureFirewallProTables();
+    const res = await this.db
+      .prepare("SELECT * FROM signer_policies WHERE lower(owner_address) = ? ORDER BY updated_at DESC LIMIT 50")
+      .bind(ownerAddress.toLowerCase())
+      .all<any>();
+    return (res.results || []).map((row: any) => ({
+      id: row.id,
+      ownerAddress: row.owner_address,
+      passId: row.pass_id || null,
+      name: row.name,
+      policyJson: row.policy_json,
+      createdAt: Number(row.created_at || 0),
+      updatedAt: Number(row.updated_at || 0)
+    }));
+  }
+
+  async createWatchtowerMonitor(monitor: WatchtowerMonitorRecord): Promise<void> {
+    await this.ensureFirewallProTables();
+    await this.db
+      .prepare(
+        `INSERT INTO watchtower_monitors (
+          id, owner_address, pass_id, chain, target_address, webhook_url, alert_rules_json,
+          last_state_json, last_checked_at, last_alert_at, alert_count, active, expires_at, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      )
+      .bind(
+        monitor.id,
+        monitor.ownerAddress.toLowerCase(),
+        monitor.passId || null,
+        monitor.chain.toLowerCase(),
+        monitor.targetAddress,
+        monitor.webhookUrl,
+        monitor.alertRulesJson,
+        monitor.lastStateJson || null,
+        monitor.lastCheckedAt,
+        monitor.lastAlertAt,
+        monitor.alertCount,
+        monitor.active ? 1 : 0,
+        monitor.expiresAt,
+        monitor.createdAt
+      )
+      .run();
+  }
+
+  async getWatchtowerMonitor(monitorId: string): Promise<WatchtowerMonitorRecord | null> {
+    await this.ensureFirewallProTables();
+    const row = await this.db
+      .prepare("SELECT * FROM watchtower_monitors WHERE id = ? LIMIT 1")
+      .bind(monitorId)
+      .first<any>();
+    return row ? this.mapMonitorRow(row) : null;
+  }
+
+  async listActiveWatchtowerMonitors(limit = 10): Promise<WatchtowerMonitorRecord[]> {
+    await this.ensureFirewallProTables();
+    const now = Date.now();
+    const res = await this.db
+      .prepare(
+        `SELECT * FROM watchtower_monitors
+         WHERE active = 1 AND expires_at > ?
+         ORDER BY last_checked_at ASC
+         LIMIT ?`
+      )
+      .bind(now, limit)
+      .all<any>();
+    return (res.results || []).map((r: any) => this.mapMonitorRow(r));
+  }
+
+  async listWatchtowerMonitorsByOwner(ownerAddress: string): Promise<WatchtowerMonitorRecord[]> {
+    await this.ensureFirewallProTables();
+    const res = await this.db
+      .prepare("SELECT * FROM watchtower_monitors WHERE lower(owner_address) = ? ORDER BY created_at DESC LIMIT 100")
+      .bind(ownerAddress.toLowerCase())
+      .all<any>();
+    return (res.results || []).map((r: any) => this.mapMonitorRow(r));
+  }
+
+  async updateWatchtowerMonitorState(
+    monitorId: string,
+    patch: {
+      lastStateJson?: string | null;
+      lastCheckedAt?: number;
+      lastAlertAt?: number;
+      incrementAlerts?: boolean;
+      active?: boolean;
+    }
+  ): Promise<void> {
+    await this.ensureFirewallProTables();
+    const existing = await this.getWatchtowerMonitor(monitorId);
+    if (!existing) return;
+    await this.db
+      .prepare(
+        `UPDATE watchtower_monitors
+         SET last_state_json = ?, last_checked_at = ?, last_alert_at = ?, alert_count = ?, active = ?
+         WHERE id = ?`
+      )
+      .bind(
+        patch.lastStateJson !== undefined ? patch.lastStateJson : existing.lastStateJson ?? null,
+        patch.lastCheckedAt !== undefined ? patch.lastCheckedAt : existing.lastCheckedAt,
+        patch.lastAlertAt !== undefined ? patch.lastAlertAt : existing.lastAlertAt,
+        patch.incrementAlerts ? existing.alertCount + 1 : existing.alertCount,
+        patch.active !== undefined ? (patch.active ? 1 : 0) : existing.active ? 1 : 0,
+        monitorId
+      )
+      .run();
+  }
+
+  async deleteWatchtowerMonitor(monitorId: string, ownerAddress?: string): Promise<boolean> {
+    await this.ensureFirewallProTables();
+    const res = ownerAddress
+      ? await this.db
+          .prepare("DELETE FROM watchtower_monitors WHERE id = ? AND lower(owner_address) = ?")
+          .bind(monitorId, ownerAddress.toLowerCase())
+          .run()
+      : await this.db
+          .prepare("DELETE FROM watchtower_monitors WHERE id = ?")
+          .bind(monitorId)
+          .run();
+    return Number((res as any)?.meta?.changes || 0) > 0;
   }
 }
 

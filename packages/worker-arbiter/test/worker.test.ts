@@ -522,7 +522,7 @@ describe("NullClear Worker Arbiter Test Suite", () => {
     expect(getRes.status).toBe(200);
     const getData = (await getRes.json()) as any;
     expect(getData.name).toBe("nullclear-mcp");
-    expect(getData.tools.length).toBe(13);
+    expect(getData.tools.length).toBe(14);
 
     const postRes = await app.fetch(
       new Request("http://localhost/mcp", {
@@ -534,7 +534,7 @@ describe("NullClear Worker Arbiter Test Suite", () => {
     );
     expect(postRes.status).toBe(200);
     const postData = (await postRes.json()) as any;
-    expect(postData.result.tools.length).toBe(13);
+    expect(postData.result.tools.length).toBe(14);
     expect(postData.result.tools[0].name).toBe("nullclear_scan_token");
     expect(postData.result.tools[1].name).toBe("nullclear_inspect_contract");
     expect(postData.result.tools[2].name).toBe("nullclear_decode_calldata");
@@ -2176,11 +2176,11 @@ describe("NullClear Worker Arbiter Test Suite", () => {
     expect(simJson.recommendedAgentAction).toBe("ABORT_DRAINER_APPROVAL");
   });
 
-  it("V2.2: Zero-Auth 100/day Free Tier + Request #101 graceful x402 upgrade & cached scan fallback", async () => {
+  it("V2.2: Zero-Auth 10/day Free Tier + Request #11 graceful x402 upgrade & cached scan fallback", async () => {
     const testIp = "198.51.100.250";
-    // Exhaust 100 calls for this IP
+    // Exhaust 10 calls for this IP
     let lastStatus = 0;
-    for (let i = 1; i <= 100; i++) {
+    for (let i = 1; i <= 10; i++) {
       const r = await app.fetch(
         new Request("https://api.nullclear.dev/v1/scan/base/0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", {
           headers: { "CF-Connecting-IP": testIp }
@@ -2191,21 +2191,21 @@ describe("NullClear Worker Arbiter Test Suite", () => {
     }
     expect(lastStatus).toBe(200);
 
-    // Request #101 on cached /v1/scan returns cached scan with rateLimited: true + x402Upgrade
-    const req101Scan = await app.fetch(
+    // Request #11 on cached /v1/scan returns cached scan with rateLimited: true + x402Upgrade
+    const req11Scan = await app.fetch(
       new Request("https://api.nullclear.dev/v1/scan/base/0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", {
         headers: { "CF-Connecting-IP": testIp }
       }),
       testEnv
     );
-    expect(req101Scan.status).toBe(200);
-    const body101 = (await req101Scan.json()) as any;
-    expect(body101.rateLimited).toBe(true);
-    expect(body101.x402Upgrade).toBeDefined();
-    expect(body101.x402Upgrade.priceUsdc).toBe("0.005");
+    expect(req11Scan.status).toBe(200);
+    const body11 = (await req11Scan.json()) as any;
+    expect(body11.rateLimited).toBe(true);
+    expect(body11.x402Upgrade).toBeDefined();
+    expect(body11.x402Upgrade.priceUsdc).toBe("0.005");
 
-    // Request #102 on live /v1/decode returns HTTP 402 Payment Required with agentPaymentInstructions
-    const req102Decode = await app.fetch(
+    // Request #12 on live /v1/decode returns HTTP 402 Payment Required with agentPaymentInstructions
+    const req12Decode = await app.fetch(
       new Request("https://api.nullclear.dev/v1/decode", {
         method: "POST",
         headers: { "Content-Type": "application/json", "CF-Connecting-IP": testIp },
@@ -2213,9 +2213,9 @@ describe("NullClear Worker Arbiter Test Suite", () => {
       }),
       testEnv
     );
-    expect(req102Decode.status).toBe(402);
-    expect(req102Decode.headers.get("PAYMENT-REQUIRED")).toBeTruthy();
-    const err402 = (await req102Decode.json()) as any;
+    expect(req12Decode.status).toBe(402);
+    expect(req12Decode.headers.get("PAYMENT-REQUIRED")).toBeTruthy();
+    const err402 = (await req12Decode.json()) as any;
     expect(err402.rateLimited).toBe(true);
     expect(err402.agentPaymentInstructions).toContain("EIP-3009");
   });
@@ -2474,7 +2474,7 @@ describe("NullClear Worker Arbiter Test Suite", () => {
       const manifest = (await res.json()) as any;
       expect(manifest.version).toBe("1.5.1");
       expect(manifest.transport).toBe("streamable-http");
-      expect(manifest.tools).toHaveLength(13);
+      expect(manifest.tools).toHaveLength(14);
       const scanTool = manifest.tools.find((t: any) => t.name === "nullclear_scan_token");
       const paidAuditTool = manifest.tools.find((t: any) => t.name === "nullclear_audit_paid_token");
       expect(scanTool?.description).toContain("Do NOT use");
@@ -2956,6 +2956,1067 @@ describe("NullClear Worker Arbiter Test Suite", () => {
     expect(header.kid).toBe("organizations/test/apiKeys/k1");
     expect(payload.iss).toBe("cdp");
     expect(payload.uris).toEqual(["POST api.cdp.coinbase.com/platform/v2/x402/settle"]);
+  });
+
+  it("V2.3: Supports 7 chains (Arb/OP/Poly/BSC/Solana), recursive Multicall3/UniversalRouter/Safe unwrapping, EIP-712 audit, Solana Token-2022 & wire tx, eth_simulateV1 asset diffs, and 1-call /v1/guard", async () => {
+    const { encodeFunctionData, parseAbi } = await import("viem");
+    const { analyzeBytecodeControlFlowRisks } = await import("../src/services/forensics-evm-deep.js");
+
+    // 1. Multi-chain EVM scan (Arbitrum, Optimism, Polygon, BSC) + OpenAPI / guard discovery
+    for (const [ch, addr] of [
+      ["arbitrum", "0xaf88d065e77c8cc2239327c5edb3a432268e5831"],
+      ["optimism", "0x0b2c639c533813f4aa9d7837caf62653d097ff85"],
+      ["polygon", "0x3c499c542cef5e3811e1192ce70d8cc03d5c3359"],
+      ["bsc", "0x8ac76a51cc950d9822d68b83fe1ad97b32cd580d"]
+    ] as const) {
+      const r = await app.fetch(
+        new Request(`https://api.nullclear.dev/v1/scan/${ch}/${addr}`, {
+          headers: { "CF-Connecting-IP": "198.51.100.77" }
+        }),
+        testEnv
+      );
+      expect(r.status).toBe(200);
+      const j = (await r.json()) as any;
+      expect(j.chain).toBe(ch);
+      expect(j.symbol).toBe("USDC");
+      expect(j.recommendedAgentAction).toBe("EXECUTE_SAFE");
+    }
+
+    // 2. Spender trust classification: Verified Permit2 router vs unverified spender
+    const permit2Addr = "0x000000000022d473030f116ddee9f6b43ac78ba3";
+    const approvePermit2Data = encodeFunctionData({
+      abi: parseAbi(["function approve(address spender, uint256 value)"]),
+      functionName: "approve",
+      args: [permit2Addr, (1n << 255n)]
+    });
+    const permit2DecRes = await app.fetch(
+      new Request("https://api.nullclear.dev/v1/decode", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "CF-Connecting-IP": "198.51.100.78" },
+        body: JSON.stringify({ input: approvePermit2Data, chain: "base" })
+      }),
+      testEnv
+    );
+    expect(permit2DecRes.status).toBe(200);
+    const permit2Dec = (await permit2DecRes.json()) as any;
+    expect(permit2Dec.spenderTrust).toBe("VERIFIED_ROUTER");
+    expect(permit2Dec.spenderLabel).toContain("Permit2");
+    expect(permit2Dec.recommendedAgentAction).toBe("CAUTION_HIGH_RISK");
+
+    // 3. Recursive Multicall3 unwrapping catches hidden unlimited approval inside aggregate3
+    const evilSpender = "0xdead00000000000000000000000000000000beef";
+    const hiddenApprove = encodeFunctionData({
+      abi: parseAbi(["function approve(address spender, uint256 value)"]),
+      functionName: "approve",
+      args: [evilSpender, (1n << 255n)]
+    });
+    const multicallData = encodeFunctionData({
+      abi: parseAbi(["function aggregate3((address target, bool allowFailure, bytes callData)[] calls)"]),
+      functionName: "aggregate3",
+      args: [[{ target: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", allowFailure: false, callData: hiddenApprove }]]
+    });
+    const mcDecRes = await app.fetch(
+      new Request("https://api.nullclear.dev/v1/decode", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "CF-Connecting-IP": "198.51.100.78" },
+        body: JSON.stringify({ input: multicallData, chain: "base" })
+      }),
+      testEnv
+    );
+    expect(mcDecRes.status).toBe(200);
+    const mcDec = (await mcDecRes.json()) as any;
+    expect(mcDec.nestedCalls?.length).toBe(1);
+    expect(mcDec.securityFlags.hasNestedDrainer).toBe(true);
+    expect(mcDec.recommendedAgentAction).toBe("ABORT_DRAINER_APPROVAL");
+
+    // 4. EIP-712 Gasless Permit & Seaport zero-consideration auditing via POST /v1/guard
+    const guardEip712Res = await app.fetch(
+      new Request("https://api.nullclear.dev/v1/guard", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "CF-Connecting-IP": "198.51.100.79" },
+        body: JSON.stringify({
+          chain: "base",
+          typedData: {
+            primaryType: "Permit",
+            domain: {
+              name: "USD Coin",
+              chainId: 8453,
+              verifyingContract: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
+            },
+            message: {
+              owner: "0xfd74fF802EA0E735514C070AF04E0D6528deD145",
+              spender: evilSpender,
+              value: "115792089237316195423570985008687907853269984665640564039457584007913129639935",
+              nonce: 0,
+              deadline: 1893456000
+            }
+          }
+        })
+      }),
+      testEnv
+    );
+    expect(guardEip712Res.status).toBe(200);
+    const guardEip712 = (await guardEip712Res.json()) as any;
+    expect(guardEip712.guardType).toBe("EIP712_SIGNATURE_GUARD");
+    expect(guardEip712.recommendedAgentAction).toBe("ABORT_DRAINER_APPROVAL");
+    expect(guardEip712.touchedTokenVerdicts?.[0]?.symbol).toBe("USDC");
+
+    // 5. Solana Token-2022 PermanentDelegate trap + Solana Wire SetAuthority(AccountOwner) + simulateTransaction
+    const token2022Mint = "Token2022Trap111111111111111111111111111111";
+    await withLocalServer(async (req, res) => {
+      const chunks: Buffer[] = [];
+      for await (const chunk of req) chunks.push(chunk as Buffer);
+      const body = JSON.parse(Buffer.concat(chunks).toString("utf8"));
+      res.writeHead(200, { "Content-Type": "application/json" });
+      if (body.method === "getAccountInfo") {
+        res.end(
+          JSON.stringify({
+            jsonrpc: "2.0",
+            id: body.id,
+            result: {
+              context: { slot: 325000123 },
+              value: {
+                owner: "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb",
+                data: {
+                  parsed: {
+                    type: "mint",
+                    info: {
+                      decimals: 6,
+                      supply: "1000000000",
+                      mintAuthority: "MintAuth1111111111111111111111111111111111",
+                      freezeAuthority: null,
+                      extensions: [
+                        {
+                          extension: "permanentDelegate",
+                          state: { delegate: "EvilDelegate11111111111111111111111111111" }
+                        },
+                        {
+                          extension: "transferFeeConfig",
+                          state: { newerTransferFee: { transferFeeBasisPoints: 1500 } }
+                        }
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          })
+        );
+        return;
+      }
+      if (body.method === "getTokenLargestAccounts") {
+        res.end(
+          JSON.stringify({
+            jsonrpc: "2.0",
+            id: body.id,
+            result: { context: { slot: 325000123 }, value: [{ amount: "600000000" }] }
+          })
+        );
+        return;
+      }
+      if (body.method === "simulateTransaction") {
+        res.end(
+          JSON.stringify({
+            jsonrpc: "2.0",
+            id: body.id,
+            result: { context: { slot: 325000125 }, value: { err: null, unitsConsumed: 14200, logs: ["Program log: ok"] } }
+          })
+        );
+        return;
+      }
+      res.end(JSON.stringify({ jsonrpc: "2.0", id: body.id, result: null }));
+    }, async (mockSolRpc) => {
+      const solEnv = { ...testEnv, SOLANA_RPC_URL: mockSolRpc };
+      const solScanRes = await app.fetch(
+        new Request(`https://api.nullclear.dev/v1/scan/solana/${token2022Mint}`, {
+          headers: { "CF-Connecting-IP": "198.51.100.80" }
+        }),
+        solEnv
+      );
+      expect(solScanRes.status).toBe(200);
+      const solScan = (await solScanRes.json()) as any;
+      expect(solScan.evidence.ownerStatus).toBe("ACTIVE_OWNER");
+      expect(solScan.evidence.solanaAuthorities.isToken2022).toBe(true);
+      expect(solScan.evidence.solanaAuthorities.permanentDelegate).toBeTruthy();
+      expect(solScan.evidence.buyTaxPercent).toBe(15);
+      expect(solScan.recommendedAgentAction).toBe("ABORT_CRITICAL_TRAP");
+
+      // Build minimal valid legacy Solana tx invoking SPL Token SetAuthority(AccountOwner=2)
+      const tokenProgBytes = Buffer.from([
+        6, 221, 246, 225, 215, 101, 161, 147, 217, 203, 225, 70, 206, 235, 121, 172,
+        28, 180, 133, 237, 95, 91, 55, 145, 58, 140, 245, 133, 126, 255, 0, 169
+      ]);
+      const feePayerBytes = Buffer.alloc(32, 7);
+      const txBuf = Buffer.concat([
+        Buffer.from([1]), // 1 signature
+        Buffer.alloc(64, 1), // dummy sig
+        Buffer.from([1, 0, 1]), // header
+        Buffer.from([2]), // 2 account keys
+        feePayerBytes,
+        tokenProgBytes,
+        Buffer.alloc(32, 9), // blockhash
+        Buffer.from([1]), // 1 instruction
+        Buffer.from([1]), // programIdIndex = 1 (SPL Token)
+        Buffer.from([1, 0]), // 1 account index [0]
+        Buffer.from([2, 6, 2]) // data len=2: SetAuthority (6), AccountOwner (2)
+      ]);
+      const solGuardRes = await app.fetch(
+        new Request("https://api.nullclear.dev/v1/guard", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "CF-Connecting-IP": "198.51.100.81" },
+          body: JSON.stringify({ chain: "solana", transaction: txBuf.toString("base64") })
+        }),
+        solEnv
+      );
+      expect(solGuardRes.status).toBe(200);
+      const solGuard = (await solGuardRes.json()) as any;
+      expect(solGuard.guardType).toBe("SOLANA_TX_GUARD");
+      expect(solGuard.recommendedAgentAction).toBe("ABORT_DRAINER_APPROVAL");
+      expect(solGuard.simulation.computeUnitsConsumed).toBe(14200);
+    });
+
+    // 6. EVM eth_simulateV1 + Transfer/Approval asset diffs + stateOverrides via /v1/simulate & MCP nullclear_preflight_guard
+    await withLocalServer(async (req, res) => {
+      const chunks: Buffer[] = [];
+      for await (const chunk of req) chunks.push(chunk as Buffer);
+      const body = JSON.parse(Buffer.concat(chunks).toString("utf8"));
+      res.writeHead(200, { "Content-Type": "application/json" });
+      if (body.method === "eth_simulateV1") {
+        const callerPadded = "0x000000000000000000000000fd74ff802ea0e735514c070af04e0d6528ded145";
+        const destPadded = "0x0000000000000000000000001111111111111111111111111111111111111111";
+        res.end(
+          JSON.stringify({
+            jsonrpc: "2.0",
+            id: body.id,
+            result: [
+              {
+                number: "0x1b20700",
+                calls: [
+                  {
+                    status: "0x1",
+                    gasUsed: "0xc350",
+                    returnData: "0x0000000000000000000000000000000000000000000000000000000000000001",
+                    logs: [
+                      {
+                        address: "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913",
+                        topics: [
+                          "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef",
+                          callerPadded,
+                          destPadded
+                        ],
+                        data: "0x0000000000000000000000000000000000000000000000000000000000989680"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          })
+        );
+        return;
+      }
+      res.end(JSON.stringify({ jsonrpc: "2.0", id: body.id, result: "0x" }));
+    }, async (mockBaseRpc) => {
+      const evmEnv = { ...testEnv, BASE_MAINNET_RPC_URL: mockBaseRpc, BASE_RPC_URL: mockBaseRpc };
+      const simV1Res = await app.fetch(
+        new Request("https://api.nullclear.dev/v1/simulate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "CF-Connecting-IP": "198.51.100.82" },
+          body: JSON.stringify({
+            chain: "base",
+            from: "0xfd74fF802EA0E735514C070AF04E0D6528deD145",
+            to: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+            data: "0xa9059cbb00000000000000000000000011111111111111111111111111111111111111110000000000000000000000000000000000000000000000000000000000989680",
+            stateOverrides: { "0xfd74fF802EA0E735514C070AF04E0D6528deD145": { balance: "0xde0b6b3a7640000" } }
+          })
+        }),
+        evmEnv
+      );
+      expect(simV1Res.status).toBe(200);
+      const simV1 = (await simV1Res.json()) as any;
+      expect(simV1.simulationMode).toBe("eth_simulateV1");
+      expect(simV1.assetDiffs).toHaveLength(1);
+      expect(simV1.assetDiffs[0].directionForCaller).toBe("OUT");
+      expect(simV1.assetDiffs[0].amountRaw).toBe("10000000");
+
+      // MCP nullclear_preflight_guard
+      const mcpGuardRes = await app.fetch(
+        new Request("https://api.nullclear.dev/mcp", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "CF-Connecting-IP": "198.51.100.83" },
+          body: JSON.stringify({
+            jsonrpc: "2.0",
+            id: 707,
+            method: "tools/call",
+            params: {
+              name: "nullclear_preflight_guard",
+              arguments: {
+                chain: "base",
+                from: "0xfd74fF802EA0E735514C070AF04E0D6528deD145",
+                to: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+                data: "0xa9059cbb00000000000000000000000011111111111111111111111111111111111111110000000000000000000000000000000000000000000000000000000000989680"
+              }
+            }
+          })
+        }),
+        evmEnv
+      );
+      expect(mcpGuardRes.status).toBe(200);
+      const mcpGuardJson = (await mcpGuardRes.json()) as any;
+      const guardPayload = JSON.parse(mcpGuardJson.result.content[0].text);
+      expect(guardPayload.recommendedAgentAction).toBe("EXECUTE_SAFE");
+      expect(guardPayload.assetDiffs).toHaveLength(1);
+    });
+
+    // 7. Bytecode CFG opcode risk analyzer: ORIGIN (0x32), SLOAD (0x54) -> DELEGATECALL (0xf4), unguarded SELFDESTRUCT (0xff)
+    const cfg = analyzeBytecodeControlFlowRisks("0x3254f4ff");
+    expect(cfg.hasTxOriginAuth).toBe(true);
+    expect(cfg.hasMutableDelegateCall).toBe(true);
+    expect(cfg.hasUnguardedSelfDestruct).toBe(true);
+  });
+
+  it("V2.4 Conversion & Telemetry: /v1/bazaar/guard & /inspect enforce 402 Before 400, GET /v1/guard returns 200 guide/exec, Bazaar free trial caps at 2/day, and telemetry captures User-Agent + isFreeTrial", async () => {
+    const prodEnv = {
+      ...testEnv,
+      ENVIRONMENT: "production"
+    };
+
+    // 1. Bare GET /v1/guard returns 200 usage guide instead of 404
+    const guardInfoRes = await app.fetch(
+      new Request("https://api.nullclear.dev/v1/guard", {
+        headers: {
+          "User-Agent": "ElizaOS-AgentKit/1.0",
+          "CF-Connecting-IP": "198.51.100.90"
+        }
+      }),
+      prodEnv
+    );
+    expect(guardInfoRes.status).toBe(200);
+    const guardInfo = (await guardInfoRes.json()) as any;
+    expect(guardInfo.paidBazaarEndpoint).toContain("/v1/bazaar/guard");
+    expect(guardInfo.supportedChains).toContain("arbitrum");
+    expect(guardInfo.supportedChains).toContain("solana");
+    expect(guardInfo.examples?.evmApprovalGuard?.method).toBe("POST");
+
+    // 2. POST /v1/bazaar/guard & GET /v1/bazaar/inspect enforce 402 Before 400 (even with spoofed free-trial header)
+    const guard402 = await app.fetch(
+      new Request("https://api.nullclear.dev/v1/bazaar/guard", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-nullclear-free-trial": "true"
+        },
+        body: JSON.stringify({})
+      }),
+      prodEnv
+    );
+    expect(guard402.status).toBe(402);
+    expect(guard402.headers.get("PAYMENT-REQUIRED")).toBeTruthy();
+
+    const inspect402 = await app.fetch(
+      new Request("https://api.nullclear.dev/v1/bazaar/inspect?chain=base&address=not-an-address", {
+        headers: { "x-nullclear-free-trial": "true" }
+      }),
+      prodEnv
+    );
+    expect(inspect402.status).toBe(402);
+    expect(inspect402.headers.get("PAYMENT-REQUIRED")).toBeTruthy();
+
+    // 3. Paid POST /v1/bazaar/guard: empty body returns 400 after settlement; EIP-712 drainer returns 200 ABORT_DRAINER_APPROVAL + relatedEndpoints
+    const sigGuardEmpty = await createValidPaymentSignature(
+      "0xB586eFcCa41dF27ad3873BEcA54da0c30bf04d5c",
+      "5000"
+    );
+    const guard400 = await app.fetch(
+      new Request("https://api.nullclear.dev/v1/bazaar/guard", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "PAYMENT-SIGNATURE": sigGuardEmpty
+        },
+        body: JSON.stringify({})
+      }),
+      testEnv
+    );
+    expect(guard400.status).toBe(400);
+
+    const sigGuardPaid = await createValidPaymentSignature(
+      "0xB586eFcCa41dF27ad3873BEcA54da0c30bf04d5c",
+      "5000"
+    );
+    const guardPaidRes = await app.fetch(
+      new Request("https://api.nullclear.dev/v1/bazaar/guard", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "PAYMENT-SIGNATURE": sigGuardPaid
+        },
+        body: JSON.stringify({
+          chain: "base",
+          typedData: {
+            primaryType: "Permit",
+            domain: {
+              name: "USD Coin",
+              chainId: 8453,
+              verifyingContract: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
+            },
+            message: {
+              owner: "0xfd74fF802EA0E735514C070AF04E0D6528deD145",
+              spender: "0xdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef",
+              value: "115792089237316195423570985008687907853269984665640564039457584007913129639935"
+            }
+          }
+        })
+      }),
+      testEnv
+    );
+    expect(guardPaidRes.status).toBe(200);
+    const guardPaid = (await guardPaidRes.json()) as any;
+    expect(guardPaid.guardType).toBe("EIP712_SIGNATURE_GUARD");
+    expect(guardPaid.recommendedAgentAction).toBe("ABORT_DRAINER_APPROVAL");
+    expect(guardPaid.relatedEndpoints?.preflightGuard?.url).toBe("https://api.nullclear.dev/v1/bazaar/guard");
+    expect(guardPaid.settlementTransaction).toBeTruthy();
+
+    // 4. Paid GET /v1/bazaar/inspect returns proxy/ABI/CFG inspection + relatedEndpoints
+    const sigInspectPaid = await createValidPaymentSignature(
+      "0xB586eFcCa41dF27ad3873BEcA54da0c30bf04d5c",
+      "5000"
+    );
+    const inspectPaidRes = await app.fetch(
+      new Request("https://api.nullclear.dev/v1/bazaar/inspect?chain=base&address=0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", {
+        headers: { "PAYMENT-SIGNATURE": sigInspectPaid }
+      }),
+      testEnv
+    );
+    expect(inspectPaidRes.status).toBe(200);
+    const inspectPaid = (await inspectPaidRes.json()) as any;
+    expect(inspectPaid.chain).toBe("base");
+    expect(inspectPaid.address).toBe("0x833589fcd6edb6e08f4c7c32d4f71b54bda02913");
+    expect(inspectPaid.relatedEndpoints?.batchScan?.url).toBe("https://api.nullclear.dev/v1/bazaar/scan-batch");
+
+    // 5. Bazaar free-trial cap tightened to 2/day: calls 1 & 2 succeed, call 3 hits 402
+    const trialIp = "198.51.100.91";
+    const t1 = await app.fetch(
+      new Request("https://api.nullclear.dev/v1/bazaar/token-security?address=0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913&trial=true", {
+        headers: { "CF-Connecting-IP": trialIp, "User-Agent": "NullClearTrialProbe/2.4" }
+      }),
+      prodEnv
+    );
+    expect(t1.status).toBe(200);
+    expect(t1.headers.get("x-nullclear-tier")).toBe("free-trial");
+    expect(t1.headers.get("x-nullclear-remaining-free-calls")).toBe("1");
+
+    const t2 = await app.fetch(
+      new Request("https://api.nullclear.dev/v1/bazaar/market-oracle?symbol=ETH&trial=true", {
+        headers: { "CF-Connecting-IP": trialIp, "User-Agent": "NullClearTrialProbe/2.4" }
+      }),
+      prodEnv
+    );
+    expect(t2.status).toBe(200);
+    expect(t2.headers.get("x-nullclear-remaining-free-calls")).toBe("0");
+
+    const t3 = await app.fetch(
+      new Request("https://api.nullclear.dev/v1/bazaar/wallet-risk?trial=true", {
+        headers: { "CF-Connecting-IP": trialIp, "User-Agent": "NullClearTrialProbe/2.4" }
+      }),
+      prodEnv
+    );
+    expect(t3.status).toBe(402);
+    const t3Json = (await t3.json()) as any;
+    expect(t3Json.tier).toBe("free-trial-exhausted");
+    expect(t3Json.message).toContain("2/2");
+
+    // 6. Telemetry funnel exposes topUserAgents and freeTrialCalls
+    const funnelRes = await app.fetch(new Request("https://api.nullclear.dev/v1/telemetry/funnel"), prodEnv);
+    expect(funnelRes.status).toBe(200);
+    const funnel = (await funnelRes.json()) as any;
+    expect(funnel.last24h.freeTrialCalls).toBeGreaterThanOrEqual(2);
+    expect(
+      funnel.last24h.topUserAgents.some((entry: any) => entry.userAgent === "ElizaOS-AgentKit/1.0")
+    ).toBe(true);
+    expect(
+      funnel.last24h.topUserAgents.some((entry: any) => entry.userAgent === "NullClearTrialProbe/2.4")
+    ).toBe(true);
+
+    // 7. Discovery manifests advertise /v1/bazaar/guard, /v1/bazaar/inspect, GET /v1/guard, and freeTierDailyLimit = 2
+    const [x402Res, catalogRes, openApiRes] = await Promise.all([
+      app.fetch(new Request("https://api.nullclear.dev/.well-known/x402"), prodEnv),
+      app.fetch(new Request("https://api.nullclear.dev/v1/bazaar"), prodEnv),
+      app.fetch(new Request("https://api.nullclear.dev/openapi.json"), prodEnv)
+    ]);
+    const x402 = (await x402Res.json()) as any;
+    const catalog = (await catalogRes.json()) as any;
+    const openApi = (await openApiRes.json()) as any;
+
+    expect(x402.resources).toContain("https://api.nullclear.dev/v1/bazaar/guard");
+    expect(x402.resources).toContain("https://api.nullclear.dev/v1/bazaar/inspect");
+    expect(x402.endpoints?.bazaarGuard?.amountAtomic).toBe("5000");
+    expect(x402.endpoints?.bazaarInspect?.amountAtomic).toBe("5000");
+
+    expect(catalog.freeTierDailyLimit).toBe(2);
+    expect(catalog.resources[0]?.id).toBe("bazaar-guard");
+    expect(catalog.resources[1]?.id).toBe("bazaar-inspect");
+
+    expect(openApi.paths?.["/v1/bazaar/guard"]?.post?.operationId).toBe("bazaarGuard");
+    expect(openApi.paths?.["/v1/bazaar/inspect"]?.get?.operationId).toBe("bazaarInspect");
+    expect(openApi.paths?.["/v1/guard"]?.get?.operationId).toBe("forensicGuardGet");
+  });
+
+  it("V2.5 Firewall Pro Suite: Prepaid Passes ($5-$100), Guarded JSON-RPC Firewall, EIP-712 Policy Co-Signer, Watchtower Monitors & $0.10 Institutional Due-Diligence", async () => {
+    const { encodeFunctionData, parseAbi, verifyTypedData } = await import("viem");
+    const { privateKeyToAccount } = await import("viem/accounts");
+    const { diffMonitorSnapshots, DEFAULT_ALERT_RULES } = await import("../src/routes/monitors.js");
+
+    // 1. Prepaid Pass 402 challenges ($5 Starter & $25 Pro) + Mint Starter Pass via x402
+    const pass402Starter = await app.fetch(
+      new Request("https://api.nullclear.dev/v1/pass/buy", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tier: "starter" })
+      }),
+      testEnv
+    );
+    expect(pass402Starter.status).toBe(402);
+    const pass402StarterJson = (await pass402Starter.json()) as any;
+    expect(pass402StarterJson.amount).toBe("5000000");
+
+    const pass402Pro = await app.fetch(
+      new Request("https://api.nullclear.dev/v1/pass/buy?tier=pro", { method: "POST" }),
+      testEnv
+    );
+    expect(pass402Pro.status).toBe(402);
+    const pass402ProJson = (await pass402Pro.json()) as any;
+    expect(pass402ProJson.amount).toBe("25000000");
+
+    const passSig = await createValidPaymentSignature(
+      "0xB586eFcCa41dF27ad3873BEcA54da0c30bf04d5c",
+      "5000000"
+    );
+    const mintedRes = await app.fetch(
+      new Request("https://api.nullclear.dev/v1/pass/buy", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "PAYMENT-SIGNATURE": passSig
+        },
+        body: JSON.stringify({ tier: "starter" })
+      }),
+      testEnv
+    );
+    expect(mintedRes.status).toBe(200);
+    const minted = (await mintedRes.json()) as any;
+    expect(minted.apiKey).toMatch(/^nc_live_[a-f0-9]{48}$/);
+    expect(minted.creditsRemaining).toBe(2000);
+    expect(minted.guardedRpcUrls?.base).toBe(`https://api.nullclear.dev/rpc/base/${minted.apiKey}`);
+
+    const apiKey: string = minted.apiKey;
+
+    // 2. Bearer nc_live_... pass authenticates Bazaar & Forensics with <5ms debit (no x402 signature needed)
+    const fastGuardRes = await app.fetch(
+      new Request("https://api.nullclear.dev/v1/bazaar/guard", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${apiKey}`
+        },
+        body: JSON.stringify({
+          chain: "base",
+          typedData: {
+            primaryType: "Permit",
+            domain: {
+              name: "USD Coin",
+              chainId: 8453,
+              verifyingContract: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
+            },
+            message: {
+              owner: "0xfd74fF802EA0E735514C070AF04E0D6528deD145",
+              spender: "0xdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef",
+              value: "115792089237316195423570985008687907853269984665640564039457584007913129639935"
+            }
+          }
+        })
+      }),
+      testEnv
+    );
+    expect(fastGuardRes.status).toBe(200);
+    expect(fastGuardRes.headers.get("x-nullclear-tier")).toBe("prepaid-pass");
+    expect(fastGuardRes.headers.get("x-nullclear-credits-remaining")).toBe("1999");
+
+    // 3. Drop-In Guarded JSON-RPC Firewall (/rpc/base/:apiKey)
+    const unauthRpc = await app.fetch(
+      new Request("https://api.nullclear.dev/rpc/base", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "eth_blockNumber", params: [] })
+      }),
+      testEnv
+    );
+    const unauthRpcJson = (await unauthRpc.json()) as any;
+    expect(unauthRpcJson.error?.code).toBe(-32002);
+
+    let upstreamBroadcastCalled = false;
+    const origFetch = globalThis.fetch;
+    const rpcEnv = {
+      ...testEnv,
+      BASE_MAINNET_RPC_URL: "https://mock-base-rpc.nullclear.test"
+    };
+    const safeTransferData = encodeFunctionData({
+      abi: parseAbi(["function transfer(address to, uint256 value)"]),
+      functionName: "transfer",
+      args: ["0x1111111111111111111111111111111111111111", 10000000n]
+    });
+    const evilApproveData = encodeFunctionData({
+      abi: parseAbi(["function approve(address spender, uint256 value)"]),
+      functionName: "approve",
+      args: ["0xdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef", (1n << 255n)]
+    });
+    const testSigner = privateKeyToAccount(
+      "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80"
+    );
+    const signedDrainerTx = await testSigner.signTransaction({
+      chainId: 8453,
+      to: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+      data: evilApproveData,
+      value: 0n,
+      nonce: 1,
+      gas: 65000n,
+      maxFeePerGas: 1000000000n,
+      maxPriorityFeePerGas: 100000000n
+    });
+
+    globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      const urlStr = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+      if (urlStr.includes("mock-base-rpc.nullclear.test")) {
+        const bodyObj = init?.body ? JSON.parse(String(init.body)) : {};
+        if (bodyObj.method === "eth_blockNumber") {
+          return new Response(JSON.stringify({ jsonrpc: "2.0", id: bodyObj.id, result: "0x1b20700" }), {
+            status: 200,
+            headers: { "Content-Type": "application/json" }
+          });
+        }
+        if (bodyObj.method === "eth_sendRawTransaction" || bodyObj.method === "eth_sendTransaction") {
+          upstreamBroadcastCalled = true;
+          return new Response(
+            JSON.stringify({
+              jsonrpc: "2.0",
+              id: bodyObj.id,
+              result: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+            }),
+            { status: 200, headers: { "Content-Type": "application/json" } }
+          );
+        }
+        if (bodyObj.method === "eth_simulateV1") {
+          return new Response(
+            JSON.stringify({
+              jsonrpc: "2.0",
+              id: bodyObj.id,
+              result: [
+                {
+                  calls: [
+                    {
+                      status: "0x1",
+                      gasUsed: "0xc350",
+                      returnData: "0x0000000000000000000000000000000000000000000000000000000000000001",
+                      logs: []
+                    }
+                  ]
+                }
+              ]
+            }),
+            { status: 200, headers: { "Content-Type": "application/json" } }
+          );
+        }
+        if (bodyObj.method === "eth_call" || bodyObj.method === "eth_estimateGas") {
+          return new Response(
+            JSON.stringify({
+              jsonrpc: "2.0",
+              id: bodyObj.id,
+              result: bodyObj.method === "eth_estimateGas" ? "0xc350" : "0x0000000000000000000000000000000000000000000000000000000000000001"
+            }),
+            { status: 200, headers: { "Content-Type": "application/json" } }
+          );
+        }
+        if (bodyObj.method === "eth_getCode") {
+          return new Response(JSON.stringify({ jsonrpc: "2.0", id: bodyObj.id, result: "0x60806040" }), {
+            status: 200,
+            headers: { "Content-Type": "application/json" }
+          });
+        }
+      }
+      return origFetch(input, init);
+    }) as typeof fetch;
+
+    try {
+      // 3a. Read method passes through at 0 credits
+      const readRpcRes = await app.fetch(
+        new Request(`https://api.nullclear.dev/rpc/base/${apiKey}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ jsonrpc: "2.0", id: 10, method: "eth_blockNumber", params: [] })
+        }),
+        rpcEnv
+      );
+      expect(readRpcRes.status).toBe(200);
+      expect(readRpcRes.headers.get("X-NullClear-Firewall")).toBe("PASSTHROUGH_READ");
+      expect(readRpcRes.headers.get("x-nullclear-credits-remaining")).toBe("1999");
+      const readRpcJson = (await readRpcRes.json()) as any;
+      expect(readRpcJson.result).toBe("0x1b20700");
+
+      // 3b. Signed drainer eth_sendRawTransaction is BLOCKED before reaching upstream RPC!
+      const blockedBroadcastRes = await app.fetch(
+        new Request(`https://api.nullclear.dev/rpc/base/${apiKey}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            jsonrpc: "2.0",
+            id: 11,
+            method: "eth_sendRawTransaction",
+            params: [signedDrainerTx]
+          })
+        }),
+        rpcEnv
+      );
+      expect(blockedBroadcastRes.status).toBe(200);
+      expect(blockedBroadcastRes.headers.get("X-NullClear-Firewall")).toBe("BLOCKED");
+      expect(upstreamBroadcastCalled).toBe(false);
+      const blockedJson = (await blockedBroadcastRes.json()) as any;
+      expect(blockedJson.error?.code).toBe(-32003);
+      expect(blockedJson.error?.data?.recommendedAgentAction).toBe("ABORT_DRAINER_APPROVAL");
+
+      // 3c. Safe eth_sendTransaction passes firewall and forwards to upstream RPC
+      const allowedBroadcastRes = await app.fetch(
+        new Request(`https://api.nullclear.dev/rpc/base/${apiKey}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            jsonrpc: "2.0",
+            id: 12,
+            method: "eth_sendTransaction",
+            params: [
+              {
+                from: "0xfd74fF802EA0E735514C070AF04E0D6528deD145",
+                to: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+                data: safeTransferData,
+                value: "0x0"
+              }
+            ]
+          })
+        }),
+        rpcEnv
+      );
+      expect(allowedBroadcastRes.status).toBe(200);
+      expect(allowedBroadcastRes.headers.get("X-NullClear-Firewall")).toBe("ALLOWED");
+      expect(upstreamBroadcastCalled).toBe(true);
+      const allowedJson = (await allowedBroadcastRes.json()) as any;
+      expect(allowedJson.result).toBe("0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
+
+      // 4. Cryptographic EIP-712 Policy Co-Signer (/v1/policy/register + /v1/policy/cosign)
+      const regPolicyRes = await app.fetch(
+        new Request("https://api.nullclear.dev/v1/policy/register", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${apiKey}`
+          },
+          body: JSON.stringify({
+            name: "Treasury Guard Policy",
+            rules: {
+              maxTaxPercent: 3,
+              blockCriticalTraps: true,
+              allowUnlimitedApprovals: false,
+              allowedChains: ["base"]
+            }
+          })
+        }),
+        rpcEnv
+      );
+      expect(regPolicyRes.status).toBe(200);
+      const regPolicy = (await regPolicyRes.json()) as any;
+      expect(regPolicy.policyId).toMatch(/^pol_/);
+
+      // 4a. Drainer approval denied co-signature
+      const cosignDeniedRes = await app.fetch(
+        new Request("https://api.nullclear.dev/v1/policy/cosign", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${apiKey}`
+          },
+          body: JSON.stringify({
+            policyId: regPolicy.policyId,
+            chain: "base",
+            from: "0xfd74fF802EA0E735514C070AF04E0D6528deD145",
+            to: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+            data: evilApproveData,
+            value: "0"
+          })
+        }),
+        rpcEnv
+      );
+      expect(cosignDeniedRes.status).toBe(200);
+      const cosignDenied = (await cosignDeniedRes.json()) as any;
+      expect(cosignDenied.approved).toBe(false);
+      expect(cosignDenied.signature).toBeNull();
+      expect(cosignDenied.violatedRules.length).toBeGreaterThan(0);
+
+      // 4b. Safe transfer receives cryptographically valid EIP-712 PolicyApproval co-signature
+      const cosignOkRes = await app.fetch(
+        new Request("https://api.nullclear.dev/v1/policy/cosign", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${apiKey}`
+          },
+          body: JSON.stringify({
+            policyId: regPolicy.policyId,
+            chain: "base",
+            from: "0xfd74fF802EA0E735514C070AF04E0D6528deD145",
+            to: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+            data: safeTransferData,
+            value: "0"
+          })
+        }),
+        rpcEnv
+      );
+      expect(cosignOkRes.status).toBe(200);
+      const cosignOk = (await cosignOkRes.json()) as any;
+      expect(cosignOk.approved).toBe(true);
+      expect(cosignOk.signature).toMatch(/^0x[a-fA-F0-9]+$/);
+
+      const sigValid = await verifyTypedData({
+        address: cosignOk.coSignerAddress,
+        domain: cosignOk.eip712.domain,
+        types: cosignOk.eip712.types,
+        primaryType: "PolicyApproval",
+        message: {
+          ...cosignOk.eip712.message,
+          value: BigInt(cosignOk.eip712.message.value),
+          validUntil: BigInt(cosignOk.eip712.message.validUntil)
+        },
+        signature: cosignOk.signature
+      });
+      expect(sigValid).toBe(true);
+
+      // 5. Continuous Cron Watchtower (/v1/monitors + diffMonitorSnapshots)
+      const createMonRes = await app.fetch(
+        new Request("https://api.nullclear.dev/v1/monitors", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${apiKey}`
+          },
+          body: JSON.stringify({
+            chain: "base",
+            address: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+            webhookUrl: `http://127.0.0.1:${mockServerPort}/honest`
+          })
+        }),
+        rpcEnv
+      );
+      expect(createMonRes.status).toBe(201);
+      const createdMon = (await createMonRes.json()) as any;
+      expect(createdMon.monitorId).toMatch(/^mon_/);
+      expect(createdMon.baseline?.chain).toBe("base");
+
+      // Verify snapshot diff detects proxy upgrade + tax spike + liquidity pull
+      const diffAlerts = diffMonitorSnapshots(
+        {
+          chain: "base",
+          address: "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913",
+          verdict: "VERIFIED CLEAR",
+          score: 99,
+          isProxy: true,
+          implementationAddress: "0x1111111111111111111111111111111111111111",
+          buyTaxPercent: 0,
+          sellTaxPercent: 0,
+          liquidityUsd: 100000,
+          ownerStatus: "RENOUNCED",
+          capturedAt: Date.now() - 60000
+        },
+        {
+          chain: "base",
+          address: "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913",
+          verdict: "CRITICAL TRAP",
+          score: 5,
+          isProxy: true,
+          implementationAddress: "0x9999999999999999999999999999999999999999",
+          buyTaxPercent: 0,
+          sellTaxPercent: 50,
+          liquidityUsd: 20000,
+          ownerStatus: "ACTIVE_OWNER",
+          capturedAt: Date.now()
+        },
+        DEFAULT_ALERT_RULES
+      );
+      expect(diffAlerts.length).toBeGreaterThanOrEqual(4);
+
+      const listMonRes = await app.fetch(
+        new Request("https://api.nullclear.dev/v1/monitors", {
+          headers: { Authorization: `Bearer ${apiKey}` }
+        }),
+        rpcEnv
+      );
+      const listMon = (await listMonRes.json()) as any;
+      expect(listMon.count).toBeGreaterThanOrEqual(1);
+
+      const delMonRes = await app.fetch(
+        new Request(`https://api.nullclear.dev/v1/monitors/${createdMon.monitorId}`, {
+          method: "DELETE",
+          headers: { Authorization: `Bearer ${apiKey}` }
+        }),
+        rpcEnv
+      );
+      expect(delMonRes.status).toBe(200);
+
+      // 6. Institutional Due-Diligence Dossier ($0.10 USDC or 10 Prepaid Pass credits)
+      const dd402 = await app.fetch(
+        new Request("https://api.nullclear.dev/v1/bazaar/due-diligence", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ chain: "base", address: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913" })
+        }),
+        rpcEnv
+      );
+      expect(dd402.status).toBe(402);
+
+      const ddPaidRes = await app.fetch(
+        new Request("https://api.nullclear.dev/v1/bazaar/due-diligence", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${apiKey}`
+          },
+          body: JSON.stringify({ chain: "base", address: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913" })
+        }),
+        rpcEnv
+      );
+      expect(ddPaidRes.status).toBe(200);
+      const ddPaid = (await ddPaidRes.json()) as any;
+      expect(ddPaid.symbol).toBe("USDC");
+      expect(ddPaid.clearanceCertificate?.signature).toMatch(/^0x[a-fA-F0-9]+$/);
+      expect(ddPaid.riskBreakdown?.honeypotRisk).toBe("NONE");
+
+      // Check pass status reflects all debits (2000 - 1 - 2 - 2 - 1 - 2 - 2 - 50 - 10 = 1930)
+      const statusRes = await app.fetch(
+        new Request("https://api.nullclear.dev/v1/pass/status", {
+          headers: { Authorization: `Bearer ${apiKey}` }
+        }),
+        rpcEnv
+      );
+      expect(statusRes.status).toBe(200);
+      const statusJson = (await statusRes.json()) as any;
+      expect(statusJson.creditsRemaining).toBe(1930);
+
+      // 7. Hard timeoutMs budget on Guarded RPC (failMode=closed blocks, failMode=open forwards) + KV read cache
+      const kvStore = new Map<string, string>();
+      const mockKv = {
+        get: async (k: string) => kvStore.get(k) ?? null,
+        put: async (k: string, v: string) => {
+          kvStore.set(k, v);
+        }
+      };
+      const slowRpcEnv = {
+        ...testEnv,
+        KV: mockKv as any,
+        BASE_MAINNET_RPC_URL: "https://slow-base-rpc.nullclear.test"
+      };
+      globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+        const urlStr = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+        if (urlStr.includes("slow-base-rpc.nullclear.test")) {
+          const bodyObj = init?.body ? JSON.parse(String(init.body)) : {};
+          if (bodyObj.method === "eth_blockNumber") {
+            return new Response(JSON.stringify({ jsonrpc: "2.0", id: bodyObj.id, result: "0x1b20701" }), {
+              status: 200,
+              headers: { "Content-Type": "application/json" }
+            });
+          }
+          if (bodyObj.method === "eth_sendTransaction") {
+            return new Response(
+              JSON.stringify({
+                jsonrpc: "2.0",
+                id: bodyObj.id,
+                result: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+              }),
+              { status: 200, headers: { "Content-Type": "application/json" } }
+            );
+          }
+          // Simulate slow upstream simulation RPC (> 150ms)
+          await new Promise((r) => setTimeout(r, 180));
+          return new Response(JSON.stringify({ jsonrpc: "2.0", id: bodyObj.id, result: "0x" }), {
+            status: 200,
+            headers: { "Content-Type": "application/json" }
+          });
+        }
+        return origFetch(input, init);
+      }) as typeof fetch;
+
+      // Populate & hit KV cache on read RPC call
+      const kvRead1 = await app.fetch(
+        new Request(`https://api.nullclear.dev/rpc/base/${apiKey}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ jsonrpc: "2.0", id: 20, method: "eth_blockNumber", params: [] })
+        }),
+        slowRpcEnv
+      );
+      expect(kvRead1.status).toBe(200);
+      expect(kvStore.size).toBe(1);
+
+      // failMode=closed + timeoutMs=50 blocks cleanly when guard exceeds budget
+      const closedTimeoutRes = await app.fetch(
+        new Request(`https://api.nullclear.dev/rpc/base/${apiKey}?failMode=closed&timeoutMs=50`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            jsonrpc: "2.0",
+            id: 21,
+            method: "eth_sendTransaction",
+            params: [
+              {
+                from: "0xfd74fF802EA0E735514C070AF04E0D6528deD145",
+                to: "0x1111111111111111111111111111111111111111",
+                data: safeTransferData,
+                value: "0x0"
+              }
+            ]
+          })
+        }),
+        slowRpcEnv
+      );
+      expect(closedTimeoutRes.headers.get("X-NullClear-Firewall")).toBe("BLOCKED");
+      const closedTimeoutJson = (await closedTimeoutRes.json()) as any;
+      expect(closedTimeoutJson.error?.code).toBe(-32003);
+      expect(closedTimeoutJson.error?.message).toContain("exceeded 50ms budget");
+
+      // failMode=open + timeoutMs=50 forwards cleanly when guard exceeds budget
+      const openTimeoutRes = await app.fetch(
+        new Request(`https://api.nullclear.dev/rpc/base/${apiKey}?failMode=open&timeoutMs=50`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            jsonrpc: "2.0",
+            id: 22,
+            method: "eth_sendTransaction",
+            params: [
+              {
+                from: "0xfd74fF802EA0E735514C070AF04E0D6528deD145",
+                to: "0x1111111111111111111111111111111111111111",
+                data: safeTransferData,
+                value: "0x0"
+              }
+            ]
+          })
+        }),
+        slowRpcEnv
+      );
+      expect(openTimeoutRes.headers.get("X-NullClear-Firewall")).toBe("FAIL_OPEN");
+      const openTimeoutJson = (await openTimeoutRes.json()) as any;
+      expect(openTimeoutJson.result).toBe(
+        "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+      );
+    } finally {
+      globalThis.fetch = origFetch;
+    }
   });
 });
 

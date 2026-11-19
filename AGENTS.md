@@ -10,10 +10,16 @@
 
 | Task | Endpoint / Method | Description |
 | :--- | :--- | :--- |
-| **Token Audit & Taxes** | `GET https://api.nullclear.dev/v1/scan/:chain/:address` | Multi-oracle security consensus, proxy resolution, buy/sell tax audit (<400 tokens). Chains: `base`, `eth`, `solana`. |
-| **Proxy & ABI Inspection** | `GET https://api.nullclear.dev/v1/inspect/:chain/:address` | Instruction-boundary disassembler, EIP-1967/1822 proxy slot reader, function selector extractor. |
-| **Calldata & Revert Decode** | `POST https://api.nullclear.dev/v1/decode` | Resolves 4-byte selectors, custom revert reasons, flags infinite approvals & collection-wide drainers. |
-| **Pre-Flight Tx Simulation** | `POST https://api.nullclear.dev/v1/simulate` | Executes `eth_call` & gas estimation, decodes failure reason, returns deterministic execution advice. |
+| **1-Call Pre-Sign Guard** | `POST https://api.nullclear.dev/v1/guard` | All-in-one recursive calldata/EIP-712/Solana wire decode + stateful simulation + touched-token honeypot scan (<400 tokens). |
+| **Drop-In Guarded RPC** | `POST https://api.nullclear.dev/rpc/:chain/:apiKey` | Replace `RPC_URL` once: 0-credit reads (`<5ms` KV auth), auto-blocks drainers, honeypots & reverts on broadcast. |
+| **Prepaid Pass (`nc_live_...`)** | `POST https://api.nullclear.dev/v1/pass/buy` | Self-serve `$5` (2k credits), `$25` (15k credits), or `$100` (100k credits) Bearer API keys with zero per-call x402 latency. |
+| **EIP-712 Policy Co-Signer** | `POST https://api.nullclear.dev/v1/policy/cosign` | Non-custodial programmable spend/tax/drainer enforcement emitting verifiable EIP-712 `PolicyApproval` co-signatures (`$0.02` / 2 credits). |
+| **30-Day Watchtower** | `POST https://api.nullclear.dev/v1/monitors` | Continuous cron monitor for proxy upgrades, sell-tax spikes, LP pulls & Solana mint/freeze hooks (`$1.00` / 50 credits). |
+| **Institutional Dossier** | `POST https://api.nullclear.dev/v1/bazaar/due-diligence` | 7-chain forensics + proxy/ABI/CFG + historical delta + signed EIP-712 Clearance Certificate (`$0.10` / 10 credits). |
+| **Token Audit & Taxes** | `GET https://api.nullclear.dev/v1/scan/:chain/:address` | Multi-oracle security consensus, Token-2022/mint/freeze audit, proxy resolution, buy/sell tax audit. Chains: `base`, `eth`, `arbitrum`, `optimism`, `polygon`, `bsc`, `solana`. |
+| **Proxy & ABI Inspection** | `GET https://api.nullclear.dev/v1/inspect/:chain/:address` | Bytecode CFG risk disassembler, EIP-1967/1822/Beacon/Diamond/Safe proxy reader, Sourcify v2 + batch OpenChain selector extractor. |
+| **Calldata, EIP-712 & Wire Decode** | `POST https://api.nullclear.dev/v1/decode` | Recursively unwraps Multicall3/Universal Router/Safe, audits EIP-712 Permits/Seaport, parses Solana wire txs, decodes custom reverts & router trust. |
+| **Stateful Tx Simulation** | `POST https://api.nullclear.dev/v1/simulate` | Executes EVM `eth_simulateV1` (`stateOverrides`, multi-tx bundles, `Transfer`/`Approval` asset diffs) & Solana `simulateTransaction`. |
 | **Clean Markdown Web Fetch** | `GET https://api.nullclear.dev/v1/clean-markdown?url=:url` | High-entropy readability scraper stripping ads, scripts, and navigation clutter into token-efficient markdown. |
 | **LLM Markdown Twin** | `GET https://nullclear.com/scan/:chain/:address.md` | Content negotiation (`Accept: text/markdown`) returning concise forensic reports (<300 tokens). |
 
@@ -58,5 +64,5 @@ To equip your agent environment with native NullClear forensic tools:
 ---
 
 ## Free-Tier & Rate-Limit Protocol
-- **Free Tier:** 100 requests / day / IP with zero headers and zero keys.
-- **Graceful Failover:** On request #101+, cached scans continue to be served transparently. For live uncached requests, an HTTP 402 challenge is returned with EIP-3009 micro-settlement instructions ($0.005 USDC on Base).
+- **Zero-Key Forensic Free Tier:** 10 requests / day / IP with zero headers and zero keys (`2` free trial calls/day on x402 Bazaar endpoints).
+- **Graceful Failover & Prepaid Passes:** On request #11+, cached scans continue to be served transparently. For live uncached requests, an HTTP 402 challenge is returned with EIP-3009 micro-settlement instructions (`$0.005 USDC` on Base) OR instant `$5/$25/$100` Prepaid Pass minting (`POST /v1/pass/buy`).

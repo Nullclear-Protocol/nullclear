@@ -74,6 +74,7 @@ export interface ElizaPluginLike {
 
 export interface NullClearElizaPluginConfig {
   arbiterUrl?: string;
+  apiKey?: string;
   defaultChain?: ForensicChain;
   strict?: boolean;
   signer?: SignerInput;
@@ -82,11 +83,15 @@ export interface NullClearElizaPluginConfig {
 }
 
 const SECURITY_KEYWORDS_RE =
-  /\b(scan|audit|check|verify|safe|safety|honeypot|rug|tax|firewall|inspect|token|mint|swap|buy)\b/i;
-const CALLDATA_KEYWORDS_RE = /\b(decode|calldata|approve|drainer|simulate|tx|revert)\b/i;
+  /\b(scan|audit|check|verify|safe|safety|honeypot|rug|tax|firewall|inspect|guard|token|mint|swap|buy)\b/i;
+const CALLDATA_KEYWORDS_RE = /\b(decode|calldata|approve|drainer|simulate|tx|revert|permit|guard)\b/i;
 
 export function extractChainHint(text: string, fallback: ForensicChain = "base"): ForensicChain {
   if (/\b(solana|sol|pump\.?fun|raydium|jupiter)\b/i.test(text)) return "solana";
+  if (/\b(arbitrum|arb\b)\b/i.test(text)) return "arbitrum";
+  if (/\b(optimism|op mainnet)\b/i.test(text)) return "optimism";
+  if (/\b(polygon|matic|pol\b)\b/i.test(text)) return "polygon";
+  if (/\b(bsc|bnb|binance smart chain)\b/i.test(text)) return "bsc";
   if (/\b(ethereum|eth\b|mainnet|uniswap v2)\b/i.test(text)) return "eth";
   return fallback;
 }
@@ -135,12 +140,14 @@ function buildRuntimeClient(
   config: NullClearElizaPluginConfig
 ): NullClearClient {
   const settingUrl = runtime?.getSetting?.("NULLCLEAR_API_URL") || undefined;
+  const settingApiKey = runtime?.getSetting?.("NULLCLEAR_API_KEY") || undefined;
   const settingKey = runtime?.getSetting?.("NULLCLEAR_PRIVATE_KEY") || undefined;
   const signer =
     config.signer ||
     (settingKey && settingKey.startsWith("0x") ? (settingKey as `0x${string}`) : undefined);
   return new NullClearClient({
     arbiterUrl: config.arbiterUrl || settingUrl || "https://api.nullclear.dev",
+    apiKey: config.apiKey || settingApiKey,
     fetch: config.fetch,
     timeoutMs: config.timeoutMs,
     signer
@@ -264,9 +271,9 @@ export function createNullClearPlugin(config: NullClearElizaPluginConfig = {}): 
 
   const guardCalldataAction: ElizaActionLike = {
     name: "NULLCLEAR_GUARD_CALLDATA",
-    similes: ["DECODE_CALLDATA", "CHECK_DRAINER_APPROVAL"],
+    similes: ["DECODE_CALLDATA", "CHECK_DRAINER_APPROVAL", "PREFLIGHT_GUARD"],
     description:
-      "Decodes hex calldata before signing to catch unlimited approve() or setApprovalForAll() drainer traps (ABORT_DRAINER_APPROVAL).",
+      "Runs NullClear's 1-Call Pre-Sign Firewall across 7 chains on hex calldata or transactions (nested Multicall3/UniversalRouter/Safe, EIP-712 Permits, stateful simulation & touched tokens).",
     validate: async (_runtime, message) => {
       const text = String(message?.content?.text || "");
       const hex = extractHexCalldata(text);
@@ -278,28 +285,40 @@ export function createNullClearPlugin(config: NullClearElizaPluginConfig = {}): 
         (typeof message?.content?.data === "string" ? message.content.data : undefined) ||
         extractHexCalldata(text);
       if (!calldata) {
-        const msg = "No hex calldata payload found to decode.";
+        const msg = "No hex calldata payload found to guard.";
         if (callback) await callback({ text: msg });
         return { success: false, text: msg, error: msg };
       }
 
       const client = buildRuntimeClient(runtime, config);
       const chainHint = extractChainHint(text, defaultChain);
-      const decoded = await client.decodeCalldata(calldata, chainHint === "eth" ? "eth" : "base");
-      const summary = `[NullClear Calldata] ${decoded.recommendedAgentAction || "UNKNOWN"} | Selector: ${decoded.selector || "?"} (${decoded.functionName || "unknown"})${decoded.riskReason ? ` | Risk: ${decoded.riskReason}` : ""}`;
+      const toAddr =
+        typeof message?.content?.to === "string" ? message.content.to : undefined;
+      const fromAddr =
+        typeof message?.content?.from === "string" ? message.content.from : undefined;
+
+      const guardOrDecode = toAddr
+        ? await client.guard({
+            chain: chainHint === "solana" ? "base" : chainHint,
+            from: fromAddr,
+            to: toAddr,
+            data: calldata
+          })
+        : await client.decodeCalldata(calldata, chainHint === "solana" ? "base" : chainHint);
+      const summary = `[NullClear Firewall] ${guardOrDecode.recommendedAgentAction || "UNKNOWN"} | ${guardOrDecode.llmDigest || guardOrDecode.functionName || "checked"}`;
 
       if (callback) {
-        await callback({ text: summary, content: { decoded } });
+        await callback({ text: summary, content: { result: guardOrDecode } });
       }
 
       return {
         success: true,
         text: summary,
         values: {
-          recommendedAgentAction: decoded.recommendedAgentAction,
-          selector: decoded.selector
+          recommendedAgentAction: guardOrDecode.recommendedAgentAction,
+          selector: guardOrDecode.selector
         },
-        data: { decoded }
+        data: { result: guardOrDecode }
       };
     }
   };
