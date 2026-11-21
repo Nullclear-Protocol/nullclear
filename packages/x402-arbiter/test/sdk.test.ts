@@ -368,4 +368,53 @@ describe("@nullclear/x402-arbiter SDK Test Suite", () => {
     expect(batchFallback.recommendedAgentAction).toBe("EXECUTE_SAFE");
     expect(batchFallback.results).toHaveLength(2);
   });
+
+  it("NullClearClient auto-pays via x402 on forensic 402 exhaustion and never masks rate-limited batch fallback as EXECUTE_SAFE", async () => {
+    const testIp = "198.51.100.211";
+    const ipFetch: typeof fetch = async (input, init) => {
+      const urlStr = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+      const path = urlStr.replace("https://mock-arbiter", "");
+      const headers = new Headers(init?.headers);
+      headers.set("CF-Connecting-IP", testIp);
+      return arbiterApp.fetch(
+        new Request(`https://api.nullclear.dev${path}`, {
+          method: init?.method,
+          headers,
+          body: init?.body as any
+        }),
+        { ARBITER_PRIVATE_KEY: arbiterKey }
+      );
+    };
+
+    // Exhaust 10 free calls without signer
+    const freeClient = new NullClearClient({
+      arbiterUrl: "https://mock-arbiter",
+      fetch: ipFetch
+    });
+    for (let i = 0; i < 10; i++) {
+      const r = await freeClient.scanToken("base", "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913");
+      expect(r.recommendedAgentAction).toBe("EXECUTE_SAFE");
+    }
+
+    // Call #11 without signer returns 402 rateLimited, and scanBatch fallback MUST NOT return EXECUTE_SAFE
+    const batchExhausted = await freeClient.scanBatch(
+      [
+        "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+        "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"
+      ],
+      { fallbackToFreeSingleScans: true }
+    );
+    expect(batchExhausted.error).toBe("Payment Required");
+    expect(batchExhausted.recommendedAgentAction).not.toBe("EXECUTE_SAFE");
+
+    // Call #11 WITH signer automatically catches 402 from /v1/scan and settles via x402 EIP-3009
+    const paidClient = new NullClearClient({
+      arbiterUrl: "https://mock-arbiter",
+      signer: buyerKey,
+      fetch: ipFetch
+    });
+    const paidScan = await paidClient.scanToken("base", "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913");
+    expect(paidScan.recommendedAgentAction).toBe("EXECUTE_SAFE");
+    expect(paidScan.rateLimited).not.toBe(true);
+  });
 });

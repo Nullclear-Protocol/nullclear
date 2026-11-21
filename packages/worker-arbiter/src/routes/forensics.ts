@@ -20,6 +20,7 @@ import {
   getTrendingScans,
   runTrendingTokenCronScan,
   readUrlCleanMarkdown,
+  normalizeChain,
   isEvmAddress,
   isSolanaAddress,
   type ForensicScanPayload
@@ -83,32 +84,45 @@ export function shouldServeMarkdown(c: any, addressParam?: string): boolean {
   return agentPatterns.some((pat) => ua.includes(pat));
 }
 
-function buildX402UpgradeBlock(c: any, resourcePath: string) {
+export function buildX402UpgradeBlock(c: any, resourcePath: string) {
   const treasuryAddress =
     c.env?.TREASURY_WALLET_ADDRESS || "0xB586eFcCa41dF27ad3873BEcA54da0c30bf04d5c";
   const priceAtomic = "5000"; // $0.005 USDC on Base Mainnet (6 decimals)
+  const resourceUrl = `https://api.nullclear.dev${resourcePath}`;
+  const description =
+    "NullClear Forensics Unlimited High-Frequency Access ($0.005 USDC per call via EIP-3009 on Base)";
+
+  const acceptOption = {
+    scheme: "exact" as const,
+    network: "eip155:8453" as const,
+    amount: priceAtomic,
+    maxAmountRequired: priceAtomic,
+    resource: resourceUrl,
+    description,
+    mimeType: "application/json",
+    payTo: treasuryAddress as `0x${string}`,
+    maxTimeoutSeconds: 300,
+    asset: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913" as `0x${string}`,
+    extra: {
+      name: "USD Coin",
+      version: "2"
+    }
+  };
 
   const paymentRequiredPayload = {
     x402Version: 2 as const,
-    resource: `https://api.nullclear.dev${resourcePath}`,
-    accepts: [
-      {
-        scheme: "exact" as const,
-        network: "eip155:8453" as const,
-        maxAmountRequired: priceAtomic,
-        resource: `https://api.nullclear.dev${resourcePath}`,
-        description:
-          "NullClear Forensics V2.2 Unlimited High-Frequency Access ($0.005 USDC per call via EIP-3009 on Base)",
-        mimeType: "application/json",
-        payTo: treasuryAddress as `0x${string}`,
-        maxTimeoutSeconds: 60,
-        asset: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913" as `0x${string}`,
-        extra: {
-          name: "USD Coin",
-          version: "2"
-        }
-      }
-    ]
+    scheme: "exact" as const,
+    network: "eip155:8453" as const,
+    amount: priceAtomic,
+    asset: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913" as `0x${string}`,
+    payTo: treasuryAddress as `0x${string}`,
+    maxTimeoutSeconds: 300,
+    resource: {
+      url: resourceUrl,
+      description,
+      mimeType: "application/json"
+    },
+    accepts: [acceptOption]
   };
 
   const encodedHeader = encodeBase64Json(paymentRequiredPayload);
@@ -116,6 +130,7 @@ function buildX402UpgradeBlock(c: any, resourcePath: string) {
   return {
     encodedHeader,
     paymentRequiredPayload,
+    treasuryAddress,
     x402Upgrade: {
       freeTierLimitPerDay: FORENSIC_FREE_TIER_DAILY_LIMIT,
       priceUsdc: "0.005",
@@ -130,6 +145,25 @@ function buildX402UpgradeBlock(c: any, resourcePath: string) {
         `Free tier (${FORENSIC_FREE_TIER_DAILY_LIMIT} req/day/IP) exhausted. Mint an instant low-latency Prepaid Pass (POST https://api.nullclear.dev/v1/pass/buy, $5-$100 USDC -> Bearer nc_live_... key) OR sign an EIP-3009 TransferWithAuthorization for 5000 atomic USDC ($0.005) on Base (chainId 8453) to 0xB586eFcCa41dF27ad3873BEcA54da0c30bf04d5c and attach Base64 payload in 'X-Payment' or 'PAYMENT-SIGNATURE'.`
     }
   };
+}
+
+export function buildForensic402Response(c: any, resourcePath: string, errorMessage?: string): Response {
+  const upgrade = buildX402UpgradeBlock(c, resourcePath);
+  c.header("PAYMENT-REQUIRED", upgrade.encodedHeader);
+  c.header("X-Payment-Required", upgrade.encodedHeader);
+  c.header("Pay-To", upgrade.treasuryAddress);
+  return c.json(
+    {
+      error: errorMessage || `Free tier limit (${FORENSIC_FREE_TIER_DAILY_LIMIT} requests/day/IP) exceeded.`,
+      rateLimited: true,
+      recommendedAgentAction: "ATTACH_X402_PAYMENT_HEADER",
+      agentPaymentInstructions: upgrade.x402Upgrade.agentPaymentInstructions,
+      x402Upgrade: upgrade.x402Upgrade,
+      paymentRequired: upgrade.paymentRequiredPayload,
+      ...upgrade.paymentRequiredPayload
+    },
+    402
+  );
 }
 
 function hasPaymentHeader(c: any): boolean {
@@ -147,9 +181,9 @@ function hasPaymentHeader(c: any): boolean {
  * Shared access gate for forensic routes:
  * 1. Prepaid Pass Bearer key (<5ms, 1 credit)
  * 2. Per-call x402 EIP-3009 ($0.005 USDC)
- * 3. Zero-key free tier (100 calls/day/IP)
+ * 3. Zero-key free tier (10 calls/day/IP)
  */
-async function resolveForensicAccess(
+export async function resolveForensicAccess(
   c: any,
   resourcePath: string
 ): Promise<{ allowed: boolean; remaining: number; paid: boolean; errorResponse?: Response }> {
@@ -160,6 +194,8 @@ async function resolveForensicAccess(
     }
     const upgrade = buildX402UpgradeBlock(c, resourcePath);
     c.header("PAYMENT-REQUIRED", upgrade.encodedHeader);
+    c.header("X-Payment-Required", upgrade.encodedHeader);
+    c.header("Pay-To", upgrade.treasuryAddress);
     return {
       allowed: false,
       remaining: 0,
@@ -169,7 +205,8 @@ async function resolveForensicAccess(
           error: passAuth.errorReason || "Invalid or exhausted Prepaid Pass key",
           rateLimited: Boolean(passAuth.pass),
           prepaidPassUrl: "POST https://api.nullclear.dev/v1/pass/buy",
-          x402Upgrade: upgrade.x402Upgrade
+          x402Upgrade: upgrade.x402Upgrade,
+          ...(passAuth.pass ? upgrade.paymentRequiredPayload : {})
         },
         passAuth.pass ? 402 : 401
       )
@@ -187,23 +224,11 @@ async function resolveForensicAccess(
     }
 
     if (!parsedAuth || !parsedAuth.from || !parsedAuth.signature) {
-      const upgrade = buildX402UpgradeBlock(c, resourcePath);
-      c.header("PAYMENT-REQUIRED", upgrade.encodedHeader);
       return {
         allowed: false,
         remaining: 0,
         paid: false,
-        errorResponse: c.json(
-          {
-            error: "Invalid x402 payment header for Forensic Oracle.",
-            rateLimited: true,
-            recommendedAgentAction: "ATTACH_X402_PAYMENT_HEADER",
-            agentPaymentInstructions: upgrade.x402Upgrade.agentPaymentInstructions,
-            x402Upgrade: upgrade.x402Upgrade,
-            paymentRequired: upgrade.paymentRequiredPayload
-          },
-          402
-        )
+        errorResponse: buildForensic402Response(c, resourcePath, "Invalid x402 payment header for Forensic Oracle.")
       };
     }
 
@@ -224,9 +249,23 @@ async function resolveForensicAccess(
         amount: "5000",
         asset: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
         payTo: treasuryAddress,
-        maxTimeoutSeconds: 60,
+        maxTimeoutSeconds: 300,
         extra: { name: "USD Coin", version: "2" }
       };
+      const requestedFacilitator = (
+        c.req.query("facilitator") ||
+        c.req.header("x-nullclear-facilitator") ||
+        c.env?.FACILITATOR_PREFERENCE ||
+        ""
+      )
+        .trim()
+        .toLowerCase();
+      const hasCdpCreds = Boolean(c.env?.CDP_API_KEY_ID && c.env?.CDP_API_KEY_SECRET);
+      const useCdp = requestedFacilitator === "cdp" && hasCdpCreds;
+      const facilitatorUrl = useCdp
+        ? c.env?.CDP_FACILITATOR_URL || "https://api.cdp.coinbase.com/platform/v2/x402"
+        : c.env?.FACILITATOR_URL || "https://facilitator.payai.network";
+
       const settlement = await settleTransfer({
         authorization: {
           from: parsedAuth.from,
@@ -244,7 +283,9 @@ async function resolveForensicAccess(
           asset: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
           extra: accepted.extra || { name: "USD Coin", version: "2" }
         },
-        facilitatorUrl: c.env?.FACILITATOR_URL || "https://facilitator.payai.network",
+        facilitatorUrl,
+        cdpApiKeyId: c.env?.CDP_API_KEY_ID,
+        cdpApiKeySecret: c.env?.CDP_API_KEY_SECRET,
         settlementMode: "facilitator",
         arbiterPrivateKey: c.env?.ARBITER_PRIVATE_KEY,
         rpcUrl: c.env?.BASE_MAINNET_RPC_URL || c.env?.BASE_RPC_URL || "https://mainnet.base.org",
@@ -257,22 +298,14 @@ async function resolveForensicAccess(
       });
 
       if (!settlement.success || !settlement.transaction) {
-        const upgrade = buildX402UpgradeBlock(c, resourcePath);
-        c.header("PAYMENT-REQUIRED", upgrade.encodedHeader);
         return {
           allowed: false,
           remaining: 0,
           paid: false,
-          errorResponse: c.json(
-            {
-              error: `Forensic payment settlement failed: ${settlement.errorReason || "rejected"}`,
-              rateLimited: true,
-              recommendedAgentAction: "ATTACH_X402_PAYMENT_HEADER",
-              agentPaymentInstructions: upgrade.x402Upgrade.agentPaymentInstructions,
-              x402Upgrade: upgrade.x402Upgrade,
-              paymentRequired: upgrade.paymentRequiredPayload
-            },
-            402
+          errorResponse: buildForensic402Response(
+            c,
+            resourcePath,
+            `Forensic payment settlement failed: ${settlement.errorReason || "rejected"}`
           )
         };
       }
@@ -325,53 +358,15 @@ async function resolveForensicAccess(
 async function handleApiScan(c: any, rawChain: string, rawAddressInput: string) {
   const isMdExt = rawAddressInput.toLowerCase().endsWith(".md");
   const cleanAddress = isMdExt ? rawAddressInput.slice(0, -3) : rawAddressInput;
-  const normChain =
-    rawChain.toLowerCase() === "ethereum" || rawChain.toLowerCase() === "eth"
-      ? "eth"
-      : rawChain.toLowerCase() === "solana" || rawChain.toLowerCase() === "sol"
-        ? "solana"
-        : "base";
+  const normChain = normalizeChain(rawChain);
   const normAddr = normChain === "solana" ? cleanAddress.trim() : cleanAddress.trim().toLowerCase();
   const access = await resolveForensicAccess(c, `/v1/scan/${normChain}/${normAddr}`);
   if (access.errorResponse) return access.errorResponse;
 
-  // If request #101+ and no valid X-Payment header:
+  // Request #11+ without Prepaid Pass or valid X-Payment header returns HTTP 402 Payment Required
+  // (public SEO/HTML/Markdown pages remain free at /scan/:chain/:address)
   if (!access.allowed && !access.paid) {
-    const store = getArbiterStore(c.env);
-    const cachedRecord = await store.getForensicScan(normChain, normAddr);
-    const upgrade = buildX402UpgradeBlock(c, `/v1/scan/${normChain}/${normAddr}`);
-    c.header("PAYMENT-REQUIRED", upgrade.encodedHeader);
-
-    const force402 = c.req.query("strict402") === "true";
-    if (cachedRecord && !force402) {
-      try {
-        const cachedScan = JSON.parse(cachedRecord.payloadJson) as ForensicScanPayload;
-        const rateLimitedPayload: ForensicScanPayload = {
-          ...cachedScan,
-          cached: true,
-          rateLimited: true,
-          x402Upgrade: upgrade.x402Upgrade
-        };
-        c.header("X-NullClear-Attestation", cachedScan.provenance.attestationSha256);
-        if (isMdExt || (c.req.header("Accept") || "").includes("text/markdown")) {
-          c.header("Content-Type", "text/markdown; charset=utf-8");
-          return c.body(formatScanMarkdown(rateLimitedPayload));
-        }
-        return c.json(rateLimitedPayload, 200);
-      } catch {}
-    }
-
-    return c.json(
-      {
-        error: `Free tier limit (${FORENSIC_FREE_TIER_DAILY_LIMIT} requests/day/IP) exceeded.`,
-        rateLimited: true,
-        recommendedAgentAction: "ATTACH_X402_PAYMENT_HEADER",
-        agentPaymentInstructions: upgrade.x402Upgrade.agentPaymentInstructions,
-        x402Upgrade: upgrade.x402Upgrade,
-        paymentRequired: upgrade.paymentRequiredPayload
-      },
-      402
-    );
+    return buildForensic402Response(c, `/v1/scan/${normChain}/${normAddr}`);
   }
 
   const scan = await scanTokenForensics(rawChain, cleanAddress, c.env);
@@ -403,17 +398,7 @@ forensicsRouter.get("/v1/inspect/:chain/:address", async (c) => {
   if (access.errorResponse) return access.errorResponse;
 
   if (!access.allowed && !access.paid) {
-    const upgrade = buildX402UpgradeBlock(c, c.req.path);
-    c.header("PAYMENT-REQUIRED", upgrade.encodedHeader);
-    return c.json(
-      {
-        error: `Free tier limit (${FORENSIC_FREE_TIER_DAILY_LIMIT} requests/day/IP) exceeded.`,
-        rateLimited: true,
-        agentPaymentInstructions: upgrade.x402Upgrade.agentPaymentInstructions,
-        x402Upgrade: upgrade.x402Upgrade
-      },
-      402
-    );
+    return buildForensic402Response(c, c.req.path);
   }
 
   const res = await inspectContractAbiAndProxy(
@@ -443,19 +428,7 @@ async function handleDecode(c: any, input: string, chain: string, typedData?: an
   if (access.errorResponse) return access.errorResponse;
 
   if (!access.allowed && !access.paid) {
-    const upgrade = buildX402UpgradeBlock(c, "/v1/decode");
-    c.header("PAYMENT-REQUIRED", upgrade.encodedHeader);
-    return c.json(
-      {
-        error: `Free tier limit (${FORENSIC_FREE_TIER_DAILY_LIMIT} requests/day/IP) exceeded.`,
-        rateLimited: true,
-        recommendedAgentAction: "ATTACH_X402_PAYMENT_HEADER",
-        agentPaymentInstructions: upgrade.x402Upgrade.agentPaymentInstructions,
-        x402Upgrade: upgrade.x402Upgrade,
-        paymentRequired: upgrade.paymentRequiredPayload
-      },
-      402
-    );
+    return buildForensic402Response(c, "/v1/decode");
   }
 
   const decoded = await decodeCalldataOrTx(input, chain || "base", c.env, { typedData });
@@ -508,19 +481,7 @@ forensicsRouter.post("/v1/simulate", async (c) => {
   if (access.errorResponse) return access.errorResponse;
 
   if (!access.allowed && !access.paid) {
-    const upgrade = buildX402UpgradeBlock(c, "/v1/simulate");
-    c.header("PAYMENT-REQUIRED", upgrade.encodedHeader);
-    return c.json(
-      {
-        error: `Free tier limit (${FORENSIC_FREE_TIER_DAILY_LIMIT} requests/day/IP) exceeded.`,
-        rateLimited: true,
-        recommendedAgentAction: "ATTACH_X402_PAYMENT_HEADER",
-        agentPaymentInstructions: upgrade.x402Upgrade.agentPaymentInstructions,
-        x402Upgrade: upgrade.x402Upgrade,
-        paymentRequired: upgrade.paymentRequiredPayload
-      },
-      402
-    );
+    return buildForensic402Response(c, "/v1/simulate");
   }
 
   const simResult = await simulateTransactionPreflight(
@@ -556,19 +517,7 @@ forensicsRouter.get("/v1/guard", async (c) => {
     if (access.errorResponse) return access.errorResponse;
 
     if (!access.allowed && !access.paid) {
-      const upgrade = buildX402UpgradeBlock(c, "/v1/guard");
-      c.header("PAYMENT-REQUIRED", upgrade.encodedHeader);
-      return c.json(
-        {
-          error: `Free tier limit (${FORENSIC_FREE_TIER_DAILY_LIMIT} requests/day/IP) exceeded.`,
-          rateLimited: true,
-          recommendedAgentAction: "ATTACH_X402_PAYMENT_HEADER",
-          agentPaymentInstructions: upgrade.x402Upgrade.agentPaymentInstructions,
-          x402Upgrade: upgrade.x402Upgrade,
-          paymentRequired: upgrade.paymentRequiredPayload
-        },
-        402
-      );
+      return buildForensic402Response(c, "/v1/guard");
     }
 
     const guardResult = await guardTransactionPreflight(
@@ -677,19 +626,7 @@ forensicsRouter.post("/v1/guard", async (c) => {
   if (access.errorResponse) return access.errorResponse;
 
   if (!access.allowed && !access.paid) {
-    const upgrade = buildX402UpgradeBlock(c, "/v1/guard");
-    c.header("PAYMENT-REQUIRED", upgrade.encodedHeader);
-    return c.json(
-      {
-        error: `Free tier limit (${FORENSIC_FREE_TIER_DAILY_LIMIT} requests/day/IP) exceeded.`,
-        rateLimited: true,
-        recommendedAgentAction: "ATTACH_X402_PAYMENT_HEADER",
-        agentPaymentInstructions: upgrade.x402Upgrade.agentPaymentInstructions,
-        x402Upgrade: upgrade.x402Upgrade,
-        paymentRequired: upgrade.paymentRequiredPayload
-      },
-      402
-    );
+    return buildForensic402Response(c, "/v1/guard");
   }
 
   const guardResult = await guardTransactionPreflight(
@@ -1117,9 +1054,11 @@ export function renderForensicScanHtmlPage(scan: ForensicScanPayload): string {
         <input id="topSearch" class="mono" placeholder="Paste 0x token, Solana mint, tx hash, or calldata..." value="${escapeHtml(scan.address)}" />
         <button type="submit" class="btn btn-emerald">Scan</button>
       </form>
-      <div style="display:flex;gap:8px;">
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
         <a href="${escapeHtml(scan.links.markdownTwinUrl)}" class="btn mono" title="View <300-token Markdown Twin">📄 .MD Twin</a>
+        <a href="https://nullclear.dev/history" class="btn" style="color:var(--emerald);">📡 Live History</a>
         <a href="/x402" class="btn">⚡ /x402 Gateway</a>
+        <a href="mailto:ops@nullclear.dev" class="btn mono">✉️ ops@nullclear.dev</a>
       </div>
     </div>
   </header>
@@ -1324,9 +1263,11 @@ forensicsRouter.get("/x402", (c) => {
       </div>
       <div style="display:flex;gap:10px;flex-wrap:wrap;">
         <a href="/firewall" class="btn btn-primary">🛡️ Pre-Swap Firewall SDK</a>
+        <a href="https://nullclear.dev/history" class="btn" style="color:var(--emerald);">📡 Live History &amp; Diagnostics</a>
         <a href="/" class="btn">🔍 Forensics Omnibox</a>
         <a href="/safepay" class="btn">📜 SafePay Deals</a>
-        <a href="https://nullclear.dev/leaderboard" class="btn">📡 x402 Leaderboard</a>
+        <a href="https://nullclear.dev/leaderboard" class="btn">🏆 x402 Leaderboard</a>
+        <a href="mailto:ops@nullclear.dev" class="btn mono">✉️ ops@nullclear.dev</a>
       </div>
     </div>
 
@@ -1438,8 +1379,10 @@ forensicsRouter.get("/firewall", (c) => {
         </p>
       </div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;">
-        <a href="/x402" class="btn">⚡ x402 &amp; Gateways</a>
-        <a href="/v1/telemetry/dashboard" class="btn">📊 Telemetry</a>
+        <a href="/" class="btn">⚡ Developer Portal</a>
+        <a href="/history" class="btn" style="color:var(--emerald);border-color:rgba(16,185,129,0.4);">📡 Live History &amp; Diagnostics</a>
+        <a href="/x402" class="btn">🔐 x402 &amp; Gateways</a>
+        <a href="mailto:ops@nullclear.dev" class="btn mono">✉️ ops@nullclear.dev</a>
         <a href="https://github.com/Nullclear-Protocol/nullclear" target="_blank" rel="noopener" class="btn btn-primary">GitHub &amp; Docs</a>
       </div>
     </div>

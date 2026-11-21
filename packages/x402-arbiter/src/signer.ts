@@ -64,10 +64,16 @@ export async function signX402Payment(
     verifyingContract: chainConfig.usdc
   };
 
+  const rawAmount = option.amount ?? (option as any).maxAmountRequired;
+  if (rawAmount === undefined || rawAmount === null || String(rawAmount).trim() === "") {
+    throw new Error("x402 payment option missing required 'amount' (or 'maxAmountRequired') field");
+  }
+  const normalizedAmount = String(rawAmount).trim();
+
   const authorization: EIP3009Authorization = {
     from: accountAddress,
     to: option.payTo,
-    value: option.amount,
+    value: normalizedAmount,
     validAfter,
     validBefore,
     nonce
@@ -89,6 +95,7 @@ export async function signX402Payment(
 
   const acceptedOption: X402PaymentOption = {
     ...option,
+    amount: normalizedAmount,
     extra: option.extra || { name: "USD Coin", version: "2" }
   };
 

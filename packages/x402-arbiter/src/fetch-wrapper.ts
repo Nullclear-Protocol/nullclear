@@ -163,7 +163,16 @@ export function createNullClearFetch(config: NullClearFetchConfig = {}) {
             ? JSON.parse(paymentRequiredHeader)
             : decodeBase64Json<X402PaymentRequired>(paymentRequiredHeader);
           if (Array.isArray(parsed.accepts)) {
-            accepts = parsed.accepts;
+            accepts = parsed.accepts.map((opt: any) => ({
+              ...opt,
+              scheme: opt.scheme || "exact",
+              network: opt.network === "base" ? "eip155:8453" : opt.network || `eip155:${chainId}`,
+              amount: String(opt.amount ?? opt.maxAmountRequired ?? "10000"),
+              asset: opt.asset || "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+              payTo: opt.payTo || opt.sellerAddress,
+              maxTimeoutSeconds: opt.maxTimeoutSeconds || 300,
+              extra: opt.extra || { name: "USD Coin", version: "2" }
+            }));
           } else if (parsed.payTo || parsed.sellerAddress) {
             accepts = [
               {

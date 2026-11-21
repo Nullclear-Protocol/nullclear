@@ -40,6 +40,7 @@ import {
   extractPaymentAuthorization,
   attachDualX402Headers
 } from "../utils/x402-headers.js";
+import { getBazaarResourceMetadata } from "./bazaar-metadata.js";
 
 export const bazaarRouter = new Hono<Env>();
 
@@ -53,9 +54,9 @@ const BAZAAR_RELATED_ENDPOINTS = {
   prepaidPass: {
     method: "POST",
     url: "https://api.nullclear.dev/v1/pass/buy",
-    priceUsdc: "5.00 - 100.00",
+    priceUsdc: "1.00 - 100.00",
     description:
-      "Mint an instant Bearer API key (nc_live_...) with 2,000-100,000 low-latency credits + Drop-in Guarded JSON-RPC (/rpc/:chain/:key) + Policy Co-Signer + Watchtower"
+      "Mint an instant Bearer API key (nc_live_...) with 300-100,000 low-latency credits + Drop-in Guarded JSON-RPC (/rpc/:chain/:key) + Policy Co-Signer + Watchtower"
   },
   preflightGuard: {
     method: "POST",
@@ -979,21 +980,28 @@ const BAZAAR_VERIFY_EXTENSION = {
   }
 };
 
+const GUARD_POST_EXAMPLE_BODY = {
+  chain: "base",
+  from: "0xfd74fF802EA0E735514C070AF04E0D6528deD145",
+  to: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+  data: "0x095ea7b3000000000000000000000000b586efcca41df27ad3873beca54da0c30bf04d5c00000000000000000000000000000000000000000000000000000000000f4240",
+  value: "0x0"
+};
+
 // 8. 1-Call Pre-Sign Firewall Extension Schema ($0.005 USDC / 5000 atomic)
 const BAZAAR_GUARD_EXTENSION = {
   discoverable: true,
   description:
-    "1-Call Pre-Sign Transaction Firewall across 7 chains (Base, Ethereum, Arbitrum, Optimism, Polygon, BSC, Solana): recursively unwraps Multicall3/Universal Router/Safe calldata, audits EIP-712 Permits & Seaport signatures, parses Solana wire txs, runs stateful eth_simulateV1/Solana simulation with Transfer/Approval net asset diffs, and scans touched tokens for honeypots & Token-2022 traps.",
+    "1-Call Pre-Sign Transaction Firewall across 7 chains (GET query params or POST JSON): unwraps Multicall3/Universal Router/Safe calldata, audits EIP-712 Permits & Seaport signatures, parses Solana wire txs, runs stateful eth_simulateV1/Solana simulation with net asset diffs, and scans touched tokens.",
   info: {
     input: {
       type: "http",
-      method: "POST",
-      bodyType: "json",
-      body: {
+      method: "GET",
+      queryParams: {
         chain: "base",
         from: "0xfd74fF802EA0E735514C070AF04E0D6528deD145",
         to: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
-        data: "0x095ea7b3000000000000000000000000deadbeefdeadbeefdeadbeefdeadbeefdeadbeefffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+        data: "0x095ea7b3000000000000000000000000b586efcca41df27ad3873beca54da0c30bf04d5c00000000000000000000000000000000000000000000000000000000000f4240",
         value: "0x0"
       }
     },
@@ -1002,10 +1010,10 @@ const BAZAAR_GUARD_EXTENSION = {
       example: {
         guardType: "EVM_TX_GUARD",
         chain: "base",
-        recommendedAgentAction: "ABORT_DRAINER_APPROVAL",
-        riskScore: 10,
-        riskLevel: "CRITICAL",
-        alerts: ["Unlimited ERC-20 approve() to unverified spender 0xdeadbeef..."],
+        recommendedAgentAction: "EXECUTE_SAFE",
+        riskScore: 95,
+        riskLevel: "LOW",
+        alerts: [],
         assetDiffs: [],
         touchedTokenVerdicts: [
           {
@@ -1026,13 +1034,12 @@ const BAZAAR_GUARD_EXTENSION = {
     properties: {
       input: {
         type: "object",
-        required: ["type", "method", "bodyType", "body"],
+        required: ["type", "method"],
         additionalProperties: false,
         properties: {
           type: { type: "string", const: "http" },
-          method: { type: "string", enum: ["POST", "PUT", "PATCH"] },
-          bodyType: { type: "string", enum: ["json", "form-data", "text"] },
-          body: {
+          method: { type: "string", enum: ["GET", "HEAD", "DELETE"] },
+          queryParams: {
             type: "object",
             properties: {
               chain: {
@@ -1043,10 +1050,7 @@ const BAZAAR_GUARD_EXTENSION = {
               to: { type: "string", description: "Target contract address (EVM)" },
               data: { type: "string", description: "0x-prefixed hex calldata (supports nested Multicall3/Universal Router/Safe)" },
               value: { type: "string", description: "Optional wei value (hex or decimal)" },
-              typedData: { type: "object", description: "Optional EIP-712 typedData JSON for Permit/Permit2/Seaport audit" },
-              transaction: { type: "string", description: "Optional Base64-encoded Solana wire transaction" },
-              transactions: { type: "array", description: "Optional multi-tx EVM bundle for eth_simulateV1" },
-              stateOverrides: { type: "object", description: "Optional EVM stateOverrides map" }
+              transaction: { type: "string", description: "Optional Base64-encoded Solana wire transaction" }
             }
           }
         }
@@ -1165,13 +1169,12 @@ const BAZAAR_INSPECT_EXTENSION = {
 const BAZAAR_DUE_DILIGENCE_EXTENSION = {
   discoverable: true,
   description:
-    "Institutional 7-chain Token & Contract Due-Diligence Dossier ($0.10 USDC or 10 prepaid credits): combines multi-oracle honeypot/tax/liquidity forensics, EIP-1967/1822/Beacon/Diamond/Safe proxy + Sourcify v2 + batch OpenChain ABI & bytecode CFG risk, D1 historical risk synthesis, and an on-chain-verifiable EIP-712 signed Clearance Certificate.",
+    "Institutional 7-chain Token & Contract Due-Diligence Dossier (GET query params or POST JSON, $0.10 USDC or 10 prepaid credits): combines multi-oracle honeypot/tax/liquidity forensics, EIP-1967/1822/Beacon/Diamond/Safe proxy + Sourcify v2 + batch OpenChain ABI & bytecode CFG risk, D1 historical risk synthesis, and an on-chain-verifiable EIP-712 signed Clearance Certificate.",
   info: {
     input: {
       type: "http",
-      method: "POST",
-      bodyType: "json",
-      body: {
+      method: "GET",
+      queryParams: {
         chain: "base",
         address: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
       }
@@ -1207,13 +1210,12 @@ const BAZAAR_DUE_DILIGENCE_EXTENSION = {
     properties: {
       input: {
         type: "object",
-        required: ["type", "method", "bodyType", "body"],
+        required: ["type", "method"],
         additionalProperties: false,
         properties: {
           type: { type: "string", const: "http" },
-          method: { type: "string", enum: ["POST", "PUT", "PATCH"] },
-          bodyType: { type: "string", enum: ["json"] },
-          body: {
+          method: { type: "string", enum: ["GET", "HEAD", "DELETE"] },
+          queryParams: {
             type: "object",
             properties: {
               chain: {
@@ -1249,6 +1251,7 @@ function createPaymentRequiredHeader(
   bazaarExtension: any,
   amountAtomic = "10000"
 ) {
+  const meta = getBazaarResourceMetadata(resourcePath);
   const payload = {
     x402Version: 2,
     scheme: "exact",
@@ -1260,7 +1263,8 @@ function createPaymentRequiredHeader(
     resource: {
       url: `https://api.nullclear.dev${resourcePath}`,
       description,
-      mimeType: "application/json"
+      mimeType: "application/json",
+      ...meta
     },
     accepts: [
       {
@@ -1303,6 +1307,7 @@ async function handleBazaarPayment(
   const priceUsd = (numericAmount / 1_000_000).toFixed(numericAmount % 10000 === 0 ? 2 : 3);
   const allowFreeTier = options?.allowFreeTier ?? true;
   const passCreditCost = options?.passCreditCost ?? Math.max(1, Math.round(numericAmount / 5000));
+  const resourceMeta = getBazaarResourceMetadata(resourcePath);
 
   // Always expose x402 payment challenge, Prepaid Pass, and Free Tier headers
   c.header(
@@ -1342,7 +1347,7 @@ async function handleBazaarPayment(
           message: passAuth.errorReason || "Invalid or exhausted Prepaid Pass key",
           prepaidPassOption: {
             buyUrl: "POST https://api.nullclear.dev/v1/pass/buy",
-            tiers: "starter ($5 / 2,000 credits), pro ($25 / 15,000 credits), scale ($100 / 100,000 credits)"
+            tiers: "micro ($1 / 300 credits), starter ($5 / 2,000 credits), pro ($25 / 15,000 credits), scale ($100 / 100,000 credits)"
           }
         },
         passAuth.pass ? 402 : 401
@@ -1422,7 +1427,8 @@ async function handleBazaarPayment(
           resource: {
             url: `https://api.nullclear.dev${resourcePath}`,
             description,
-            mimeType: "application/json"
+            mimeType: "application/json",
+            ...resourceMeta
           },
           accepts: [
             {
@@ -1469,7 +1475,8 @@ async function handleBazaarPayment(
           resource: {
             url: `https://api.nullclear.dev${resourcePath}`,
             description,
-            mimeType: "application/json"
+            mimeType: "application/json",
+            ...resourceMeta
           },
           accepts: [
             {
@@ -1618,7 +1625,8 @@ async function handleBazaarPayment(
     resource: {
       url: resourceUrl,
       description,
-      mimeType: "application/json"
+      mimeType: "application/json",
+      ...resourceMeta
     },
     bazaarExtension
   });
@@ -2435,10 +2443,12 @@ bazaarRouter.all("/guard", async (c) => {
   }
 
   const body = await parseJsonBodySafe(c);
-  const to = sanitizeParamString(body.to || c.req.query("to"), 128);
-  const from = sanitizeParamString(body.from || c.req.query("from"), 128);
-  const data = sanitizeParamString(body.data || c.req.query("data"), 32768);
-  const value = sanitizeParamString(body.value || c.req.query("value"), 128);
+  const method = c.req.method.toUpperCase();
+  const isGetLike = method === "GET" || method === "HEAD";
+  let to = sanitizeParamString(body.to || c.req.query("to"), 128);
+  let from = sanitizeParamString(body.from || c.req.query("from"), 128);
+  let data = sanitizeParamString(body.data || c.req.query("data"), 32768);
+  let value = sanitizeParamString(body.value || c.req.query("value"), 128);
   const transaction = sanitizeParamString(body.transaction || c.req.query("transaction"), 32768);
   const typedData = body.typedData;
   const transactions = Array.isArray(body.transactions) ? body.transactions : undefined;
@@ -2448,15 +2458,23 @@ bazaarRouter.all("/guard", async (c) => {
     (transaction && !to && !typedData ? "solana" : "base");
 
   if (!to && !typedData && !transaction && (!transactions || transactions.length === 0)) {
-    return c.json(
-      {
-        error: "Invalid guard payload",
-        message:
-          "Provide EVM tx ({ chain, from, to, data, value }), EIP-712 { typedData }, or Solana { chain: 'solana', transaction }.",
-        example: BAZAAR_GUARD_EXTENSION.info.input.body
-      },
-      400
-    );
+    if (isGetLike) {
+      // Safe default evaluation for 1-click GET Bazaar agents without query params
+      from = from || GUARD_POST_EXAMPLE_BODY.from;
+      to = GUARD_POST_EXAMPLE_BODY.to;
+      data = data || GUARD_POST_EXAMPLE_BODY.data;
+      value = value || GUARD_POST_EXAMPLE_BODY.value;
+    } else {
+      return c.json(
+        {
+          error: "Invalid guard payload",
+          message:
+            "Provide EVM tx ({ chain, from, to, data, value }), EIP-712 { typedData }, or Solana { chain: 'solana', transaction }.",
+          example: GUARD_POST_EXAMPLE_BODY
+        },
+        400
+      );
+    }
   }
 
   const guardResult = await guardTransactionPreflight(
@@ -2696,7 +2714,7 @@ bazaarRouter.all("/due-diligence", async (c) => {
   });
 });
 
-// 6e. POST & GET /v1/bazaar/buy-pass — Bazaar alias for $5/$25/$100 Prepaid Firewall Passes
+// 6e. POST & GET /v1/bazaar/buy-pass — Bazaar alias for $1/$5/$25/$100 Prepaid Firewall Passes
 bazaarRouter.all("/buy-pass", (c) => handleBuyPassRequest(c, "/v1/bazaar/buy-pass"));
 
 // 7. GET /v1/bazaar/directory - Machine-Readable x402 & ERC-8004 Ecosystem Directory
@@ -2778,11 +2796,13 @@ bazaarRouter.get("/", async (c) => {
       slug: "guard",
       path: "/v1/bazaar/guard",
       url: "https://api.nullclear.dev/v1/bazaar/guard",
-      method: "POST",
+      method: "GET",
+      methods: ["GET", "POST"],
       priceAtomic: "5000",
       priceUsdc: "0.005",
       sellerAddress: NULLCLEAR_TREASURY_ADDRESS,
       category: "security",
+      ...getBazaarResourceMetadata("/v1/bazaar/guard"),
       description: BAZAAR_GUARD_EXTENSION.description
     },
     {
@@ -2791,10 +2811,12 @@ bazaarRouter.get("/", async (c) => {
       path: "/v1/bazaar/inspect",
       url: "https://api.nullclear.dev/v1/bazaar/inspect",
       method: "GET",
+      methods: ["GET", "POST"],
       priceAtomic: "5000",
       priceUsdc: "0.005",
       sellerAddress: NULLCLEAR_TREASURY_ADDRESS,
       category: "security",
+      ...getBazaarResourceMetadata("/v1/bazaar/inspect"),
       description: BAZAAR_INSPECT_EXTENSION.description
     },
     {
@@ -2802,11 +2824,13 @@ bazaarRouter.get("/", async (c) => {
       slug: "due-diligence",
       path: "/v1/bazaar/due-diligence",
       url: "https://api.nullclear.dev/v1/bazaar/due-diligence",
-      method: "POST",
+      method: "GET",
+      methods: ["GET", "POST"],
       priceAtomic: "100000",
       priceUsdc: "0.10",
       sellerAddress: NULLCLEAR_TREASURY_ADDRESS,
       category: "security",
+      ...getBazaarResourceMetadata("/v1/bazaar/due-diligence"),
       description: BAZAAR_DUE_DILIGENCE_EXTENSION.description
     },
     {
@@ -2815,11 +2839,13 @@ bazaarRouter.get("/", async (c) => {
       path: "/v1/bazaar/buy-pass",
       url: "https://api.nullclear.dev/v1/bazaar/buy-pass",
       method: "POST",
-      priceAtomic: PASS_TIERS.starter.priceAtomic,
-      priceUsdc: PASS_TIERS.starter.priceUsdc,
+      methods: ["GET", "POST"],
+      priceAtomic: PASS_TIERS.micro.priceAtomic,
+      priceUsdc: PASS_TIERS.micro.priceUsdc,
       sellerAddress: NULLCLEAR_TREASURY_ADDRESS,
       category: "security",
-      description: buildBuyPassBazaarExtension(PASS_TIERS.starter).description
+      ...getBazaarResourceMetadata("/v1/bazaar/buy-pass"),
+      description: buildBuyPassBazaarExtension(PASS_TIERS.micro).description
     },
     {
       id: "bazaar-token-security",
@@ -2827,10 +2853,12 @@ bazaarRouter.get("/", async (c) => {
       path: "/v1/bazaar/token-security",
       url: "https://api.nullclear.dev/v1/bazaar/token-security",
       method: "GET",
+      methods: ["GET", "POST"],
       priceAtomic: "5000",
       priceUsdc: "0.005",
       sellerAddress: NULLCLEAR_TREASURY_ADDRESS,
       category: "security",
+      ...getBazaarResourceMetadata("/v1/bazaar/token-security"),
       description: BAZAAR_TOKEN_SECURITY_EXTENSION.description
     },
     {
@@ -2839,10 +2867,12 @@ bazaarRouter.get("/", async (c) => {
       path: "/v1/bazaar/scan-batch",
       url: "https://api.nullclear.dev/v1/bazaar/scan-batch",
       method: "POST",
+      methods: ["POST", "GET"],
       priceAtomic: "25000",
       priceUsdc: "0.025",
       sellerAddress: NULLCLEAR_TREASURY_ADDRESS,
       category: "security",
+      ...getBazaarResourceMetadata("/v1/bazaar/scan-batch"),
       description: BAZAAR_SCAN_BATCH_EXTENSION.description
     },
     {
@@ -2851,10 +2881,12 @@ bazaarRouter.get("/", async (c) => {
       path: "/v1/bazaar/market-oracle",
       url: "https://api.nullclear.dev/v1/bazaar/market-oracle",
       method: "GET",
+      methods: ["GET", "POST"],
       priceAtomic: "5000",
       priceUsdc: "0.005",
       sellerAddress: NULLCLEAR_TREASURY_ADDRESS,
       category: "oracle",
+      ...getBazaarResourceMetadata("/v1/bazaar/market-oracle"),
       description: BAZAAR_MARKET_ORACLE_EXTENSION.description
     },
     {
@@ -2863,10 +2895,12 @@ bazaarRouter.get("/", async (c) => {
       path: "/v1/bazaar/wallet-risk",
       url: "https://api.nullclear.dev/v1/bazaar/wallet-risk",
       method: "GET",
+      methods: ["GET", "POST"],
       priceAtomic: "5000",
       priceUsdc: "0.005",
       sellerAddress: NULLCLEAR_TREASURY_ADDRESS,
       category: "security",
+      ...getBazaarResourceMetadata("/v1/bazaar/wallet-risk"),
       description: BAZAAR_WALLET_RISK_EXTENSION.description
     },
     {
@@ -2875,10 +2909,12 @@ bazaarRouter.get("/", async (c) => {
       path: "/v1/bazaar/verified-fetch",
       url: "https://api.nullclear.dev/v1/bazaar/verified-fetch",
       method: "GET",
+      methods: ["GET", "POST"],
       priceAtomic: "5000",
       priceUsdc: "0.005",
       sellerAddress: NULLCLEAR_TREASURY_ADDRESS,
       category: "data",
+      ...getBazaarResourceMetadata("/v1/bazaar/verified-fetch"),
       description: BAZAAR_VERIFIED_FETCH_EXTENSION.description
     },
     {
@@ -2887,10 +2923,12 @@ bazaarRouter.get("/", async (c) => {
       path: "/v1/bazaar/audit",
       url: "https://api.nullclear.dev/v1/bazaar/audit",
       method: "GET",
+      methods: ["GET", "POST"],
       priceAtomic: "5000",
       priceUsdc: "0.005",
       sellerAddress: NULLCLEAR_TREASURY_ADDRESS,
       category: "security",
+      ...getBazaarResourceMetadata("/v1/bazaar/audit"),
       description: BAZAAR_AUDIT_EXTENSION.description
     },
     {
@@ -2899,10 +2937,12 @@ bazaarRouter.get("/", async (c) => {
       path: "/v1/bazaar/verify",
       url: "https://api.nullclear.dev/v1/bazaar/verify",
       method: "POST",
+      methods: ["POST", "GET"],
       priceAtomic: "10000",
       priceUsdc: "0.01",
       sellerAddress: NULLCLEAR_TREASURY_ADDRESS,
       category: "ai",
+      ...getBazaarResourceMetadata("/v1/bazaar/verify"),
       description: BAZAAR_VERIFY_EXTENSION.description
     }
   ];

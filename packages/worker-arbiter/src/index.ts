@@ -19,7 +19,11 @@ import { passesRouter } from "./routes/passes.js";
 import { rpcFirewallRouter } from "./routes/rpc-firewall.js";
 import { policyRouter } from "./routes/policy.js";
 import { monitorsRouter, runWatchtowerCronTick } from "./routes/monitors.js";
-import { telemetryMiddleware, telemetryRouter } from "./middleware/telemetry.js";
+import {
+  telemetryMiddleware,
+  telemetryRouter,
+  renderLiveHistoryDiagnosticsHtml
+} from "./middleware/telemetry.js";
 import { buildNullClearMetadata } from "./middleware/free-tier.js";
 import { runEcosystemCrawlAndAudit } from "./services/ecosystem-crawler.js";
 import { syncBaseEip3009Logs } from "./services/base-eip3009-indexer.js";
@@ -110,6 +114,7 @@ app.use("*", async (c, next) => {
       p === "/api/v1/openapi.json" ||
       p === "/agents.md" ||
       p === "/leaderboard" ||
+      p === "/history" ||
       p.startsWith("/.well-known/") ||
       p.startsWith("/a2a");
 
@@ -163,8 +168,15 @@ app.route("/safepay", safepayWebRouter);
 app.get("/deal/:dealId", (c) => safepayWebRouter.fetch(c.req.raw, c.env));
 app.get("/for/:vertical", (c) => safepayWebRouter.fetch(c.req.raw, c.env));
 
-// Telemetry, Proxy, Seller Gateway, and Radar Routes
+// Telemetry, Live History & Diagnostics, Proxy, Seller Gateway, and Radar Routes
 app.route("/v1/telemetry", telemetryRouter);
+app.get("/history", async (c) => {
+  const store = getArbiterStore(c.env);
+  const filter = c.req.query("filter") || "real_agents";
+  const search = c.req.query("search") || "";
+  const report = await store.getProductHistoryAndDiagnostics({ limit: 120, filter, search });
+  return c.html(renderLiveHistoryDiagnosticsHtml(report));
+});
 app.route("/v1/proxy", proxyRouter);
 app.route("/v1/gateways", gatewaysRouter);
 app.route("/g", gatewayProxyRouter);

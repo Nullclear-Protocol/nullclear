@@ -20,6 +20,7 @@ import {
   extractPaymentAuthorization,
   attachDualX402Headers
 } from "../utils/x402-headers.js";
+import { getBazaarResourceMetadata, parseAtomicBigInt } from "./bazaar-metadata.js";
 
 export const passesRouter = new Hono<Env>();
 
@@ -70,8 +71,8 @@ export function buildBuyPassBazaarExtension(tier: PassTierSpec) {
               properties: {
                 tier: {
                   type: "string",
-                  enum: ["starter", "pro", "scale"],
-                  description: "starter ($5 / 2,000 credits), pro ($25 / 15,000 credits), scale ($100 / 100,000 credits)"
+                  enum: ["micro", "starter", "pro", "scale"],
+                  description: "micro ($1 / 300 credits), starter ($5 / 2,000 credits), pro ($25 / 15,000 credits), scale ($100 / 100,000 credits)"
                 }
               }
             }
@@ -105,6 +106,7 @@ export async function handleBuyPassRequest(
   const tierId = normalizePassTier(c.req.query("tier") || body.tier);
   const tier = PASS_TIERS[tierId];
   const extension = buildBuyPassBazaarExtension(tier);
+  const resourceMeta = getBazaarResourceMetadata(resourcePath);
 
   const paymentHeader =
     c.req.header("payment-signature") ||
@@ -121,7 +123,8 @@ export async function handleBuyPassRequest(
       resource: {
         url: `https://api.nullclear.dev${resourcePath}`,
         description: extension.description,
-        mimeType: "application/json"
+        mimeType: "application/json",
+        ...resourceMeta
       },
       accepts: [
         {
@@ -169,8 +172,9 @@ export async function handleBuyPassRequest(
     return make402("Payment payload missing valid EIP-3009 authorization or signature");
   }
 
-  // Verify the signed EIP-3009 value covers the selected tier price
-  if (BigInt(parsedAuth.value || "0") < BigInt(tier.priceAtomic)) {
+  // Verify the signed EIP-3009 value covers the selected tier price (safely reject non-integer values with 402)
+  const parsedValue = parseAtomicBigInt(parsedAuth.value);
+  if (parsedValue === null || parsedValue < BigInt(tier.priceAtomic)) {
     return make402(
       `Insufficient EIP-3009 authorization value for ${tier.id} pass: expected at least ${tier.priceAtomic} atomic USDC ($${tier.priceUsdc}), got ${parsedAuth.value}`
     );
@@ -237,7 +241,8 @@ export async function handleBuyPassRequest(
       resource: {
         url: `https://api.nullclear.dev${resourcePath}`,
         description: extension.description,
-        mimeType: "application/json"
+        mimeType: "application/json",
+        ...resourceMeta
       },
       bazaarExtension: extension
     });

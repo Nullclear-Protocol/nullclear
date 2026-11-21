@@ -3,6 +3,7 @@ import { getArbiterStore, type Env } from "../env.js";
 import { getTrendingScans } from "../services/forensics-engine.js";
 import { CLAUDE_AGENTS_MD_RULE_SNIPPET } from "./forensics.js";
 import { MCP_TOOLS } from "./mcp-http.js";
+import { getBazaarResourceMetadata } from "./bazaar-metadata.js";
 
 export const discoveryRouter = new Hono<Env>();
 
@@ -49,13 +50,98 @@ discoveryRouter.get("/", (c) => {
       background-color: var(--bg);
       color: var(--text);
       line-height: 1.6;
-      padding: 2rem 1rem;
+      padding: 0 1rem 2.5rem;
     }
-    .container { max-width: 1080px; margin: 0 auto; }
+    .container { max-width: 1140px; margin: 0 auto; }
+    .top-nav {
+      border-bottom: 1px solid var(--border);
+      background: rgba(9, 10, 15, 0.92);
+      backdrop-filter: blur(12px);
+      position: sticky;
+      top: 0;
+      z-index: 50;
+      margin: 0 -1rem 1.75rem;
+      padding: 0 1rem;
+    }
+    .top-nav-inner {
+      max-width: 1140px;
+      margin: 0 auto;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      min-height: 64px;
+      gap: 12px;
+      flex-wrap: wrap;
+      padding: 10px 0;
+    }
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      color: var(--text);
+      text-decoration: none;
+      font-weight: 800;
+      font-size: 18px;
+    }
+    .brand:hover { text-decoration: none; }
+    .brand-mark {
+      width: 32px;
+      height: 32px;
+      border-radius: 8px;
+      background: linear-gradient(135deg, #34d399, #38bdf8);
+      color: #04130d;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 900;
+    }
+    .nav-tabs {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .nav-tab {
+      color: var(--muted);
+      text-decoration: none;
+      font-size: 0.82rem;
+      font-weight: 600;
+      padding: 6px 12px;
+      border-radius: 8px;
+      border: 1px solid transparent;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.15s ease;
+    }
+    .nav-tab:hover {
+      color: var(--text);
+      border-color: var(--border);
+      background: rgba(255, 255, 255, 0.04);
+      text-decoration: none;
+    }
+    .nav-tab.active {
+      color: var(--accent);
+      background: rgba(56, 189, 248, 0.14);
+      border-color: rgba(56, 189, 248, 0.4);
+    }
+    .nav-tab-history {
+      color: var(--success);
+      background: rgba(52, 211, 153, 0.12);
+      border-color: rgba(52, 211, 153, 0.4);
+    }
+    .live-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--success);
+      display: inline-block;
+      box-shadow: 0 0 8px var(--success);
+    }
     header {
       text-align: center;
-      margin-bottom: 2.5rem;
-      padding: 2.75rem 1.25rem;
+      margin-bottom: 1.75rem;
+      padding: 2.5rem 1.25rem;
       background: radial-gradient(circle at 50% 30%, var(--accent-glow), transparent 70%);
       border-radius: 16px;
       border: 1px solid var(--border);
@@ -158,17 +244,54 @@ discoveryRouter.get("/", (c) => {
   </style>
 </head>
 <body>
+  <nav class="top-nav">
+    <div class="top-nav-inner">
+      <a href="/" class="brand">
+        <span class="brand-mark">N</span>
+        <span>NullClear <span style="color:var(--accent)">Arbiter</span></span>
+        <span style="font-family:monospace;font-size:0.72rem;color:var(--muted);padding:2px 8px;border:1px solid var(--border);border-radius:6px;">ERC-8004 #124595</span>
+      </a>
+      <div class="nav-tabs">
+        <a href="/" class="nav-tab active">⚡ Developer Portal</a>
+        <a href="/history" class="nav-tab nav-tab-history"><span class="live-dot"></span> Live History &amp; Diagnostics</a>
+        <a href="/firewall" class="nav-tab">🛡️ Pre-Sign Firewall &amp; RPC</a>
+        <a href="/x402" class="nav-tab">🔐 x402 Clearinghouse</a>
+        <a href="/leaderboard" class="nav-tab">🏆 Leaderboard &amp; Radar</a>
+        <a href="https://nullclear.com" class="nav-tab">💼 SafePay (nullclear.com) ↗</a>
+        <a href="mailto:ops@nullclear.dev" class="nav-tab" style="font-family:monospace;color:var(--accent);">✉️ ops@nullclear.dev</a>
+      </div>
+    </div>
+  </nav>
+
   <div class="container">
     <header>
-      <div class="badge">PROTOCOL SPECIFICATION v1.7.0 &bull; PRE-EXECUTION FIREWALL &amp; GUARDED RPC</div>
+      <div class="badge">NULLCLEAR ORGANIZATION &bull; PROTOCOL v1.7.0 &bull; 7-CHAIN FIREWALL, GUARDED RPC &amp; X402 ESCROW</div>
       <h1>NullClear Arbiter</h1>
-      <p class="subtitle">The Autonomous Pre-Execution Firewall for On-Chain Agents: 1-Call Guard, Drop-In Guarded JSON-RPC, $5-$100 Prepaid Passes, Policy Co-Signer &amp; x402 Escrow</p>
-      <div class="quick-copy">
+      <p class="subtitle">Institutional Pre-Execution Security &amp; Non-Custodial Clearinghouse for Autonomous AI Agents: 1-Call Guard, Drop-In Guarded JSON-RPC, $5–$100 Prepaid Passes, Policy Co-Signer &amp; x402 Schema Escrow</p>
+      <div class="quick-copy" style="flex-wrap:wrap;justify-content:center;">
         <span>npx -y @nullclear/mcp</span>
         <span style="color:var(--muted)">|</span>
-        <span>https://api.nullclear.dev/https://api.example.com</span>
+        <span>https://api.nullclear.dev/mcp</span>
+        <span style="color:var(--muted)">|</span>
+        <a href="mailto:ops@nullclear.dev" style="color:var(--success);">ops@nullclear.dev</a>
       </div>
     </header>
+
+    <!-- Live Agent History & Payment Diagnostics Callout Bar -->
+    <div class="card" style="margin-bottom: 1.75rem; border-color: rgba(52, 211, 153, 0.45); background: linear-gradient(90deg, rgba(16, 185, 129, 0.1) 0%, rgba(22, 27, 34, 0.85) 100%); display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:1rem;">
+      <div>
+        <div style="display:flex;align-items:center;gap:8px;font-family:monospace;font-size:0.78rem;color:var(--success);font-weight:700;">
+          <span class="live-dot"></span>
+          <span>REAL-TIME TRANSPARENCY &amp; CONVERSION DIAGNOSTICS</span>
+        </div>
+        <h3 style="margin-top:4px;margin-bottom:2px;color:var(--text);">Live Agent Product History &amp; &ldquo;Why Callers Aren&rsquo;t Paying&rdquo; Diagnostics</h3>
+        <p style="font-size:0.9rem;">Inspect every real-time MCP tool invocation, 7-chain forensic scan, 1-call firewall check, per-agent 10/day free-tier quota meter, and HTTP 402 conversion diagnostic directly at the edge.</p>
+      </div>
+      <div style="display:flex;gap:0.65rem;flex-wrap:wrap;">
+        <a href="/history" class="btn btn-primary" style="background:var(--success);border-color:var(--success);color:#04130d;text-decoration:none;">📡 Open Live History &amp; Diagnostics →</a>
+        <a href="/v1/telemetry/history" class="btn" style="text-decoration:none;font-family:monospace;">JSON Feed</a>
+      </div>
+    </div>
 
     <!-- Interactive Zero-Wallet x402 Chaos Simulator -->
     <div class="card" style="margin-bottom: 2rem; border-color: rgba(56, 189, 248, 0.4);">
@@ -248,8 +371,9 @@ discoveryRouter.get("/", (c) => {
           <tr><td><span class="method-post">POST</span></td><td><code>/v1/gateways</code> &amp; <code>/g/:slug</code></td><td>1-Click Seller Gateway registration &amp; x402 execution proxy</td></tr>
           <tr><td><span class="method-post">POST</span></td><td><code>/v1/clear</code></td><td>Deferred schema escrow proxy, deep invariants &amp; failover routing (10 free/day)</td></tr>
           <tr><td><span class="method-get">GET</span></td><td><code>/v1/score/:chainId/:agentId</code></td><td>Sybil-resistant trust score &amp; cryptographic attestation</td></tr>
+          <tr><td><span class="method-get">GET</span></td><td><a href="/history"><code>/history</code></a></td><td>Real-time agent product invocation history stream &amp; &ldquo;why callers aren&rsquo;t paying&rdquo; diagnostics</td></tr>
           <tr><td><span class="method-get">GET</span></td><td><a href="/firewall"><code>/firewall</code></a></td><td>Interactive Pre-Swap Firewall Sandbox &amp; 3-line AgentKit / ElizaOS SDKs</td></tr>
-          <tr><td><span class="method-get">GET</span></td><td><a href="/v1/telemetry/dashboard"><code>/v1/telemetry/dashboard</code></a></td><td>Live D1 traffic attribution &amp; conversion funnel dashboard</td></tr>
+          <tr><td><span class="method-get">GET</span></td><td><a href="/v1/telemetry/history"><code>/v1/telemetry/history</code></a></td><td>Live D1 product usage &amp; payment conversion diagnostics JSON API</td></tr>
           <tr><td><span class="method-post">POST</span></td><td><code>/v1/pass/buy</code></td><td>Self-Serve Prepaid Firewall Pass ($5 / $25 / $100 USDC &rarr; instant <code>nc_live_...</code> Bearer key, 2k&ndash;100k low-latency credits)</td></tr>
           <tr><td><span class="method-post">POST</span></td><td><code>/rpc/:chain/:apiKey</code></td><td>Drop-In Guarded JSON-RPC Firewall (7 chains: free reads, auto-blocks drainers/honeypots/reverts before mempool broadcast)</td></tr>
           <tr><td><span class="method-post">POST</span></td><td><code>/v1/policy/cosign</code></td><td>Non-Custodial EIP-712 Policy Co-Signer for Safe / ERC-4337 / Agent Treasuries (2 credits or $0.02 USDC)</td></tr>
@@ -269,8 +393,35 @@ discoveryRouter.get("/", (c) => {
       </table>
     </div>
 
+    <!-- NullClear Organization & Enterprise Operations Section -->
+    <div class="card" style="margin-bottom: 2rem; border-color: rgba(56, 189, 248, 0.35);">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:1rem;margin-bottom:1rem;">
+        <div>
+          <div style="font-family:monospace;font-size:0.75rem;color:var(--accent);font-weight:700;letter-spacing:0.06em;">NULLCLEAR ORGANIZATION &bull; INSTITUTIONAL INFRASTRUCTURE</div>
+          <h3 style="margin-top:4px;margin-bottom:4px;color:var(--text);">Enterprise Operations, Security Desk &amp; Commercial Divisions</h3>
+          <p style="font-size:0.9rem;">NullClear operates unified agent security, non-custodial x402 payment clearing, and cryptographic deliverable escrow across 7 blockchains.</p>
+        </div>
+        <a href="mailto:ops@nullclear.dev" class="btn btn-primary" style="text-decoration:none;font-family:monospace;">✉️ Contact Operations: ops@nullclear.dev</a>
+      </div>
+      <div class="grid" style="margin-bottom:0;gap:1rem;">
+        <div style="background:#0d1117;border:1px solid var(--border);border-radius:10px;padding:1rem;">
+          <div style="font-weight:700;color:var(--accent);font-size:0.92rem;margin-bottom:4px;">1. Pre-Execution Firewall &amp; Guarded RPC</div>
+          <p style="font-size:0.84rem;">7-chain 1-call pre-sign guard (<code>/v1/guard</code>), drop-in guarded JSON-RPC (<code>/rpc/:chain/:key</code>), EIP-712 policy co-signer, and 30-day cron watchtower.</p>
+        </div>
+        <div style="background:#0d1117;border:1px solid var(--border);border-radius:10px;padding:1rem;">
+          <div style="font-weight:700;color:var(--success);font-size:0.92rem;margin-bottom:4px;">2. x402 Clearinghouse &amp; SafePay (<a href="https://nullclear.com">nullclear.com</a>)</div>
+          <p style="font-size:0.84rem;">Non-custodial EIP-3009 USDC schema-escrow proxy (<code>/v1/clear</code>), 1-click seller gateways (<code>/g/:slug</code>), and commercial deliverable escrow rooms.</p>
+        </div>
+        <div style="background:#0d1117;border:1px solid var(--border);border-radius:10px;padding:1rem;">
+          <div style="font-weight:700;color:var(--warning);font-size:0.92rem;margin-bottom:4px;">3. Live Transparency &amp; Operations Desk</div>
+          <p style="font-size:0.84rem;">Real-time public product telemetry at <a href="/history"><code>nullclear.dev/history</code></a>. Institutional SLA, custom RPC quotas &amp; KYA onboarding: <a href="mailto:ops@nullclear.dev"><code>ops@nullclear.dev</code></a>.</p>
+        </div>
+      </div>
+    </div>
+
     <footer>
-      <p>NullClear Protocol &bull; Base Mainnet (8453) &bull; Base Sepolia (84532) &bull; <a href="/openapi.json">OpenAPI Spec</a> &bull; <a href="/v1/telemetry/dashboard">Funnel Telemetry</a> &bull; <a href="/llms.txt">llms.txt</a></p>
+      <p><strong>NullClear Organization</strong> &bull; Operations &amp; Enterprise Desk: <a href="mailto:ops@nullclear.dev">ops@nullclear.dev</a> &bull; Base Mainnet (8453) &bull; ERC-8004 Agent #124595</p>
+      <p style="margin-top:6px;"><a href="/history">Live Agent History &amp; Diagnostics</a> &bull; <a href="/firewall">Pre-Sign Firewall</a> &bull; <a href="/x402">x402 Clearinghouse</a> &bull; <a href="/leaderboard">Leaderboard</a> &bull; <a href="https://nullclear.com">SafePay (nullclear.com)</a> &bull; <a href="/openapi.json">OpenAPI Spec</a> &bull; <a href="/llms.txt">llms.txt</a></p>
     </footer>
   </div>
 
@@ -411,6 +562,16 @@ discoveryRouter.get("/sitemap.xml", async (c) => {
     <loc>https://nullclear.dev/</loc>
     <changefreq>daily</changefreq>
     <priority>1.0</priority>
+  </url>
+  <url>
+    <loc>https://nullclear.dev/history</loc>
+    <changefreq>hourly</changefreq>
+    <priority>0.9</priority>
+  </url>
+  <url>
+    <loc>https://nullclear.dev/firewall</loc>
+    <changefreq>daily</changefreq>
+    <priority>0.9</priority>
   </url>
   <url>
     <loc>https://nullclear.dev/x402</loc>
@@ -689,11 +850,6 @@ const getX402Manifest = async (c: any) => {
     "https://api.nullclear.dev/v1/pass/buy",
     "https://api.nullclear.dev/v1/policy/cosign",
     "https://api.nullclear.dev/v1/monitors",
-    "https://api.nullclear.dev/v1/scan/base/0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
-    "https://api.nullclear.dev/v1/inspect/base/0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
-    "https://api.nullclear.dev/v1/decode",
-    "https://api.nullclear.dev/v1/simulate",
-    "https://api.nullclear.dev/v1/guard",
     ...gateways.map((gw) => `https://api.nullclear.dev/g/${gw.slug}`)
   ];
 
@@ -703,7 +859,7 @@ const getX402Manifest = async (c: any) => {
     protocolVersion: "1.7.0",
     service: "NullClear Arbiter",
     description:
-      "7-chain Pre-Execution Security Firewall, Drop-In Guarded JSON-RPC, $5-$100 Prepaid Passes, Policy Co-Signer, Watchtower & x402 schema-escrow clearinghouse",
+      "7-chain Pre-Execution Security Firewall, Drop-In Guarded JSON-RPC, $1-$100 Prepaid Passes, Policy Co-Signer, Watchtower & x402 schema-escrow clearinghouse",
     erc8004AgentId: agentId,
     treasuryAddress,
     arbiterAddress,
@@ -784,6 +940,7 @@ const getX402Manifest = async (c: any) => {
         method: "GET",
         payable: true,
         amountAtomic: "5000",
+        ...getBazaarResourceMetadata("/v1/bazaar/market-oracle"),
         extensions: {
           bazaar: {
             discoverable: true,
@@ -841,6 +998,7 @@ const getX402Manifest = async (c: any) => {
         method: "GET",
         payable: true,
         amountAtomic: "5000",
+        ...getBazaarResourceMetadata("/v1/bazaar/token-security"),
         extensions: {
           bazaar: {
             discoverable: true,
@@ -915,6 +1073,7 @@ const getX402Manifest = async (c: any) => {
         method: "GET",
         payable: true,
         amountAtomic: "5000",
+        ...getBazaarResourceMetadata("/v1/bazaar/wallet-risk"),
         extensions: {
           bazaar: {
             discoverable: true,
@@ -979,6 +1138,7 @@ const getX402Manifest = async (c: any) => {
         method: "GET",
         payable: true,
         amountAtomic: "5000",
+        ...getBazaarResourceMetadata("/v1/bazaar/verified-fetch"),
         extensions: {
           bazaar: {
             discoverable: true,
@@ -1040,6 +1200,7 @@ const getX402Manifest = async (c: any) => {
         method: "GET",
         payable: true,
         amountAtomic: "5000",
+        ...getBazaarResourceMetadata("/v1/bazaar/audit"),
         extensions: {
           bazaar: {
             discoverable: true,
@@ -1094,6 +1255,7 @@ const getX402Manifest = async (c: any) => {
         method: "POST",
         payable: true,
         amountAtomic: "10000",
+        ...getBazaarResourceMetadata("/v1/bazaar/verify"),
         extensions: {
           bazaar: {
             discoverable: true,
@@ -1141,6 +1303,7 @@ const getX402Manifest = async (c: any) => {
         method: "POST",
         payable: true,
         amountAtomic: "25000",
+        ...getBazaarResourceMetadata("/v1/bazaar/scan-batch"),
         extensions: {
           bazaar: {
             discoverable: true,
@@ -1221,24 +1384,24 @@ const getX402Manifest = async (c: any) => {
       },
       bazaarGuard: {
         path: "/v1/bazaar/guard",
-        method: "POST",
+        method: "GET",
         payable: true,
         amountAtomic: "5000",
+        ...getBazaarResourceMetadata("/v1/bazaar/guard"),
         extensions: {
           bazaar: {
             discoverable: true,
             description:
-              "1-Call Pre-Sign Transaction Firewall across 7 chains (Base, Ethereum, Arbitrum, Optimism, Polygon, BSC, Solana): unwraps nested Multicall3/Universal Router/Safe calldata, audits EIP-712 Permits & Seaport signatures, parses Solana wire txs, runs stateful eth_simulateV1/Solana simulation with net asset diffs, and scans touched tokens.",
+              "1-Call Pre-Sign Transaction Firewall across 7 chains (GET query params or POST JSON): unwraps Multicall3/Universal Router/Safe calldata, audits EIP-712 Permits & Seaport signatures, parses Solana wire txs, runs stateful eth_simulateV1/Solana simulation with net asset diffs, and scans touched tokens.",
             info: {
               input: {
                 type: "http",
-                method: "POST",
-                bodyType: "json",
-                body: {
+                method: "GET",
+                queryParams: {
                   chain: "base",
                   from: "0xfd74fF802EA0E735514C070AF04E0D6528deD145",
                   to: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
-                  data: "0x095ea7b3000000000000000000000000deadbeefdeadbeefdeadbeefdeadbeefdeadbeefffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+                  data: "0x095ea7b3000000000000000000000000b586efcca41df27ad3873beca54da0c30bf04d5c00000000000000000000000000000000000000000000000000000000000f4240",
                   value: "0x0"
                 }
               },
@@ -1247,10 +1410,10 @@ const getX402Manifest = async (c: any) => {
                 example: {
                   guardType: "EVM_TX_GUARD",
                   chain: "base",
-                  recommendedAgentAction: "ABORT_DRAINER_APPROVAL",
-                  riskScore: 10,
-                  riskLevel: "CRITICAL",
-                  alerts: ["Unlimited ERC-20 approve() to unverified spender"],
+                  recommendedAgentAction: "EXECUTE_SAFE",
+                  riskScore: 95,
+                  riskLevel: "LOW",
+                  alerts: [],
                   assetDiffs: [],
                   touchedTokenVerdicts: [],
                   attestation: "0xabc123",
@@ -1265,13 +1428,12 @@ const getX402Manifest = async (c: any) => {
               properties: {
                 input: {
                   type: "object",
-                  required: ["type", "method", "bodyType", "body"],
+                  required: ["type", "method"],
                   additionalProperties: false,
                   properties: {
                     type: { type: "string", const: "http" },
-                    method: { type: "string", enum: ["POST", "PUT", "PATCH"] },
-                    bodyType: { type: "string", enum: ["json", "form-data", "text"] },
-                    body: {
+                    method: { type: "string", enum: ["GET", "HEAD", "DELETE"] },
+                    queryParams: {
                       type: "object",
                       properties: {
                         chain: { type: "string" },
@@ -1279,10 +1441,7 @@ const getX402Manifest = async (c: any) => {
                         to: { type: "string" },
                         data: { type: "string" },
                         value: { type: "string" },
-                        typedData: { type: "object" },
-                        transaction: { type: "string" },
-                        transactions: { type: "array" },
-                        stateOverrides: { type: "object" }
+                        transaction: { type: "string" }
                       }
                     }
                   }
@@ -1308,6 +1467,7 @@ const getX402Manifest = async (c: any) => {
         method: "GET",
         payable: true,
         amountAtomic: "5000",
+        ...getBazaarResourceMetadata("/v1/bazaar/inspect"),
         extensions: {
           bazaar: {
             discoverable: true,
@@ -1376,20 +1536,20 @@ const getX402Manifest = async (c: any) => {
       },
       bazaarDueDiligence: {
         path: "/v1/bazaar/due-diligence",
-        method: "POST",
+        method: "GET",
         payable: true,
         amountAtomic: "100000",
+        ...getBazaarResourceMetadata("/v1/bazaar/due-diligence"),
         extensions: {
           bazaar: {
             discoverable: true,
             description:
-              "Institutional 7-chain Token & Contract Due-Diligence Dossier ($0.10 USDC or 10 prepaid credits): combines multi-oracle forensics, proxy/ABI/CFG inspection, historical sighting delta, and an EIP-712 signed Clearance Certificate.",
+              "Institutional 7-chain Token & Contract Due-Diligence Dossier (GET query params or POST JSON, $0.10 USDC or 10 prepaid credits): combines multi-oracle forensics, proxy/ABI/CFG inspection, historical sighting delta, and an EIP-712 signed Clearance Certificate.",
             info: {
               input: {
                 type: "http",
-                method: "POST",
-                bodyType: "json",
-                body: {
+                method: "GET",
+                queryParams: {
                   chain: "base",
                   address: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
                 }
@@ -1413,26 +1573,27 @@ const getX402Manifest = async (c: any) => {
         path: "/v1/bazaar/buy-pass",
         method: "POST",
         payable: true,
-        amountAtomic: "5000000",
+        amountAtomic: "1000000",
+        ...getBazaarResourceMetadata("/v1/bazaar/buy-pass"),
         extensions: {
           bazaar: {
             discoverable: true,
             description:
-              "Self-Serve Prepaid Firewall Pass ($5 Starter / 2,000 credits, $25 Pro / 15,000 credits, $100 Scale / 100,000 credits): mints an instant low-latency Bearer API key (nc_live_...) unlocking Drop-in Guarded JSON-RPC (/rpc/:chain/:key), EIP-712 Policy Co-Signer, and Continuous Watchtower Monitors.",
+              "Self-Serve Prepaid Firewall Pass ($1 Micro / 300 credits, $5 Starter / 2,000 credits, $25 Pro / 15,000 credits, $100 Scale / 100,000 credits): mints an instant low-latency Bearer API key (nc_live_...) unlocking Drop-in Guarded JSON-RPC (/rpc/:chain/:key), EIP-712 Policy Co-Signer, and Continuous Watchtower Monitors.",
             info: {
               input: {
                 type: "http",
                 method: "POST",
                 bodyType: "json",
-                body: { tier: "starter" }
+                body: { tier: "micro" }
               },
               output: {
                 type: "json",
                 example: {
                   passId: "pass_1795000000_ab12cd34",
                   apiKey: "nc_live_...",
-                  tier: "starter",
-                  creditsRemaining: 2000
+                  tier: "micro",
+                  creditsRemaining: 300
                 }
               }
             }
@@ -1444,6 +1605,7 @@ const getX402Manifest = async (c: any) => {
         method: "POST",
         payable: true,
         amountAtomic: "20000",
+        ...getBazaarResourceMetadata("/v1/policy/cosign"),
         description:
           "Non-Custodial EIP-712 Policy Co-Signer ($0.02 USDC or 2 prepaid credits): simulates transaction & enforces programmable policy before issuing on-chain-verifiable EIP-712 PolicyApproval co-signature."
       },
@@ -1452,6 +1614,7 @@ const getX402Manifest = async (c: any) => {
         method: "POST",
         payable: true,
         amountAtomic: "1000000",
+        ...getBazaarResourceMetadata("/v1/monitors"),
         description:
           "30-Day Continuous Cron Watchtower Monitor ($1.00 USDC or 50 prepaid credits): monitors proxy upgrades, sell-tax spikes, LP pulls & Solana authorities with signed webhooks."
       },
@@ -1782,7 +1945,7 @@ discoveryRouter.get("/.well-known/ai-plugin.json", (c) => {
       url: "https://api.nullclear.dev/openapi.json"
     },
     logo_url: "https://nullclear.dev/logo.png",
-    contact_email: "contact@nullclear.dev",
+    contact_email: "ops@nullclear.dev",
     legal_info_url: "https://nullclear.dev/terms"
   });
 });
@@ -1862,7 +2025,7 @@ discoveryRouter.get("/.well-known/ard.json", (c) => {
 const serveSecurityTxt = (c: any) =>
   c.text(
     [
-      "Contact: mailto:contact@nullclear.dev",
+      "Contact: mailto:ops@nullclear.dev",
       "Contact: https://github.com/Nullclear-Protocol/nullclear/security",
       "Canonical: https://api.nullclear.dev/.well-known/security.txt",
       "Preferred-Languages: en",
@@ -1895,7 +2058,7 @@ discoveryRouter.get("/pricing", (c) =>
 
 discoveryRouter.get("/privacy", (c) =>
   c.text(
-    "NullClear Privacy Policy\n\nNullClear is a zero-registration, non-custodial protocol. We never require user accounts, API keys, passwords, cookies, or custodial deposits. Public request telemetry logs (path, HTTP status, country/ASN, and optional audited target URLs) are retained solely for protocol reliability, x402 indexing, and anti-abuse rate limiting. Contact: contact@nullclear.dev\n"
+    "NullClear Privacy Policy\n\nNullClear is a zero-registration, non-custodial protocol. We never require user accounts, API keys, passwords, cookies, or custodial deposits. Public request telemetry logs (path, HTTP status, country/ASN, and optional audited target URLs) are retained solely for protocol reliability, x402 indexing, and anti-abuse rate limiting. Contact: ops@nullclear.dev\n"
   )
 );
 discoveryRouter.get("/privacy-policy", (c) => c.redirect("/privacy", 301));
@@ -1903,7 +2066,7 @@ discoveryRouter.get("/legal/privacy", (c) => c.redirect("/privacy", 301));
 
 discoveryRouter.get("/terms", (c) =>
   c.text(
-    "NullClear Terms of Service\n\nNullClear provides non-custodial on-chain forensics, MCP tools, and EIP-3009 x402 clearinghouse verification on an as-is basis. Callers retain full custody of wallets and signed authorizations until upstream invariants pass. Contact: contact@nullclear.dev\n"
+    "NullClear Terms of Service\n\nNullClear provides non-custodial on-chain forensics, MCP tools, and EIP-3009 x402 clearinghouse verification on an as-is basis. Callers retain full custody of wallets and signed authorizations until upstream invariants pass. Contact: ops@nullclear.dev\n"
   )
 );
 discoveryRouter.get("/terms-of-service", (c) => c.redirect("/terms", 301));
@@ -1919,9 +2082,13 @@ discoveryRouter.get("/about", (c) => c.redirect("/", 302));
 discoveryRouter.get("/contact", (c) =>
   c.json({
     protocol: "NullClear Protocol",
-    email: "contact@nullclear.dev",
+    organization: "NullClear Organization",
+    email: "ops@nullclear.dev",
+    operationsEmail: "ops@nullclear.dev",
     github: "https://github.com/Nullclear-Protocol/nullclear",
     mcp: "https://api.nullclear.dev/mcp",
+    historyDashboard: "https://nullclear.dev/history",
+    commercialEscrow: "https://nullclear.com",
     erc8004AgentId: 124595
   })
 );
@@ -1964,8 +2131,8 @@ const getOpenApiSpec = () => ({
     "x-guidance":
       "NullClear provides two modes for autonomous AI agents on Base Mainnet (eip155:8453): (1) Direct x402 Payable Intelligence Oracles ($0.005-$0.025 USDC / 5000-25000 atomic units per call via PayAI or Coinbase CDP Facilitator): call POST /v1/bazaar/guard ($0.005) for a 1-call pre-sign firewall across 7 chains (Base, ETH, Arbitrum, Optimism, Polygon, BSC, Solana — nested Multicall3/UniversalRouter/Safe decode, EIP-712 Permit/Seaport audit, Solana wire tx & stateful eth_simulateV1 asset diffs), GET /v1/bazaar/inspect?chain=base&address=0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913 ($0.005) for proxy resolution, Sourcify v2 + batch OpenChain ABI & bytecode CFG risk, GET /v1/bazaar/token-security?chain=base&address=0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913 ($0.005) for 7-chain contract & honeypot/Token-2022 scanning, POST /v1/bazaar/scan-batch ($0.025) for parallel batch scanning up to 15 tokens across 7 chains, GET /v1/bazaar/market-oracle?symbol=ETH ($0.005) for cross-verified crypto spot prices, GET /v1/bazaar/wallet-risk?address=0xfd74fF802EA0E735514C070AF04E0D6528deD145 ($0.005) for wallet counterparty & Sybil profiling, GET/POST /v1/bazaar/verified-fetch?url=https://api.coinbase.com/v2/prices/BTC-USD/spot ($0.005) for schema-verified anti-hallucination HTTP fetching, GET/POST /v1/bazaar/audit?agentId=124595 ($0.005) for ERC-8004 reputation audits, or POST /v1/bazaar/verify ($0.01) for x402 schema readiness verification (plus zero-key dev free tier then $0.005 USDC on /v1/guard, /v1/scan, /v1/inspect, /v1/decode, /v1/simulate). All paid endpoints return HTTP 402 with a PAYMENT-REQUIRED header first before any parameter rejection. (2) Non-Custodial Schema-Escrow Proxy: use POST /v1/clear (holds your signed EIP-3009 header in memory and only settles if the upstream response satisfies your JSON schema, numeric invariants, and LLM-refusal checks; voids with $0.00 charged on upstream failure).",
     contact: {
-      name: "NullClear Protocol",
-      email: "contact@nullclear.dev",
+      name: "NullClear Protocol Operations",
+      email: "ops@nullclear.dev",
       url: "https://nullclear.dev"
     }
   },
@@ -2686,6 +2853,57 @@ const getOpenApiSpec = () => ({
       }
     },
     "/v1/bazaar/guard": {
+      get: {
+        operationId: "bazaarGuardGet",
+        summary: "1-Call Pre-Sign Transaction Firewall (GET) - 7-chain calldata/tx check with working defaults for $0.005 USDC",
+        tags: ["Bazaar Oracles"],
+        "x-payment-info": MICRO_PAYMENT_INFO,
+        parameters: [
+          {
+            name: "chain",
+            in: "query",
+            required: false,
+            description: "Target chain (base, eth, arbitrum, optimism, polygon, bsc, solana)",
+            schema: { type: "string", default: "base", example: "base" }
+          },
+          {
+            name: "from",
+            in: "query",
+            required: false,
+            description: "Optional sender EVM address",
+            schema: { type: "string", example: "0xfd74fF802EA0E735514C070AF04E0D6528deD145" }
+          },
+          {
+            name: "to",
+            in: "query",
+            required: false,
+            description: "Target contract address (EVM)",
+            schema: { type: "string", example: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913" }
+          },
+          {
+            name: "data",
+            in: "query",
+            required: false,
+            description: "0x-prefixed hex calldata",
+            schema: {
+              type: "string",
+              example:
+                "0x095ea7b3000000000000000000000000b586efcca41df27ad3873beca54da0c30bf04d5c00000000000000000000000000000000000000000000000000000000000f4240"
+            }
+          },
+          {
+            name: "value",
+            in: "query",
+            required: false,
+            description: "Optional wei value",
+            schema: { type: "string", default: "0x0", example: "0x0" }
+          }
+        ],
+        responses: {
+          "200": { description: "Unified pre-sign firewall verdict, asset diffs, and touched-token audit" },
+          "402": { description: "Payment Required ($0.005 USDC / 5000 atomic)" }
+        }
+      },
       post: {
         operationId: "bazaarGuard",
         summary: "1-Call Pre-Sign Transaction Firewall (POST) - 7-chain nested calldata, EIP-712, Solana wire & stateful simulation for $0.005 USDC",
@@ -2753,6 +2971,35 @@ const getOpenApiSpec = () => ({
       }
     },
     "/v1/bazaar/due-diligence": {
+      get: {
+        operationId: "bazaarDueDiligenceGet",
+        summary: "Institutional 7-Chain Due-Diligence Dossier (GET) + EIP-712 Clearance Certificate ($0.10 USDC or 10 pass credits)",
+        tags: ["Firewall Pro Suite"],
+        "x-payment-info": {
+          price: { mode: "fixed", currency: "USD", amount: "0.10" },
+          protocols: [{ x402: {} }]
+        },
+        parameters: [
+          {
+            name: "chain",
+            in: "query",
+            required: false,
+            description: "Target chain (base, eth, arbitrum, optimism, polygon, bsc, solana)",
+            schema: { type: "string", default: "base", example: "base" }
+          },
+          {
+            name: "address",
+            in: "query",
+            required: false,
+            description: "Token or smart contract address",
+            schema: { type: "string", example: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913" }
+          }
+        ],
+        responses: {
+          "200": { description: "Institutional dossier with riskBreakdown & EIP-712 signed clearanceCertificate" },
+          "402": { description: "Payment Required ($0.10 USDC or Bearer nc_live_... pass)" }
+        }
+      },
       post: {
         operationId: "bazaarDueDiligence",
         summary: "Institutional 7-Chain Due-Diligence Dossier + EIP-712 Clearance Certificate ($0.10 USDC or 10 pass credits)",
@@ -2784,10 +3031,10 @@ const getOpenApiSpec = () => ({
     "/v1/pass/buy": {
       post: {
         operationId: "buyPrepaidPass",
-        summary: "Mint a Self-Serve Prepaid Firewall Pass ($5 Starter / 2,000 credits, $25 Pro / 15,000 credits, $100 Scale / 100,000 credits)",
+        summary: "Mint a Self-Serve Prepaid Firewall Pass ($1 Micro / 300 credits, $5 Starter / 2,000 credits, $25 Pro / 15,000 credits, $100 Scale / 100,000 credits)",
         tags: ["Firewall Pro Suite"],
         "x-payment-info": {
-          price: { mode: "fixed", currency: "USD", amount: "5.00" },
+          price: { mode: "fixed", currency: "USD", amount: "1.00" },
           protocols: [{ x402: {} }]
         },
         requestBody: {
@@ -2797,7 +3044,7 @@ const getOpenApiSpec = () => ({
               schema: {
                 type: "object",
                 properties: {
-                  tier: { type: "string", enum: ["starter", "pro", "scale"], default: "starter" }
+                  tier: { type: "string", enum: ["micro", "starter", "pro", "scale"], default: "micro" }
                 }
               }
             }
@@ -2805,7 +3052,7 @@ const getOpenApiSpec = () => ({
         },
         responses: {
           "200": { description: "Minted nc_live_... Bearer API key and guarded RPC URLs" },
-          "402": { description: "Payment Required ($5 / $25 / $100 USDC)" }
+          "402": { description: "Payment Required ($1 / $5 / $25 / $100 USDC)" }
         }
       }
     },
@@ -3695,9 +3942,12 @@ discoveryRouter.get("/leaderboard", async (c) => {
       <h1>x402 &amp; ERC-8004 Live Uptime Leaderboard</h1>
       <p class="subtitle">Real-time Canary probes across all x402 APIs and Base Mainnet USDC EIP-3009 settlements. Route any endpoint through <code>https://api.nullclear.dev/</code> for zero-loss schema escrow.</p>
       <div style="margin-top:0.75rem;font-size:0.86rem">
-        <a href="/">← Back to Developer Portal</a> &bull;
+        <a href="/">← Developer Portal</a> &bull;
+        <a href="/history" style="color:var(--success);font-weight:700;">📡 Live Agent History &amp; Diagnostics</a> &bull;
+        <a href="/firewall">🛡️ Pre-Sign Firewall</a> &bull;
         <a href="/v1/bazaar/directory">JSON Directory API (<code>/v1/bazaar/directory</code>)</a> &bull;
-        <a href="/v1/radar/onchain-flows">On-Chain Volume API (<code>/v1/radar/onchain-flows</code>)</a>
+        <a href="/v1/radar/onchain-flows">On-Chain Volume API (<code>/v1/radar/onchain-flows</code>)</a> &bull;
+        <a href="mailto:ops@nullclear.dev">✉️ ops@nullclear.dev</a>
       </div>
     </header>
 

@@ -34,7 +34,15 @@ export interface SettlementOptions {
   arbiterPrivateKey?: string;
   rpcUrl?: string;
   environment?: string;
-  resource?: { url: string; description?: string; mimeType?: string };
+  resource?: {
+    url: string;
+    description?: string;
+    mimeType?: string;
+    serviceName?: string;
+    tags?: string[];
+    toolName?: string;
+    iconUrl?: string;
+  };
   bazaarExtension?: unknown;
 }
 
@@ -317,6 +325,17 @@ export async function settleViaFacilitator(options: SettlementOptions): Promise<
       nonce: authorization.nonce
     };
 
+    const resourceMetadata = resource
+      ? {
+          ...(resource.serviceName ? { serviceName: resource.serviceName } : {}),
+          ...(resource.tags && resource.tags.length > 0 ? { tags: resource.tags } : {}),
+          ...(resource.toolName ? { toolName: resource.toolName } : {}),
+          ...(resource.iconUrl ? { iconUrl: resource.iconUrl } : {}),
+          ...(resource.description ? { description: resource.description } : {}),
+          ...(resource.mimeType ? { mimeType: resource.mimeType } : {})
+        }
+      : undefined;
+
     const requestBody: Record<string, unknown> = {
       x402Version: 2,
       paymentPayload: {
@@ -330,6 +349,9 @@ export async function settleViaFacilitator(options: SettlementOptions): Promise<
         ...(bazaarExtension ? { extensions: { bazaar: bazaarExtension } } : {})
       },
       paymentRequirements,
+      ...(resourceMetadata && Object.keys(resourceMetadata).length > 0
+        ? { metadata: resourceMetadata }
+        : {}),
       ...(bazaarExtension
         ? {
             extensions: { bazaar: bazaarExtension },

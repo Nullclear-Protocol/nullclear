@@ -27,6 +27,7 @@ import {
   extractPaymentAuthorization,
   attachDualX402Headers
 } from "../utils/x402-headers.js";
+import { getBazaarResourceMetadata, parseAtomicBigInt } from "./bazaar-metadata.js";
 
 export const policyRouter = new Hono<Env>();
 
@@ -147,6 +148,7 @@ async function resolvePolicyAuth(
     c.req.header("payment-signature") ||
     c.req.header("x-payment") ||
     c.req.header("x-nullclear-authorization");
+  const resourceMeta = getBazaarResourceMetadata(resourcePath);
 
   const make402 = (msg?: string) => {
     const priceUsd = (Number(x402AmountAtomic) / 1_000_000).toFixed(3);
@@ -159,7 +161,8 @@ async function resolvePolicyAuth(
       resource: {
         url: `https://api.nullclear.dev${resourcePath}`,
         description,
-        mimeType: "application/json"
+        mimeType: "application/json",
+        ...resourceMeta
       },
       accepts: [
         {
@@ -171,11 +174,18 @@ async function resolvePolicyAuth(
           maxTimeoutSeconds: 300,
           extra: { name: "USD Coin", version: "2" }
         }
-      ]
+      ],
+      extensions: {
+        bazaar: {
+          discoverable: true,
+          description
+        }
+      }
     };
     const encoded = encodeBase64Json(payload);
     c.header("PAYMENT-REQUIRED", encoded);
     c.header("X-Payment-Required", encoded);
+    c.header("Pay-To", NULLCLEAR_TREASURY_ADDRESS);
     return {
       authorized: false,
       errorResponse: c.json(
@@ -204,6 +214,10 @@ async function resolvePolicyAuth(
   }
   if (!parsedAuth || !parsedAuth.from || !parsedAuth.signature) {
     return make402("Invalid x402 payment header");
+  }
+  const parsedValue = parseAtomicBigInt(parsedAuth.value);
+  if (parsedValue === null || parsedValue < BigInt(x402AmountAtomic)) {
+    return make402(`Insufficient payment: expected at least ${x402AmountAtomic} atomic USDC`);
   }
 
   const payer = parsedAuth.from.toLowerCase() as `0x${string}`;
@@ -249,7 +263,8 @@ async function resolvePolicyAuth(
       resource: {
         url: `https://api.nullclear.dev${resourcePath}`,
         description,
-        mimeType: "application/json"
+        mimeType: "application/json",
+        ...resourceMeta
       }
     });
     if (!settlement.success || !settlement.transaction) {
@@ -432,8 +447,8 @@ policyRouter.post("/register", async (c) => {
   });
 });
 
-// POST /v1/policy/cosign — Evaluate guard + policy and emit EIP-712 PolicyApproval co-signature ONLY if all rules pass
-policyRouter.post("/cosign", async (c) => {
+// POST & GET /v1/policy/cosign — Evaluate guard + policy and emit EIP-712 PolicyApproval co-signature ONLY if all rules pass
+policyRouter.all("/cosign", async (c) => {
   const auth = await resolvePolicyAuth(
     c,
     "/v1/policy/cosign",
@@ -444,9 +459,18 @@ policyRouter.post("/cosign", async (c) => {
   if (!auth.authorized) return auth.errorResponse!;
 
   let body: any = {};
-  try {
-    body = await c.req.json();
-  } catch {}
+  if (c.req.method === "POST" || c.req.method === "PUT" || c.req.method === "PATCH") {
+    try {
+      body = await c.req.json();
+    } catch {}
+  }
+  if (!body.to && c.req.query("to")) body.to = c.req.query("to");
+  if (!body.from && c.req.query("from")) body.from = c.req.query("from");
+  if (!body.data && c.req.query("data")) body.data = c.req.query("data");
+  if (!body.value && c.req.query("value")) body.value = c.req.query("value");
+  if (!body.chain && c.req.query("chain")) body.chain = c.req.query("chain");
+  if (!body.transaction && c.req.query("transaction")) body.transaction = c.req.query("transaction");
+  if (!body.policyId && c.req.query("policyId")) body.policyId = c.req.query("policyId");
 
   if (
     !body.to &&

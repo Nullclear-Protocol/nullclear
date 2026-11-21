@@ -29,6 +29,7 @@ import {
   extractPaymentAuthorization,
   attachDualX402Headers
 } from "../utils/x402-headers.js";
+import { getBazaarResourceMetadata, parseAtomicBigInt } from "./bazaar-metadata.js";
 
 export const monitorsRouter = new Hono<Env>();
 
@@ -304,6 +305,65 @@ export async function runWatchtowerCronTick(
   return { checked, alertsFired };
 }
 
+const MONITOR_AMOUNT_ATOMIC = "1000000";
+const MONITOR_DESCRIPTION =
+  "30-Day Continuous Watchtower Monitor across 7 chains (proxy upgrades, tax spikes, LP pulls, Solana mint/freeze hooks) with signed webhooks";
+
+function buildMonitor402Response(c: Context<Env>, msg?: string): Response {
+  const resourceMeta = getBazaarResourceMetadata("/v1/monitors");
+  const payload = {
+    x402Version: 2,
+    scheme: "exact",
+    network: "eip155:8453",
+    amount: MONITOR_AMOUNT_ATOMIC,
+    payTo: NULLCLEAR_TREASURY_ADDRESS,
+    resource: {
+      url: "https://api.nullclear.dev/v1/monitors",
+      description: MONITOR_DESCRIPTION,
+      mimeType: "application/json",
+      ...resourceMeta
+    },
+    accepts: [
+      {
+        scheme: "exact",
+        network: "eip155:8453",
+        amount: MONITOR_AMOUNT_ATOMIC,
+        asset: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+        payTo: NULLCLEAR_TREASURY_ADDRESS,
+        maxTimeoutSeconds: 300,
+        extra: { name: "USD Coin", version: "2" }
+      }
+    ],
+    extensions: {
+      bazaar: {
+        discoverable: true,
+        description: MONITOR_DESCRIPTION
+      }
+    }
+  };
+  const encoded = encodeBase64Json(payload);
+  c.header("PAYMENT-REQUIRED", encoded);
+  c.header("X-Payment-Required", encoded);
+  c.header("Pay-To", NULLCLEAR_TREASURY_ADDRESS);
+  return c.json(
+    {
+      error: "Payment Required",
+      message:
+        msg ||
+        "Register a 30-day Watchtower Monitor using Authorization: Bearer <nc_live_key> (50 credits) OR $1.00 USDC x402 EIP-3009 payment.",
+      buyPassUrl: "POST https://api.nullclear.dev/v1/pass/buy",
+      endpoints: {
+        create: "POST https://api.nullclear.dev/v1/monitors",
+        list: "GET https://api.nullclear.dev/v1/monitors (Authorization: Bearer nc_live_...)",
+        checkNow: "POST https://api.nullclear.dev/v1/monitors/:id/check",
+        delete: "DELETE https://api.nullclear.dev/v1/monitors/:id"
+      },
+      ...payload
+    },
+    402
+  );
+}
+
 async function resolveMonitorCreateAuth(c: Context<Env>): Promise<{
   authorized: boolean;
   ownerAddress?: string;
@@ -335,55 +395,16 @@ async function resolveMonitorCreateAuth(c: Context<Env>): Promise<{
   }
 
   // 2. Direct x402 EIP-3009 USDC ($1.00 USDC / 1,000,000 atomic for 30 days)
-  const amountAtomic = "1000000";
+  const amountAtomic = MONITOR_AMOUNT_ATOMIC;
   const paymentHeader =
     c.req.header("payment-signature") ||
     c.req.header("x-payment") ||
     c.req.header("x-nullclear-authorization");
 
-  const make402 = (msg?: string) => {
-    const payload = {
-      x402Version: 2,
-      scheme: "exact",
-      network: "eip155:8453",
-      amount: amountAtomic,
-      payTo: NULLCLEAR_TREASURY_ADDRESS,
-      resource: {
-        url: "https://api.nullclear.dev/v1/monitors",
-        description:
-          "30-Day Continuous Watchtower Monitor across 7 chains (proxy upgrades, tax spikes, LP pulls, Solana mint/freeze hooks) with signed webhooks",
-        mimeType: "application/json"
-      },
-      accepts: [
-        {
-          scheme: "exact",
-          network: "eip155:8453",
-          amount: amountAtomic,
-          asset: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
-          payTo: NULLCLEAR_TREASURY_ADDRESS,
-          maxTimeoutSeconds: 300,
-          extra: { name: "USD Coin", version: "2" }
-        }
-      ]
-    };
-    const encoded = encodeBase64Json(payload);
-    c.header("PAYMENT-REQUIRED", encoded);
-    c.header("X-Payment-Required", encoded);
-    return {
-      authorized: false,
-      errorResponse: c.json(
-        {
-          error: "Payment Required",
-          message:
-            msg ||
-            "Register a 30-day Watchtower Monitor using Authorization: Bearer <nc_live_key> (50 credits) OR $1.00 USDC x402 EIP-3009 payment.",
-          buyPassUrl: "POST https://api.nullclear.dev/v1/pass/buy",
-          ...payload
-        },
-        402
-      )
-    };
-  };
+  const make402 = (msg?: string) => ({
+    authorized: false,
+    errorResponse: buildMonitor402Response(c, msg)
+  });
 
   if (!paymentHeader) return make402();
 
@@ -396,7 +417,8 @@ async function resolveMonitorCreateAuth(c: Context<Env>): Promise<{
   if (!parsedAuth || !parsedAuth.from || !parsedAuth.signature) {
     return make402("Invalid x402 payment header");
   }
-  if (BigInt(parsedAuth.value || "0") < BigInt(amountAtomic)) {
+  const parsedValue = parseAtomicBigInt(parsedAuth.value);
+  if (parsedValue === null || parsedValue < BigInt(amountAtomic)) {
     return make402(`Insufficient payment: expected ${amountAtomic} atomic USDC ($1.00)`);
   }
 
@@ -442,8 +464,9 @@ async function resolveMonitorCreateAuth(c: Context<Env>): Promise<{
       environment: c.env?.ENVIRONMENT || "production",
       resource: {
         url: "https://api.nullclear.dev/v1/monitors",
-        description: "NullClear 30-Day Continuous Watchtower Monitor ($1.00 USDC)",
-        mimeType: "application/json"
+        description: MONITOR_DESCRIPTION,
+        mimeType: "application/json",
+        ...getBazaarResourceMetadata("/v1/monitors")
       }
     });
     if (!settlement.success || !settlement.transaction) {
@@ -468,7 +491,7 @@ async function resolveMonitorCreateAuth(c: Context<Env>): Promise<{
   };
 }
 
-// GET /v1/monitors — List monitors for authenticated pass, or return usage guide
+// GET /v1/monitors — List monitors for authenticated pass, or emit 402 Payment Required challenge for x402 conformance
 monitorsRouter.get("/", async (c) => {
   const auth = await authenticatePassReadOnly(c);
   if (auth.authenticated && auth.pass) {
@@ -493,20 +516,7 @@ monitorsRouter.get("/", async (c) => {
     });
   }
 
-  return c.json({
-    service: "NullClear Continuous Cron Watchtower",
-    description:
-      "Continuously monitors tokens and smart contracts across 7 chains for post-launch proxy upgrades, sell-tax spikes, liquidity pulls, critical traps, and Solana mint/freeze authority changes — firing cryptographically signed webhooks.",
-    pricing: "50 prepaid pass credits (or $1.00 USDC x402) per 30-day monitor",
-    endpoints: {
-      create: "POST https://api.nullclear.dev/v1/monitors",
-      list: "GET https://api.nullclear.dev/v1/monitors (Authorization: Bearer nc_live_...)",
-      checkNow: "POST https://api.nullclear.dev/v1/monitors/:id/check",
-      delete: "DELETE https://api.nullclear.dev/v1/monitors/:id"
-    },
-    defaultAlertRules: DEFAULT_ALERT_RULES,
-    _nullclear: buildNullClearMetadata({ verified: true })
-  });
+  return buildMonitor402Response(c);
 });
 
 // POST /v1/monitors — Register a new 30-day Watchtower Monitor

@@ -299,6 +299,8 @@ export class NullClearClient {
     if (
       res?.error === "Payment Required" &&
       options?.fallbackToFreeSingleScans &&
+      !this.signer &&
+      !this.apiKey &&
       tokens.length > 0 &&
       tokens.length <= 5
     ) {
@@ -308,6 +310,10 @@ export class NullClearClient {
           : normalizeForensicTarget(entry.address, entry.chain || options.defaultChain || "base")
       );
       const scans = await Promise.all(normalized.map((t) => this.scanToken(t.chain, t.address)));
+      // Never mask a rate-limited / 402 / error response as EXECUTE_SAFE
+      if (scans.some((s) => !s || s.rateLimited || s.error || !s.recommendedAgentAction)) {
+        return res;
+      }
       const criticalTrapCount = scans.filter(
         (s) => s?.recommendedAgentAction === "ABORT_CRITICAL_TRAP" || s?.evidence?.isHoneypot
       ).length;
@@ -522,10 +528,10 @@ export class NullClearClient {
   }
 
   /**
-   * Mint a Prepaid Firewall Pass ($5 Starter / $25 Pro / $100 Scale) via x402 EIP-3009 USDC.
+   * Mint a Prepaid Firewall Pass ($1 Micro / $5 Starter / $25 Pro / $100 Scale) via x402 EIP-3009 USDC.
    */
   async buyPass(
-    tier: "starter" | "pro" | "scale" = "starter",
+    tier: "micro" | "starter" | "pro" | "scale" = "starter",
     paymentSignatureHeader?: string
   ): Promise<any> {
     return this.requestJsonWithAutoX402("/v1/pass/buy", {

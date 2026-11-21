@@ -162,6 +162,135 @@ export interface TrafficEventRecord {
   referer?: string | null;
   userAgent?: string | null;
   isFreeTrial?: boolean;
+  paymentTier?: string | null;
+  remainingFree?: number | null;
+  clientId?: string | null;
+  targetSubject?: string | null;
+  diagnosticReason?: string | null;
+  latencyMs?: number | null;
+}
+
+export interface EnrichedProductHistoryEvent extends TrafficEventRecord {
+  productCategory: string;
+  productName: string;
+  targetSubject: string;
+  paymentTier: string;
+  paymentBadge: string;
+  diagnosticReason: string;
+  isRealProductUse: boolean;
+  isIndexerBot: boolean;
+  isPaid: boolean;
+}
+
+export interface FreeTierCallerMeter {
+  clientKeyMasked: string;
+  bucketType: "forensic" | "bazaar-or-mcp";
+  usageDate: string;
+  callCount: number;
+  dailyLimit: number;
+  remaining: number;
+  hitPaywall: boolean;
+  updatedAt: number;
+}
+
+export interface ProductDiagnosticBreakdownRow {
+  productCategory: string;
+  productName: string;
+  calls24h: number;
+  calls7d: number;
+  ok200Count: number;
+  freeTierCount: number;
+  paidCount: number;
+  paywall402RealAgentCount: number;
+  paywall402IndexerCount: number;
+  error400Count: number;
+}
+
+export interface DailyProductUsagePoint {
+  date: string;
+  totalRealProductUses: number;
+  mcpToolCalls: number;
+  forensicsAndFirewall: number;
+  bazaarAndEscrow: number;
+  webAndMarkdownScorecards: number;
+  uniqueFreeTierCallers: number;
+  unpaid402Challenges: number;
+  preBilling400Errors: number;
+  totalHttpHits: number;
+}
+
+export interface PaymentDiagnosticsReport {
+  generatedAt: number;
+  filterApplied: string;
+  executiveDiagnosis: {
+    headline: string;
+    reasonsWhyNotPaying: Array<{
+      id: string;
+      title: string;
+      severity: "PRIMARY" | "SECONDARY" | "INFO";
+      metricValue: string;
+      shareOfTrafficPct: number;
+      explanation: string;
+    }>;
+  };
+  dailySeries: DailyProductUsagePoint[];
+  counters24h: {
+    totalRequests: number;
+    realProductUses: number;
+    executedFreeTier200: number;
+    paidSettled200: number;
+    realAgentUnpaid402: number;
+    freeTierExhausted402: number;
+    indexerBot402Probes: number;
+    preBilling400Errors: number;
+    publicScorecardReads: number;
+    mcpHandshakes: number;
+    mcpToolCalls: number;
+  };
+  counters7d: {
+    totalRequests: number;
+    realProductUses: number;
+    executedFreeTier200: number;
+    paidSettled200: number;
+    realAgentUnpaid402: number;
+    freeTierExhausted402: number;
+    indexerBot402Probes: number;
+    preBilling400Errors: number;
+    publicScorecardReads: number;
+    mcpHandshakes: number;
+    mcpToolCalls: number;
+  };
+  quotaMeters: {
+    todayDate: string;
+    activeCallersToday: number;
+    totalFreeCallsToday: number;
+    avgCallsPerCallerToday: number;
+    maxCallsBySingleCallerToday: number;
+    callersHittingPaywallToday: number;
+    callersHittingPaywall7d: number;
+    activeCallers7d: number;
+    recentCallers: FreeTierCallerMeter[];
+  };
+  productBreakdown: ProductDiagnosticBreakdownRow[];
+  ledgerSummary: {
+    totalPassedClearings: number;
+    totalVoidedClearings: number;
+    totalClearedVolumeUsdc: string;
+    activePrepaidPasses: number;
+    totalPassCreditsRemaining: number;
+    recentClearings: ClearingRecord[];
+    recentForensicScans: Array<{
+      chain: string;
+      address: string;
+      symbol: string;
+      name: string;
+      score: number;
+      verdict: string;
+      recommendedAction: string;
+      scannedAt: number;
+    }>;
+  };
+  events: EnrichedProductHistoryEvent[];
 }
 
 export interface TelemetryFunnelWindow {
@@ -451,7 +580,7 @@ export interface ApiPassRecord {
   keyHash: string;
   keyPrefix: string;
   ownerAddress: string;
-  tier: "starter" | "pro" | "scale";
+  tier: "micro" | "starter" | "pro" | "scale";
   creditsTotal: number;
   creditsRemaining: number;
   priceAtomic: string;
@@ -504,6 +633,11 @@ export interface IArbiterStore {
   getSafePayDeal(dealId: string): Promise<SafePayDealRecord | null>;
   recordTrafficEvent(event: TrafficEventRecord): Promise<void>;
   getTelemetryFunnel(): Promise<TelemetryFunnelReport>;
+  getProductHistoryAndDiagnostics(options?: {
+    limit?: number;
+    filter?: string;
+    search?: string;
+  }): Promise<PaymentDiagnosticsReport>;
   consumeFreeTierCall(clientKey: string, dailyLimit?: number): Promise<FreeTierUsageResult>;
   getFreeTierRemaining(clientKey: string, dailyLimit?: number): Promise<number>;
   saveSellerGateway(gateway: SellerGatewayRecord): Promise<void>;
@@ -786,6 +920,36 @@ export class MemoryArbiterStore implements IArbiterStore {
       last24h: buildTelemetryWindow("Last 24 Hours", events24h, clearings24h),
       last7d: buildTelemetryWindow("Last 7 Days", events7d, clearings7d)
     };
+  }
+
+  async getProductHistoryAndDiagnostics(options?: {
+    limit?: number;
+    filter?: string;
+    search?: string;
+  }): Promise<PaymentDiagnosticsReport> {
+    const freeTierRows: Array<{ clientKey: string; usageDate: string; callCount: number; updatedAt: number }> = [];
+    for (const [compoundKey, count] of this.freeTierUsage.entries()) {
+      const idx = compoundKey.indexOf(":");
+      const usageDate = idx > 0 ? compoundKey.slice(0, idx) : new Date().toISOString().slice(0, 10);
+      const clientKey = idx > 0 ? compoundKey.slice(idx + 1) : compoundKey;
+      freeTierRows.push({
+        clientKey,
+        usageDate,
+        callCount: count,
+        updatedAt: Date.now()
+      });
+    }
+    const passes = Array.from(this.apiPassesByHash.values());
+    const scans = await this.listForensicScans(undefined, 15);
+    return buildPaymentDiagnosticsReport({
+      events: [...this.trafficEvents].reverse(),
+      freeTierRows,
+      clearings: [...this.clearings].reverse(),
+      activePrepaidPasses: passes.length,
+      totalPassCreditsRemaining: passes.reduce((acc, p) => acc + p.creditsRemaining, 0),
+      recentForensicScans: scans,
+      options
+    });
   }
 
   async consumeFreeTierCall(clientKey: string, dailyLimit = 10): Promise<FreeTierUsageResult> {
@@ -1201,6 +1365,17 @@ function buildTelemetryWindow(
       ev.mcpMethod === "tools/call" ||
       p.startsWith("/v1/sandbox") ||
       p.startsWith("/v1/bazaar") ||
+      p.startsWith("/v1/guard") ||
+      p.startsWith("/v1/scan") ||
+      p.startsWith("/v1/inspect") ||
+      p.startsWith("/v1/decode") ||
+      p.startsWith("/v1/simulate") ||
+      p.startsWith("/v1/pass") ||
+      p.startsWith("/rpc/") ||
+      p.startsWith("/v1/policy") ||
+      p.startsWith("/v1/monitors") ||
+      p.startsWith("/v1/clear") ||
+      p.startsWith("/v1/escrow") ||
       p.startsWith("/https://") ||
       p.startsWith("/http://") ||
       p.startsWith("/v1/proxy") ||
@@ -1249,6 +1424,841 @@ function buildTelemetryWindow(
       freeOrSandboxCall,
       realX402Settlement
     }
+  };
+}
+
+export function maskClientKeyForDisplay(rawKey: string | null | undefined): string {
+  if (!rawKey) return "anon";
+  const cleaned = rawKey.trim();
+  const withoutBucket = cleaned.startsWith("forensic:") ? cleaned.slice(9) : cleaned;
+  if (withoutBucket.startsWith("mcp:")) {
+    const sess = withoutBucket.slice(4);
+    return `mcp:${sess.slice(0, 10)}${sess.length > 10 ? "…" : ""}`;
+  }
+  if (withoutBucket.startsWith("ip:")) {
+    const ip = withoutBucket.slice(3);
+    if (ip.includes(".")) {
+      const parts = ip.split(".");
+      let hash = 0;
+      for (let i = 0; i < ip.length; i++) {
+        hash = (hash * 31 + ip.charCodeAt(i)) & 0xfff;
+      }
+      return `ip:${parts[0]}.${parts[1]}.*.#${hash.toString(16).padStart(3, "0")}`;
+    }
+    if (ip.includes(":")) {
+      const parts = ip.split(":").filter(Boolean);
+      let hash = 0;
+      for (let i = 0; i < ip.length; i++) {
+        hash = (hash * 31 + ip.charCodeAt(i)) & 0xfff;
+      }
+      return `ipv6:${parts.slice(0, 2).join(":")}::#${hash.toString(16).padStart(3, "0")}`;
+    }
+  }
+  return withoutBucket.slice(0, 18);
+}
+
+const KNOWN_INDEXER_BOT_PATTERNS = [
+  "payai-bazaar",
+  "payai",
+  "coinbasebazaardiscovery",
+  "x402-first-sight",
+  "first-sight",
+  "x402station",
+  "x402-observer",
+  "mortal01-x402-monitor",
+  "kertivostatus",
+  "carbonmonitor",
+  "alalanet-prober",
+  "lumiere-paycheck-prober",
+  "agentrankprobe",
+  "ainet-probe",
+  "mareliberum",
+  "genesis-live-demand-radar",
+  "genesis-buyer-intent-radar",
+  "erc8004-opportunity-watch",
+  "nullclear-canary-auditor",
+  "mcpbeat",
+  "sentineloracle",
+  "histor/",
+  "rokmcp-collector",
+  "agent402/",
+  "uptime-probe",
+  "uptime probe",
+  "unauth probe",
+  "unpaid http 402",
+  "unpaid x402",
+  "liveness-only",
+  "liveness check",
+  "healthcheck",
+  "402index",
+  "402explorer",
+  "x402scan-worker",
+  "x402scan",
+  "brickbluebot",
+  "agent402-probe",
+  "botsrated",
+  "faceabotprobe",
+  "p0-catalog",
+  "zerobot",
+  "verantis-verifier",
+  "aegis-unserved-demand",
+  "tenet-boi-labels",
+  "x402-list-monitor",
+  "x402-census-probe",
+  "x402-conformance-check",
+  "x402-reliability-probe",
+  "x402-discovery-probe",
+  "x402-router-crawler",
+  "x402-directory",
+  "x402-audit",
+  "x402trust",
+  "x402lens",
+  "x402-mpp-liveness",
+  "solari-x402",
+  "kanteiapiindex",
+  "easy402-indexer",
+  "agentvalcon",
+  "sealkeeperbot",
+  "agenstrybot",
+  "agents-trust-probe",
+  "agentprobe",
+  "mcpwatch",
+  "mcp-index",
+  "dollardollardollar-signals",
+  "entropy-daemon-trust-oracle",
+  "taifoon-content-probe",
+  "satohub",
+  "glama",
+  "smithery",
+  "mcprush",
+  "mcpservers",
+  "mcptry"
+];
+
+export function isKnownDirectoryIndexerUa(uaRaw: string | null | undefined): boolean {
+  const ua = (uaRaw || "").toLowerCase();
+  if (!ua) return false;
+  return KNOWN_INDEXER_BOT_PATTERNS.some((p) => ua.includes(p));
+}
+
+export function enrichTrafficEventDiagnostics(ev: TrafficEventRecord): EnrichedProductHistoryEvent {
+  const p = ev.path || "/";
+  const m = (ev.method || "GET").toUpperCase();
+  const ua = ev.userAgent || "";
+  const isKnownIndexerUa = isKnownDirectoryIndexerUa(ua);
+
+  let productCategory = "Web UI / Navigation";
+  let productName = `${m} ${p}`;
+  let targetSubject = ev.targetSubject || "";
+  let isRealProductUse = false;
+
+  if (ev.mcpMethod === "tools/call" || (p.startsWith("/mcp") && ev.toolName)) {
+    productCategory = "MCP Tool Call";
+    productName = ev.toolName || "mcp:tools/call";
+    targetSubject = targetSubject || "MCP JSON-RPC Tool Invocation";
+    isRealProductUse = true;
+  } else if (p.startsWith("/mcp")) {
+    productCategory = "MCP Handshake";
+    productName = ev.mcpMethod ? `mcp:${ev.mcpMethod}` : `mcp:${m}`;
+    targetSubject = targetSubject || (ev.mcpMethod || "Streamable HTTP Session");
+    isRealProductUse = false;
+  } else if (p.startsWith("/v1/guard")) {
+    productCategory = "1-Call Pre-Sign Firewall";
+    productName = `${m} /v1/guard`;
+    targetSubject = targetSubject || "EVM / EIP-712 / Solana Preflight";
+    isRealProductUse = m === "POST" || p.includes("?");
+  } else if (p.startsWith("/v1/scan/")) {
+    productCategory = "Token Forensics API";
+    productName = "GET /v1/scan";
+    const parts = p.replace("/v1/scan/", "").split("/").filter(Boolean);
+    targetSubject = targetSubject || (parts.length >= 2 ? `${parts[0]}:${parts[1]}` : parts[0] || "token-scan");
+    isRealProductUse = true;
+  } else if (p.startsWith("/v1/inspect/")) {
+    productCategory = "Proxy & ABI Inspector";
+    productName = "GET /v1/inspect";
+    const parts = p.replace("/v1/inspect/", "").split("/").filter(Boolean);
+    targetSubject = targetSubject || (parts.length >= 2 ? `${parts[0]}:${parts[1]}` : parts[0] || "contract-inspect");
+    isRealProductUse = true;
+  } else if (p.startsWith("/v1/decode")) {
+    productCategory = "Calldata & Revert Decoder";
+    productName = `${m} /v1/decode`;
+    targetSubject = targetSubject || "Hex Calldata / EIP-712 / Tx Hash";
+    isRealProductUse = m === "POST" || (m === "GET" && ev.status !== 400);
+  } else if (p.startsWith("/v1/simulate")) {
+    productCategory = "Stateful Tx Simulator";
+    productName = `${m} /v1/simulate`;
+    targetSubject = targetSubject || "eth_simulateV1 / Solana Sim";
+    isRealProductUse = m === "POST";
+  } else if (p.startsWith("/v1/pass/")) {
+    productCategory = "Prepaid Firewall Pass";
+    productName = p.includes("/buy") ? `${m} /v1/pass/buy` : `${m} ${p}`;
+    targetSubject = targetSubject || "nc_live_... Pass ($1 / $5 / $25 / $100)";
+    isRealProductUse = true;
+  } else if (p.startsWith("/rpc/")) {
+    productCategory = "Drop-In Guarded RPC";
+    const chainSeg = p.replace("/rpc/", "").split("/")[0] || "base";
+    productName = `${m} /rpc/${chainSeg}`;
+    targetSubject = targetSubject || `chain:${chainSeg}`;
+    isRealProductUse = m === "POST";
+  } else if (p.startsWith("/v1/policy/")) {
+    productCategory = "EIP-712 Policy Co-Signer";
+    productName = `${m} ${p}`;
+    targetSubject = targetSubject || "Programmable Treasury Policy";
+    isRealProductUse = true;
+  } else if (p.startsWith("/v1/monitors")) {
+    productCategory = "Continuous Watchtower";
+    productName = `${m} ${p}`;
+    targetSubject = targetSubject || "30-Day Contract Monitor";
+    isRealProductUse = m === "POST" || p.includes("/check");
+  } else if (p.startsWith("/v1/bazaar/")) {
+    const ep = p.replace("/v1/bazaar/", "").split("/")[0] || "oracle";
+    productCategory = "x402 Bazaar Oracle";
+    productName = `bazaar:${ep}`;
+    targetSubject = targetSubject || `/v1/bazaar/${ep}`;
+    isRealProductUse = ep !== "directory";
+  } else if (p.startsWith("/v1/clear") || p.startsWith("/v1/escrow")) {
+    productCategory = "x402 Schema Escrow";
+    productName = `${m} ${p}`;
+    targetSubject = targetSubject || "Deferred EIP-3009 Verification";
+    isRealProductUse = m === "POST";
+  } else if (p.startsWith("/v1/proxy") || /^\/https?:\/+/i.test(p)) {
+    productCategory = "Auto-Guard URL Proxy";
+    productName = "proxy:auto-guard";
+    targetSubject = targetSubject || p.replace(/^\/v1\/proxy\??/, "").slice(0, 72) || "Upstream URL";
+    isRealProductUse = true;
+  } else if (p.startsWith("/g/")) {
+    const slug = p.replace("/g/", "").split("/")[0] || "gateway";
+    productCategory = "Seller x402 Gateway";
+    productName = `gateway:${slug}`;
+    targetSubject = targetSubject || `/g/${slug}`;
+    isRealProductUse = true;
+  } else if (p.startsWith("/v1/score/")) {
+    productCategory = "ERC-8004 Reputation Oracle";
+    productName = "GET /v1/score";
+    targetSubject = targetSubject || p.replace("/v1/score/", "");
+    isRealProductUse = true;
+  } else if (p.startsWith("/v1/kya")) {
+    productCategory = "Corporate KYA Mandate";
+    productName = `${m} ${p}`;
+    targetSubject = targetSubject || "KYA Entity Verification";
+    isRealProductUse = true;
+  } else if (p.startsWith("/scan/")) {
+    const isMd = p.toLowerCase().endsWith(".md");
+    productCategory = isMd ? "LLM Markdown Twin (.md)" : "Public Forensic Scorecard";
+    productName = isMd ? "GET /scan/*.md" : "GET /scan/:chain/:addr";
+    const parts = p.replace("/scan/", "").split("/").filter(Boolean);
+    targetSubject = targetSubject || (parts.length >= 2 ? `${parts[0]}:${parts[1]}` : parts[0] || "token-report");
+    isRealProductUse = true;
+  } else if (p.startsWith("/api/safepay/deals")) {
+    productCategory = "SafePay Escrow Deal";
+    productName = `${m} ${p}`;
+    targetSubject = targetSubject || p.replace("/api/safepay/deals/", "") || "new-deal";
+    isRealProductUse = true;
+  } else if (p.startsWith("/a2a") && m === "POST") {
+    productCategory = "A2A Agent Task";
+    productName = ev.toolName || "POST /a2a";
+    targetSubject = targetSubject || "A2A JSON-RPC 2.0";
+    isRealProductUse = true;
+  } else if (p.startsWith("/v1/clean-markdown")) {
+    productCategory = "Clean Markdown Scraper";
+    productName = "GET /v1/clean-markdown";
+    targetSubject = targetSubject || "Web Readability Scraper";
+    isRealProductUse = true;
+  } else if (
+    p.startsWith("/.well-known/") ||
+    p === "/openapi.json" ||
+    p === "/api/v1/openapi.json" ||
+    p === "/llms.txt" ||
+    p === "/llms-full.txt" ||
+    p === "/agents.md"
+  ) {
+    productCategory = "Protocol Discovery Manifest";
+    productName = `GET ${p}`;
+    targetSubject = ev.host || "nullclear.dev";
+    isRealProductUse = false;
+  }
+
+  if (m === "HEAD" || m === "OPTIONS" || ev.status === 404) {
+    isRealProductUse = false;
+  }
+
+  // Classify indexer 402 probes vs real callers
+  const isPaidEndpoint =
+    p.startsWith("/v1/bazaar/") ||
+    p.startsWith("/v1/pass/buy") ||
+    p.startsWith("/v1/policy/cosign") ||
+    (p.startsWith("/v1/monitors") && m === "POST") ||
+    p.startsWith("/g/");
+
+  const isIndexerBot =
+    isKnownIndexerUa ||
+    (ev.status === 402 && isPaidEndpoint && ev.actorType === "BOT_SCANNER" && !ev.isFreeTrial);
+
+  let paymentTier = (ev.paymentTier || "").toLowerCase();
+  let paymentBadge = "EXECUTED (200)";
+  let diagnosticReason = ev.diagnosticReason || "";
+  let isPaid = false;
+
+  if (paymentTier === "x402-paid" || paymentTier === "prepaid-pass") {
+    isPaid = true;
+    paymentBadge = paymentTier === "prepaid-pass" ? "PAID (PASS CREDIT)" : "PAID (x402 USDC)";
+    if (!diagnosticReason) {
+      diagnosticReason =
+        paymentTier === "prepaid-pass"
+          ? "PAID: Authenticated via Prepaid Pass (nc_live_...)"
+          : "PAID: Settled on-chain x402 EIP-3009 USDC authorization on Base";
+    }
+  } else if (ev.status === 200) {
+    if (
+      paymentTier === "forensic-free" ||
+      paymentTier === "zero-key-free" ||
+      p.startsWith("/v1/scan") ||
+      p.startsWith("/v1/inspect") ||
+      p.startsWith("/v1/decode") ||
+      p.startsWith("/v1/simulate") ||
+      p.startsWith("/v1/guard") ||
+      ev.mcpMethod === "tools/call"
+    ) {
+      paymentTier = paymentTier || "forensic-free";
+      const rem = typeof ev.remainingFree === "number" ? ev.remainingFree : null;
+      const used = rem !== null ? Math.max(1, 10 - rem) : null;
+      paymentBadge = used !== null ? `FREE TIER (${used}/10 USED)` : "FREE TIER (200 OK)";
+      if (!diagnosticReason) {
+        diagnosticReason =
+          used !== null
+            ? `FREE QUOTA: Caller used ${used}/10 daily free calls (${rem} left today) — under paywall threshold`
+            : "FREE QUOTA: Served under 10 calls/day/IP free tier — caller did not reach call #11 paywall";
+      }
+    } else if (paymentTier === "free-trial" || ev.isFreeTrial) {
+      paymentTier = "free-trial";
+      const rem = typeof ev.remainingFree === "number" ? ev.remainingFree : null;
+      paymentBadge = rem !== null ? `FREE TRIAL (${rem} LEFT)` : "FREE TRIAL (200 OK)";
+      if (!diagnosticReason) {
+        diagnosticReason = "FREE TRIAL: Caller used daily sponsored trial quota — no x402 payment required yet";
+      }
+    } else if (p.startsWith("/scan/")) {
+      paymentTier = "public-scorecard";
+      paymentBadge = "PUBLIC REPORT (FREE)";
+      if (!diagnosticReason) {
+        diagnosticReason = "PUBLIC SCORECARD: Web/Markdown report (/scan/:chain/:address) is free by design for SEO & LLM citation";
+      }
+    } else if (isPaidEndpoint || p.startsWith("/v1/clear") || p.startsWith("/v1/escrow")) {
+      paymentTier = paymentTier || "settled-or-trial";
+      paymentBadge = "CLEARED (200 OK)";
+      if (!diagnosticReason) {
+        diagnosticReason = "CLEARED (200 OK): Oracle or schema-escrow verification succeeded at edge";
+      }
+    } else {
+      paymentTier = "unmetered";
+      paymentBadge = "UNMETERED (200)";
+      if (!diagnosticReason) {
+        diagnosticReason = "UNMETERED: Public discovery manifest, handshake, or UI navigation";
+      }
+    }
+  } else if (ev.status === 402) {
+    if (isIndexerBot || paymentTier === "indexer-402-probe") {
+      paymentTier = "indexer-402-probe";
+      paymentBadge = "INDEXER 402 PROBE";
+      if (!diagnosticReason) {
+        diagnosticReason =
+          "DIRECTORY INDEXER: Automated x402 directory scanner (PayAI / 402index / MareLiberum / First-Sight) verifying 402 schema — indexers never pay by design";
+      }
+    } else if (
+      paymentTier === "free-tier-exhausted" ||
+      paymentTier === "forensic-rate-limited" ||
+      paymentTier === "free-trial-exhausted" ||
+      p.startsWith("/v1/scan") ||
+      p.startsWith("/v1/inspect") ||
+      p.startsWith("/v1/decode") ||
+      p.startsWith("/v1/simulate") ||
+      p.startsWith("/v1/guard") ||
+      ev.mcpMethod === "tools/call"
+    ) {
+      paymentTier = "free-tier-exhausted";
+      paymentBadge = "HIT 10/DAY LIMIT (402)";
+      if (!diagnosticReason) {
+        diagnosticReason =
+          "PAYWALL HIT (10/10 USED): Caller exhausted 10 free daily calls, received HTTP 402 upgrade challenge, and stopped without attaching X-Payment";
+      }
+    } else if (paymentTier === "payment-failed") {
+      paymentBadge = "PAYMENT REJECTED (402)";
+      if (!diagnosticReason) {
+        diagnosticReason =
+          "PAYMENT FAILED: Caller attached X-Payment header but EIP-3009 signature or facilitator settlement was rejected";
+      }
+    } else {
+      paymentTier = "unpaid-402-challenge";
+      paymentBadge = "UNPAID 402 CHALLENGE";
+      if (!diagnosticReason) {
+        diagnosticReason =
+          "402 CHALLENGE ISSUED: Agent called paid route without X-Payment header or Bearer Pass key and did not retry with signed EIP-3009 payment";
+      }
+    }
+  } else if (ev.status === 400) {
+    paymentTier = "invalid-params-400";
+    paymentBadge = "BAD PARAMS (400)";
+    if (!diagnosticReason) {
+      diagnosticReason =
+        "PRE-BILLING 400: Caller sent empty or malformed payload (e.g. POST {}) and failed parameter validation before billing";
+    }
+  } else if (ev.status === 401 || ev.status === 403) {
+    paymentTier = "unauthorized";
+    paymentBadge = `AUTH REJECTED (${ev.status})`;
+    if (!diagnosticReason) {
+      diagnosticReason = `UNAUTHORIZED (HTTP ${ev.status}): Missing or invalid Prepaid Pass key (nc_live_...)`;
+    }
+  } else {
+    paymentTier = `http-${ev.status}`;
+    paymentBadge = `HTTP ${ev.status}`;
+    if (!diagnosticReason) {
+      diagnosticReason = `HTTP ${ev.status} response`;
+    }
+  }
+
+  return {
+    ...ev,
+    clientId: ev.clientId || null,
+    productCategory,
+    productName,
+    targetSubject: targetSubject || p,
+    paymentTier,
+    paymentBadge,
+    diagnosticReason,
+    isRealProductUse,
+    isIndexerBot,
+    isPaid
+  };
+}
+
+interface SqlAggregatedDayRow {
+  day: string;
+  total_hits: number;
+  mcp_handshakes: number;
+  mcp_calls: number;
+  forensics_firewall: number;
+  scorecards: number;
+  bazaar_escrow: number;
+  count_402: number;
+  count_400: number;
+}
+
+function buildPaymentDiagnosticsReport(params: {
+  events: TrafficEventRecord[];
+  freeTierRows: Array<{ clientKey: string; usageDate: string; callCount: number; updatedAt: number }>;
+  clearings: ClearingRecord[];
+  activePrepaidPasses: number;
+  totalPassCreditsRemaining: number;
+  recentForensicScans: ForensicScanRecord[];
+  dailySqlRows?: SqlAggregatedDayRow[];
+  rolling24hSqlRow?: SqlAggregatedDayRow | null;
+  options?: { limit?: number; filter?: string; search?: string };
+}): PaymentDiagnosticsReport {
+  const now = Date.now();
+  const cutoff24h = now - 24 * 3600 * 1000;
+  const cutoff7d = now - 7 * 24 * 3600 * 1000;
+  const todayDate = new Date().toISOString().slice(0, 10);
+  const cutoff7dDate = new Date(cutoff7d).toISOString().slice(0, 10);
+
+  const enrichedAll = params.events.map((e) => enrichTrafficEventDiagnostics(e));
+  const passedClearings = params.clearings.filter((c) => c.status === "PASSED");
+  const voidedClearings = params.clearings.filter((c) => c.status !== "PASSED");
+  const passedClearings24h = passedClearings.filter((c) => c.createdAt >= cutoff24h).length;
+  const passedClearings7d = passedClearings.filter((c) => c.createdAt >= cutoff7d).length;
+
+  const initCounters = () => ({
+    totalRequests: 0,
+    realProductUses: 0,
+    executedFreeTier200: 0,
+    paidSettled200: 0,
+    realAgentUnpaid402: 0,
+    freeTierExhausted402: 0,
+    indexerBot402Probes: 0,
+    preBilling400Errors: 0,
+    publicScorecardReads: 0,
+    mcpHandshakes: 0,
+    mcpToolCalls: 0
+  });
+
+  const c24 = initCounters();
+  const c7d = initCounters();
+  const prodMap = new Map<string, ProductDiagnosticBreakdownRow>();
+  const fallbackDayMap = new Map<string, DailyProductUsagePoint>();
+
+  for (const ev of enrichedAll) {
+    const in24 = ev.timestamp >= cutoff24h;
+    const in7d = ev.timestamp >= cutoff7d;
+    const evDate = new Date(ev.timestamp).toISOString().slice(0, 10);
+
+    if (!params.dailySqlRows) {
+      const dp = fallbackDayMap.get(evDate) || {
+        date: evDate,
+        totalRealProductUses: 0,
+        mcpToolCalls: 0,
+        forensicsAndFirewall: 0,
+        bazaarAndEscrow: 0,
+        webAndMarkdownScorecards: 0,
+        uniqueFreeTierCallers: 0,
+        unpaid402Challenges: 0,
+        preBilling400Errors: 0,
+        totalHttpHits: 0
+      };
+      dp.totalHttpHits += 1;
+      if (ev.isRealProductUse && ev.status === 200) {
+        dp.totalRealProductUses += 1;
+        if (ev.mcpMethod === "tools/call" || ev.productCategory === "MCP Tool Call") {
+          dp.mcpToolCalls += 1;
+        } else if (ev.paymentTier === "public-scorecard" || ev.path.startsWith("/scan/")) {
+          dp.webAndMarkdownScorecards += 1;
+        } else if (
+          ev.path.startsWith("/v1/scan") ||
+          ev.path.startsWith("/v1/inspect") ||
+          ev.path.startsWith("/v1/guard") ||
+          ev.path.startsWith("/v1/decode") ||
+          ev.path.startsWith("/v1/simulate") ||
+          ev.path.startsWith("/rpc") ||
+          ev.path.startsWith("/v1/policy") ||
+          ev.path.startsWith("/v1/monitors")
+        ) {
+          dp.forensicsAndFirewall += 1;
+        } else {
+          dp.bazaarAndEscrow += 1;
+        }
+      } else if (ev.status === 402) {
+        dp.unpaid402Challenges += 1;
+      } else if (ev.status === 400 && ev.isRealProductUse) {
+        dp.preBilling400Errors += 1;
+      }
+      fallbackDayMap.set(evDate, dp);
+    }
+
+    if (!in7d) continue;
+
+    const bump = (c: ReturnType<typeof initCounters>) => {
+      c.totalRequests += 1;
+      if (ev.productCategory === "MCP Handshake") {
+        c.mcpHandshakes += 1;
+      }
+      if (ev.mcpMethod === "tools/call" || ev.productCategory === "MCP Tool Call") {
+        c.mcpToolCalls += 1;
+      }
+      if (!ev.isRealProductUse) return;
+
+      // Only count actual executed (HTTP 200) invocations as Real Product Uses
+      // (402 challenges and 400 malformed probes are tracked in their own counters)
+      if (ev.isPaid) {
+        c.realProductUses += 1;
+        c.paidSettled200 += 1;
+      } else if (ev.paymentTier === "public-scorecard") {
+        c.realProductUses += 1;
+        c.publicScorecardReads += 1;
+      } else if (ev.status === 200) {
+        if (!ev.isIndexerBot) {
+          c.realProductUses += 1;
+          c.executedFreeTier200 += 1;
+        }
+      } else if (ev.status === 402) {
+        if (ev.paymentTier === "indexer-402-probe" || ev.isIndexerBot) {
+          c.indexerBot402Probes += 1;
+        } else if (ev.paymentTier === "free-tier-exhausted") {
+          c.freeTierExhausted402 += 1;
+        } else {
+          c.realAgentUnpaid402 += 1;
+        }
+      } else if (ev.status === 400) {
+        c.preBilling400Errors += 1;
+      }
+    };
+
+    bump(c7d);
+    if (in24) bump(c24);
+
+    if (ev.isRealProductUse) {
+      const key = `${ev.productCategory}::${ev.productName}`;
+      const row = prodMap.get(key) || {
+        productCategory: ev.productCategory,
+        productName: ev.productName,
+        calls24h: 0,
+        calls7d: 0,
+        ok200Count: 0,
+        freeTierCount: 0,
+        paidCount: 0,
+        paywall402RealAgentCount: 0,
+        paywall402IndexerCount: 0,
+        error400Count: 0
+      };
+      row.calls7d += 1;
+      if (in24) row.calls24h += 1;
+      if (ev.status === 200) {
+        row.ok200Count += 1;
+        if (ev.isPaid) row.paidCount += 1;
+        else row.freeTierCount += 1;
+      } else if (ev.status === 402) {
+        if (ev.paymentTier === "indexer-402-probe" || ev.isIndexerBot) {
+          row.paywall402IndexerCount += 1;
+        } else {
+          row.paywall402RealAgentCount += 1;
+        }
+      } else if (ev.status === 400) {
+        row.error400Count += 1;
+      }
+      prodMap.set(key, row);
+    }
+  }
+
+  // Build dailySeries (last 14 days) and override 7d/24h counters with full-table D1 SQL aggregations when present
+  const callersByDate = new Map<string, number>();
+  for (const r of params.freeTierRows) {
+    callersByDate.set(r.usageDate, (callersByDate.get(r.usageDate) || 0) + 1);
+  }
+
+  let dailySeries: DailyProductUsagePoint[] = [];
+  if (params.dailySqlRows && params.dailySqlRows.length > 0) {
+    dailySeries = params.dailySqlRows.map((r) => {
+      const mcp = Number(r.mcp_calls || 0);
+      const ff = Number(r.forensics_firewall || 0);
+      const sc = Number(r.scorecards || 0);
+      const bz = Number(r.bazaar_escrow || 0);
+      return {
+        date: r.day,
+        totalRealProductUses: mcp + ff + sc + bz,
+        mcpToolCalls: mcp,
+        forensicsAndFirewall: ff,
+        bazaarAndEscrow: bz,
+        webAndMarkdownScorecards: sc,
+        uniqueFreeTierCallers: callersByDate.get(r.day) || 0,
+        unpaid402Challenges: Number(r.count_402 || 0),
+        preBilling400Errors: Number(r.count_400 || 0),
+        totalHttpHits: Number(r.total_hits || 0)
+      };
+    });
+
+    // Recompute exact 7-day totals across all 7 days in dailySeries (zero LIMIT truncation!)
+    const last7DaysPoints = dailySeries.filter((d) => d.date >= cutoff7dDate);
+    const sql7dRealUses = last7DaysPoints.reduce((s, d) => s + d.totalRealProductUses, 0);
+    const sql7dMcpCalls = last7DaysPoints.reduce((s, d) => s + d.mcpToolCalls, 0);
+    const sql7dScorecards = last7DaysPoints.reduce((s, d) => s + d.webAndMarkdownScorecards, 0);
+    const sql7dApiUses = last7DaysPoints.reduce(
+      (s, d) => s + d.mcpToolCalls + d.forensicsAndFirewall + d.bazaarAndEscrow,
+      0
+    );
+    const sql7dTotalHits = last7DaysPoints.reduce((s, d) => s + d.totalHttpHits, 0);
+    const sql7d400 = last7DaysPoints.reduce((s, d) => s + d.preBilling400Errors, 0);
+    const sql7dHandshakes = params.dailySqlRows
+      .filter((r) => r.day >= cutoff7dDate)
+      .reduce((s, r) => s + Number(r.mcp_handshakes || 0), 0);
+
+    c7d.totalRequests = Math.max(c7d.totalRequests, sql7dTotalHits);
+    c7d.realProductUses = Math.max(c7d.realProductUses, sql7dRealUses);
+    c7d.mcpToolCalls = Math.max(c7d.mcpToolCalls, sql7dMcpCalls);
+    c7d.publicScorecardReads = Math.max(c7d.publicScorecardReads, sql7dScorecards);
+    c7d.executedFreeTier200 = Math.max(c7d.executedFreeTier200, sql7dApiUses);
+    c7d.preBilling400Errors = Math.max(c7d.preBilling400Errors, sql7d400);
+    c7d.mcpHandshakes = Math.max(c7d.mcpHandshakes, sql7dHandshakes);
+  } else {
+    dailySeries = Array.from(fallbackDayMap.values())
+      .map((d) => ({
+        ...d,
+        uniqueFreeTierCallers: callersByDate.get(d.date) || 0
+      }))
+      .sort((a, b) => a.date.localeCompare(b.date));
+  }
+
+  if (params.rolling24hSqlRow) {
+    const r24 = params.rolling24hSqlRow;
+    const mcp24 = Number(r24.mcp_calls || 0);
+    const ff24 = Number(r24.forensics_firewall || 0);
+    const sc24 = Number(r24.scorecards || 0);
+    const bz24 = Number(r24.bazaar_escrow || 0);
+    c24.totalRequests = Number(r24.total_hits || 0);
+    c24.realProductUses = mcp24 + ff24 + sc24 + bz24;
+    c24.mcpToolCalls = mcp24;
+    c24.publicScorecardReads = sc24;
+    c24.executedFreeTier200 = mcp24 + ff24 + bz24;
+    c24.preBilling400Errors = Number(r24.count_400 || 0);
+    c24.mcpHandshakes = Number(r24.mcp_handshakes || 0);
+  }
+
+  c24.paidSettled200 = Math.max(c24.paidSettled200, passedClearings24h);
+  c7d.paidSettled200 = Math.max(c7d.paidSettled200, passedClearings7d);
+
+  // Free tier quota meters analysis
+  const todayMeters = params.freeTierRows.filter((r) => r.usageDate === todayDate);
+  const activeCallersToday = todayMeters.length;
+  const totalFreeCallsToday = todayMeters.reduce((sum, r) => sum + r.callCount, 0);
+  const maxCallsBySingleCallerToday = todayMeters.reduce((max, r) => Math.max(max, r.callCount), 0);
+  const callersHittingPaywallToday = todayMeters.filter((r) => r.callCount >= 10).length;
+  const callersHittingPaywall7d = params.freeTierRows.filter((r) => r.callCount >= 10).length;
+  const avgCallsPerCallerToday =
+    activeCallersToday > 0 ? Math.round((totalFreeCallsToday / activeCallersToday) * 10) / 10 : 0;
+
+  const recentCallers: FreeTierCallerMeter[] = params.freeTierRows.slice(0, 30).map((r) => {
+    const isForensic = r.clientKey.startsWith("forensic:");
+    const limit = 10;
+    return {
+      clientKeyMasked: maskClientKeyForDisplay(r.clientKey),
+      bucketType: isForensic ? "forensic" : "bazaar-or-mcp",
+      usageDate: r.usageDate,
+      callCount: r.callCount,
+      dailyLimit: limit,
+      remaining: Math.max(0, limit - r.callCount),
+      hitPaywall: r.callCount >= limit,
+      updatedAt: r.updatedAt
+    };
+  });
+
+  // Compute Root-Cause "Why People Aren't Paying" Breakdown
+  const total7dProduct = Math.max(1, c7d.realProductUses);
+  const total402s7d = c7d.indexerBot402Probes + c7d.realAgentUnpaid402 + c7d.freeTierExhausted402;
+  const indexerShareOf402Pct =
+    total402s7d > 0 ? Math.round((c7d.indexerBot402Probes / total402s7d) * 1000) / 10 : 0;
+
+  const reasonsWhyNotPaying: PaymentDiagnosticsReport["executiveDiagnosis"]["reasonsWhyNotPaying"] = [
+    {
+      id: "free_tier_headroom",
+      title: "1. Daily Free-Tier Quota Headroom (10 Free Calls/Day/Agent Absorbs Current Usage)",
+      severity: "PRIMARY",
+      metricValue: `${activeCallersToday} active callers today · avg ${avgCallsPerCallerToday}/10 calls used · ${callersHittingPaywallToday} hit limit today (${callersHittingPaywall7d} in 7d)`,
+      shareOfTrafficPct: Math.round(((c7d.executedFreeTier200 + c7d.publicScorecardReads) / total7dProduct) * 1000) / 10,
+      explanation: `Real agents calling MCP tools (tools/call) and Forensics (/v1/scan, /v1/guard, /v1/decode) are averaging ${avgCallsPerCallerToday} calls/day (peak single caller today: ${maxCallsBySingleCallerToday}/10). Because the paywall only triggers on call #11/day from the same IP/session, ${callersHittingPaywallToday === 0 ? "100% of today's organic agent callers finished their task within the free tier without ever seeing an HTTP 402 paywall." : `only ${callersHittingPaywallToday} caller(s) today exceeded 10 calls.`}`
+    },
+    {
+      id: "indexer_402_noise",
+      title: "2. Automated x402 Directory & Indexer Health Probes (Look Like Traffic, Never Pay by Design)",
+      severity: "PRIMARY",
+      metricValue: `${c7d.indexerBot402Probes.toLocaleString()} directory 402 probes (${indexerShareOf402Pct}% of all HTTP 402s)`,
+      shareOfTrafficPct: Math.round((c7d.indexerBot402Probes / total7dProduct) * 1000) / 10,
+      explanation: `Ecosystem crawlers (PayAI-Bazaar, x402-first-sight, MareLiberum, GENESIS, 402index) continuously ping /v1/bazaar/*, /v1/pass/buy, and /v1/policy/cosign without an X-Payment header solely to verify that our HTTP 402 PAYMENT-REQUIRED schema stays online and listed in their directories.`
+    },
+    {
+      id: "unequipped_402_callers",
+      title: "3. Unfunded Agent 402 Challenges (No EIP-3009 Wallet Signer Attached on Retry)",
+      severity: "SECONDARY",
+      metricValue: `${c7d.realAgentUnpaid402.toLocaleString()} unpaid 402 challenges (${c24.realAgentUnpaid402.toLocaleString()} in 24h)`,
+      shareOfTrafficPct: Math.round(((c7d.realAgentUnpaid402 + c7d.freeTierExhausted402) / total7dProduct) * 1000) / 10,
+      explanation: `When SDK agents or autonomous crawlers probe paid /v1/bazaar/* or /v1/pass/buy routes without an active Base USDC hot-wallet signer (or x-nullclear-free-trial header), they receive the 402 challenge and drop off rather than signing an EIP-3009 TransferWithAuthorization.`
+    },
+    {
+      id: "mcp_browse_vs_call",
+      title: "4. MCP Registry Handshake-to-Execution Funnel (Listing Tools vs. Invoking Tools)",
+      severity: "INFO",
+      metricValue: `${c7d.mcpHandshakes.toLocaleString()} handshakes → ${c7d.mcpToolCalls.toLocaleString()} tool calls (7d)`,
+      shareOfTrafficPct: 0,
+      explanation: `MCP registries (Glama, Smithery, Cursor/Claude clients) perform frequent initialize and tools/list handshakes on connect. Only ${c7d.mcpToolCalls.toLocaleString()} resulted in actual tools/call invocations, which were served under the 10/day free tier.`
+    },
+    {
+      id: "malformed_400_probes",
+      title: "5. Pre-Billing HTTP 400 Payload Probes (Empty POST {} Scanners)",
+      severity: "INFO",
+      metricValue: `${c7d.preBilling400Errors.toLocaleString()} HTTP 400 responses (${c24.preBilling400Errors.toLocaleString()} in 24h)`,
+      shareOfTrafficPct: Math.round((c7d.preBilling400Errors / total7dProduct) * 1000) / 10,
+      explanation: `Automated agent benchmarks send empty POST {} requests to /v1/clear, /v1/guard, /v1/simulate, and /v1/decode without target addresses or calldata, returning HTTP 400 before billing is reached.`
+    }
+  ];
+
+  const headline =
+    `Live Diagnostic Summary: Today ${activeCallersToday} unique agents made ${totalFreeCallsToday} free-tier product calls (peak caller: ${maxCallsBySingleCallerToday}/10 calls; ${callersHittingPaywallToday} hit the 10-call paywall). ` +
+    `Over 7d, ${c7d.executedFreeTier200 + c7d.publicScorecardReads} product calls succeeded for free, ${c7d.indexerBot402Probes.toLocaleString()} HTTP 402s were directory health-check bots, ${c7d.realAgentUnpaid402.toLocaleString()} were unfunded agent 402 challenges, and ${passedClearings.length} settled on-chain.`;
+
+  // Filter events for the real-time stream
+  const filter = (params.options?.filter || "real_agents").toLowerCase();
+  const search = (params.options?.search || "").trim().toLowerCase();
+  const limit = Math.min(300, Math.max(10, Number(params.options?.limit || 120)));
+
+  let filteredEvents = enrichedAll;
+  if (filter === "real_agents" || filter === "default") {
+    filteredEvents = enrichedAll.filter(
+      (e) => e.isRealProductUse && !e.isIndexerBot && e.paymentTier !== "indexer-402-probe" && e.status !== 400
+    );
+  } else if (filter === "product_all") {
+    filteredEvents = enrichedAll.filter((e) => e.isRealProductUse);
+  } else if (filter === "executed_200") {
+    filteredEvents = enrichedAll.filter((e) => e.isRealProductUse && e.status === 200);
+  } else if (filter === "paid") {
+    filteredEvents = enrichedAll.filter((e) => e.isPaid);
+  } else if (filter === "paywall_402") {
+    filteredEvents = enrichedAll.filter((e) => e.status === 402 && !e.isIndexerBot && e.paymentTier !== "indexer-402-probe");
+  } else if (filter === "all_402") {
+    filteredEvents = enrichedAll.filter((e) => e.status === 402);
+  } else if (filter === "mcp_calls") {
+    filteredEvents = enrichedAll.filter((e) => e.mcpMethod === "tools/call" || e.productCategory === "MCP Tool Call");
+  } else if (filter === "error_400") {
+    filteredEvents = enrichedAll.filter((e) => e.isRealProductUse && e.status >= 400 && e.status !== 402);
+  }
+
+  if (search) {
+    filteredEvents = filteredEvents.filter((e) => {
+      const hay = [
+        e.productCategory,
+        e.productName,
+        e.targetSubject,
+        e.path,
+        e.actorType,
+        e.paymentBadge,
+        e.diagnosticReason,
+        e.userAgent || "",
+        e.clientId || "",
+        e.country || ""
+      ]
+        .join(" ")
+        .toLowerCase();
+      return hay.includes(search);
+    });
+  }
+
+  const totalClearedAtomic = passedClearings.reduce((acc, c) => {
+    try {
+      return acc + BigInt(c.amount || "0");
+    } catch {
+      return acc;
+    }
+  }, 0n);
+  const totalClearedVolumeUsdc = (Number(totalClearedAtomic) / 1_000_000).toFixed(4);
+
+  const productBreakdown = Array.from(prodMap.values()).sort(
+    (a, b) => b.calls7d - a.calls7d || b.calls24h - a.calls24h
+  );
+
+  return {
+    generatedAt: now,
+    filterApplied: filter,
+    executiveDiagnosis: {
+      headline,
+      reasonsWhyNotPaying
+    },
+    dailySeries,
+    counters24h: c24,
+    counters7d: c7d,
+    quotaMeters: {
+      todayDate,
+      activeCallersToday,
+      totalFreeCallsToday,
+      avgCallsPerCallerToday,
+      maxCallsBySingleCallerToday,
+      callersHittingPaywallToday,
+      callersHittingPaywall7d,
+      activeCallers7d: new Set(params.freeTierRows.map((r) => r.clientKey)).size,
+      recentCallers
+    },
+    productBreakdown,
+    ledgerSummary: {
+      totalPassedClearings: passedClearings.length,
+      totalVoidedClearings: voidedClearings.length,
+      totalClearedVolumeUsdc,
+      activePrepaidPasses: params.activePrepaidPasses,
+      totalPassCreditsRemaining: params.totalPassCreditsRemaining,
+      recentClearings: params.clearings.slice(0, 20),
+      recentForensicScans: params.recentForensicScans.slice(0, 12).map((s) => ({
+        chain: s.chain,
+        address: s.address,
+        symbol: s.symbol,
+        name: s.name,
+        score: s.score,
+        verdict: s.verdict,
+        recommendedAction: s.recommendedAction,
+        scannedAt: s.scannedAt
+      }))
+    },
+    events: filteredEvents.slice(0, limit)
   };
 }
 
@@ -1792,6 +2802,8 @@ export class D1ArbiterStore implements IArbiterStore {
     };
   }
 
+  private trafficDiagEnsured = false;
+
   private async ensureTelemetryAndFreeTierTables(): Promise<void> {
     await this.db.batch([
       this.db.prepare(
@@ -1809,7 +2821,13 @@ export class D1ArbiterStore implements IArbiterStore {
           asn TEXT,
           referer TEXT,
           user_agent TEXT,
-          is_free_trial INTEGER DEFAULT 0
+          is_free_trial INTEGER DEFAULT 0,
+          payment_tier TEXT,
+          remaining_free INTEGER,
+          client_id TEXT,
+          target_subject TEXT,
+          diagnostic_reason TEXT,
+          latency_ms INTEGER
         )`
       ),
       this.db.prepare(
@@ -1822,6 +2840,26 @@ export class D1ArbiterStore implements IArbiterStore {
         )`
       )
     ]);
+
+    if (!this.trafficDiagEnsured) {
+      try {
+        const info = await this.db.prepare("PRAGMA table_info(traffic_events)").all<{ name: string }>();
+        const cols = new Set((info.results || []).map((c) => c.name));
+        const alters: string[] = [];
+        if (!cols.has("payment_tier")) alters.push("ALTER TABLE traffic_events ADD COLUMN payment_tier TEXT");
+        if (!cols.has("remaining_free")) alters.push("ALTER TABLE traffic_events ADD COLUMN remaining_free INTEGER");
+        if (!cols.has("client_id")) alters.push("ALTER TABLE traffic_events ADD COLUMN client_id TEXT");
+        if (!cols.has("target_subject")) alters.push("ALTER TABLE traffic_events ADD COLUMN target_subject TEXT");
+        if (!cols.has("diagnostic_reason")) alters.push("ALTER TABLE traffic_events ADD COLUMN diagnostic_reason TEXT");
+        if (!cols.has("latency_ms")) alters.push("ALTER TABLE traffic_events ADD COLUMN latency_ms INTEGER");
+        for (const sql of alters) {
+          try {
+            await this.db.prepare(sql).run();
+          } catch {}
+        }
+        this.trafficDiagEnsured = true;
+      } catch {}
+    }
   }
 
   private async ensureGatewayTable(): Promise<void> {
@@ -1844,14 +2882,41 @@ export class D1ArbiterStore implements IArbiterStore {
       .run();
   }
 
+  private mapTrafficEventRow(r: any): TrafficEventRecord {
+    return {
+      id: r.id,
+      timestamp: Number(r.timestamp),
+      host: r.host,
+      path: r.path,
+      method: r.method,
+      status: Number(r.status),
+      actorType: r.actor_type as TrafficActorType,
+      mcpMethod: r.mcp_method ?? null,
+      toolName: r.tool_name ?? null,
+      country: r.country ?? null,
+      asn: r.asn ?? null,
+      referer: r.referer ?? null,
+      userAgent: r.user_agent ?? null,
+      isFreeTrial: Boolean(r.is_free_trial),
+      paymentTier: r.payment_tier ?? null,
+      remainingFree:
+        r.remaining_free !== null && r.remaining_free !== undefined ? Number(r.remaining_free) : null,
+      clientId: r.client_id ?? null,
+      targetSubject: r.target_subject ?? null,
+      diagnosticReason: r.diagnostic_reason ?? null,
+      latencyMs: r.latency_ms !== null && r.latency_ms !== undefined ? Number(r.latency_ms) : null
+    };
+  }
+
   async recordTrafficEvent(event: TrafficEventRecord): Promise<void> {
     await this.ensureTelemetryAndFreeTierTables();
     try {
       await this.db
         .prepare(
           `INSERT INTO traffic_events (
-            id, timestamp, host, path, method, status, actor_type, mcp_method, tool_name, country, asn, referer, user_agent, is_free_trial
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+            id, timestamp, host, path, method, status, actor_type, mcp_method, tool_name, country, asn, referer, user_agent, is_free_trial,
+            payment_tier, remaining_free, client_id, target_subject, diagnostic_reason, latency_ms
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
         )
         .bind(
           event.id,
@@ -1867,7 +2932,13 @@ export class D1ArbiterStore implements IArbiterStore {
           event.asn || null,
           event.referer || null,
           event.userAgent || null,
-          event.isFreeTrial ? 1 : 0
+          event.isFreeTrial ? 1 : 0,
+          event.paymentTier || null,
+          typeof event.remainingFree === "number" ? event.remainingFree : null,
+          event.clientId || null,
+          event.targetSubject || null,
+          event.diagnosticReason || null,
+          typeof event.latencyMs === "number" ? event.latencyMs : null
         )
         .run();
     } catch (err: any) {
@@ -1876,8 +2947,8 @@ export class D1ArbiterStore implements IArbiterStore {
         await this.db
           .prepare(
             `INSERT INTO traffic_events (
-              id, timestamp, host, path, method, status, actor_type, mcp_method, tool_name, country, asn, referer
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+              id, timestamp, host, path, method, status, actor_type, mcp_method, tool_name, country, asn, referer, user_agent, is_free_trial
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
           )
           .bind(
             event.id,
@@ -1891,7 +2962,9 @@ export class D1ArbiterStore implements IArbiterStore {
             event.toolName || null,
             event.country || null,
             event.asn || null,
-            event.referer || null
+            event.referer || null,
+            event.userAgent || null,
+            event.isFreeTrial ? 1 : 0
           )
           .run();
         return;
@@ -1921,22 +2994,9 @@ export class D1ArbiterStore implements IArbiterStore {
         .first<{ count: number }>()
     ]);
 
-    const events7d: TrafficEventRecord[] = (rows7dRes.results || []).map((r: any) => ({
-      id: r.id,
-      timestamp: Number(r.timestamp),
-      host: r.host,
-      path: r.path,
-      method: r.method,
-      status: Number(r.status),
-      actorType: r.actor_type as TrafficActorType,
-      mcpMethod: r.mcp_method,
-      toolName: r.tool_name,
-      country: r.country,
-      asn: r.asn,
-      referer: r.referer,
-      userAgent: r.user_agent ?? null,
-      isFreeTrial: Boolean(r.is_free_trial)
-    }));
+    const events7d: TrafficEventRecord[] = (rows7dRes.results || []).map((r: any) =>
+      this.mapTrafficEventRow(r)
+    );
 
     const events24h = events7d.filter((e) => e.timestamp >= cutoff24h);
 
@@ -1945,6 +3005,168 @@ export class D1ArbiterStore implements IArbiterStore {
       last24h: buildTelemetryWindow("Last 24 Hours", events24h, Number(clearings24hRes?.count || 0)),
       last7d: buildTelemetryWindow("Last 7 Days", events7d, Number(clearings7dRes?.count || 0))
     };
+  }
+
+  async getProductHistoryAndDiagnostics(options?: {
+    limit?: number;
+    filter?: string;
+    search?: string;
+  }): Promise<PaymentDiagnosticsReport> {
+    await this.ensureTelemetryAndFreeTierTables();
+    const now = Date.now();
+    const cutoff24h = now - 24 * 3600 * 1000;
+    const cutoff7d = now - 7 * 24 * 3600 * 1000;
+    const cutoff14d = now - 14 * 24 * 3600 * 1000;
+    const cutoff14dDate = new Date(cutoff14d).toISOString().slice(0, 10);
+
+    const notIndexerUaSql = KNOWN_INDEXER_BOT_PATTERNS.map(
+      (pat) => `LOWER(COALESCE(user_agent, '')) NOT LIKE '%${pat.replace(/'/g, "''")}%'`
+    ).join(" AND ");
+    const realCallerSqlFilter = `(user_agent IS NULL OR (${notIndexerUaSql}))`;
+
+    const aggSelectCols = `
+      COUNT(*) as total_hits,
+      SUM(CASE WHEN path LIKE '/mcp%' AND mcp_method IN ('initialize', 'tools/list', 'notifications/initialized', 'prompts/list', 'resources/list', 'server/discover') THEN 1 ELSE 0 END) as mcp_handshakes,
+      SUM(CASE WHEN mcp_method = 'tools/call' AND status = 200 AND ${realCallerSqlFilter} THEN 1 ELSE 0 END) as mcp_calls,
+      SUM(CASE WHEN status = 200 AND method != 'HEAD' AND ${realCallerSqlFilter} AND (path LIKE '/v1/scan%' OR path LIKE '/v1/inspect%' OR path LIKE '/v1/guard%' OR path LIKE '/v1/decode%' OR path LIKE '/v1/simulate%' OR path LIKE '/rpc%' OR path LIKE '/v1/policy%' OR path LIKE '/v1/monitors%') THEN 1 ELSE 0 END) as forensics_firewall,
+      SUM(CASE WHEN status = 200 AND method != 'HEAD' AND path LIKE '/scan/%' THEN 1 ELSE 0 END) as scorecards,
+      SUM(CASE WHEN status = 200 AND method != 'HEAD' AND mcp_method IS NULL AND (path LIKE '/v1/bazaar/%' OR path LIKE '/v1/clear%' OR path LIKE '/v1/escrow%' OR path LIKE '/v1/pass/%' OR path LIKE '/v1/score%' OR path LIKE '/v1/kya%' OR path LIKE '/v1/proxy%' OR path LIKE '/https:%' OR path LIKE '/http:%' OR path LIKE '/g/%' OR path LIKE '/api/safepay/deals%' OR (path LIKE '/a2a%' AND method = 'POST')) AND path NOT LIKE '/v1/bazaar/directory%' AND ${realCallerSqlFilter} THEN 1 ELSE 0 END) as bazaar_escrow,
+      SUM(CASE WHEN status = 402 THEN 1 ELSE 0 END) as count_402,
+      SUM(CASE WHEN status = 400 AND (path LIKE '/v1/%' OR path LIKE '/rpc%') THEN 1 ELSE 0 END) as count_400
+    `;
+
+    const [
+      dailySqlRes,
+      rolling24hSqlRes,
+      realExecutedEventsRes,
+      productEventsRes,
+      recentAllEventsRes,
+      freeTierRes,
+      clearings,
+      passesRes,
+      scans
+    ] = await Promise.all([
+      this.db
+        .prepare(
+          `SELECT strftime('%Y-%m-%d', timestamp / 1000, 'unixepoch') as day, ${aggSelectCols}
+           FROM traffic_events
+           WHERE timestamp >= ?
+           GROUP BY day
+           ORDER BY day ASC`
+        )
+        .bind(cutoff14d)
+        .all<SqlAggregatedDayRow>(),
+      this.db
+        .prepare(
+          `SELECT '24h' as day, ${aggSelectCols}
+           FROM traffic_events
+           WHERE timestamp >= ?`
+        )
+        .bind(cutoff24h)
+        .first<SqlAggregatedDayRow>(),
+      this.db
+        .prepare(
+          `SELECT * FROM traffic_events
+           WHERE timestamp >= ?
+             AND (
+               mcp_method = 'tools/call'
+               OR path LIKE '/v1/scan%'
+               OR path LIKE '/v1/inspect%'
+               OR path LIKE '/v1/guard%'
+               OR path LIKE '/v1/decode%'
+               OR path LIKE '/v1/simulate%'
+               OR path LIKE '/rpc%'
+               OR path LIKE '/g/%'
+               OR path LIKE '/scan/%'
+               OR path LIKE '/api/safepay/%'
+               OR path LIKE '/https:%'
+               OR path LIKE '/http:%'
+               OR (path LIKE '/v1/bazaar/%' AND status = 200)
+               OR (path LIKE '/v1/clear%' AND status = 200)
+               OR (path LIKE '/v1/pass/%' AND status = 200)
+             )
+             AND path NOT LIKE '/v1/bazaar/directory%'
+             AND (user_agent IS NULL OR user_agent NOT LIKE '%NullClear-Canary-Auditor%')
+           ORDER BY timestamp DESC
+           LIMIT 600`
+        )
+        .bind(cutoff7d)
+        .all<any>(),
+      this.db
+        .prepare(
+          `SELECT * FROM traffic_events
+           WHERE timestamp >= ?
+             AND (
+               mcp_method = 'tools/call'
+               OR path LIKE '/v1/%'
+               OR path LIKE '/rpc%'
+               OR path LIKE '/g/%'
+               OR path LIKE '/scan/%'
+               OR path LIKE '/api/safepay/%'
+               OR path LIKE '/https:%'
+               OR path LIKE '/http:%'
+               OR (path LIKE '/a2a%' AND method = 'POST')
+             )
+             AND path NOT LIKE '/v1/telemetry%'
+             AND path NOT LIKE '/v1/trending%'
+             AND path NOT LIKE '/v1/stats%'
+           ORDER BY timestamp DESC
+           LIMIT 3500`
+        )
+        .bind(cutoff7d)
+        .all<any>(),
+      this.db
+        .prepare("SELECT * FROM traffic_events WHERE timestamp >= ? ORDER BY timestamp DESC LIMIT 2000")
+        .bind(cutoff7d)
+        .all<any>(),
+      this.db
+        .prepare(
+          "SELECT client_key, usage_date, call_count, updated_at FROM free_tier_usage WHERE usage_date >= ? ORDER BY usage_date DESC, call_count DESC, updated_at DESC LIMIT 300"
+        )
+        .bind(cutoff14dDate)
+        .all<{ client_key: string; usage_date: string; call_count: number; updated_at: number }>(),
+      this.listRecentClearings(100),
+      this.db
+        .prepare("SELECT COUNT(*) as total_passes, COALESCE(SUM(credits_remaining), 0) as total_credits FROM api_passes")
+        .first<{ total_passes: number; total_credits: number }>()
+        .catch(() => ({ total_passes: 0, total_credits: 0 })),
+      this.listForensicScans(undefined, 15).catch(() => [])
+    ]);
+
+    const mergedMap = new Map<string, TrafficEventRecord>();
+    for (const r of realExecutedEventsRes.results || []) {
+      mergedMap.set(r.id, this.mapTrafficEventRow(r));
+    }
+    for (const r of productEventsRes.results || []) {
+      if (!mergedMap.has(r.id)) {
+        mergedMap.set(r.id, this.mapTrafficEventRow(r));
+      }
+    }
+    for (const r of recentAllEventsRes.results || []) {
+      if (!mergedMap.has(r.id)) {
+        mergedMap.set(r.id, this.mapTrafficEventRow(r));
+      }
+    }
+
+    const mergedEvents = Array.from(mergedMap.values()).sort((a, b) => b.timestamp - a.timestamp);
+    const freeTierRows = (freeTierRes.results || []).map((r) => ({
+      clientKey: r.client_key,
+      usageDate: r.usage_date,
+      callCount: Number(r.call_count || 0),
+      updatedAt: Number(r.updated_at || 0)
+    }));
+
+    return buildPaymentDiagnosticsReport({
+      events: mergedEvents,
+      freeTierRows,
+      clearings,
+      activePrepaidPasses: Number(passesRes?.total_passes || 0),
+      totalPassCreditsRemaining: Number(passesRes?.total_credits || 0),
+      recentForensicScans: scans,
+      dailySqlRows: dailySqlRes.results || [],
+      rolling24hSqlRow: rolling24hSqlRes || null,
+      options
+    });
   }
 
   async consumeFreeTierCall(clientKey: string, dailyLimit = 10): Promise<FreeTierUsageResult> {

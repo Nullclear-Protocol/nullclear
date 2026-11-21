@@ -8,12 +8,14 @@ import { validateTargetUrl } from "../services/ssrf-guard.js";
 import { validateUpstreamResponse } from "../services/validator.js";
 import { executeUpstreamFetch } from "./clear.js";
 import { runAutoGuard } from "./proxy.js";
+import { buildX402UpgradeBlock, resolveForensicAccess } from "./forensics.js";
 import {
   buildNullClearMetadata,
   consumeSponsoredFreeCall,
-  consumeForensicFreeCall,
+  FREE_TIER_DAILY_LIMIT,
   FORENSIC_FREE_TIER_DAILY_LIMIT
 } from "../middleware/free-tier.js";
+import { authenticateAndDebitPass } from "../middleware/pass-auth.js";
 import {
   scanTokenForensics,
   inspectContractAbiAndProxy,
@@ -24,6 +26,178 @@ import {
 } from "../services/forensics-engine.js";
 
 export const mcpHttpRouter = new Hono<Env>();
+
+function hasMcpX402PaymentHeader(c: any): boolean {
+  const raw =
+    c.req.header("X-Payment") ||
+    c.req.header("x-payment") ||
+    c.req.header("PAYMENT-SIGNATURE") ||
+    c.req.header("payment-signature") ||
+    c.req.header("X-NullClear-Authorization") ||
+    c.req.header("x-nullclear-authorization") ||
+    "";
+  const trimmed = raw.trim();
+  return (
+    trimmed.length > 10 &&
+    trimmed.toLowerCase() !== "free-trial" &&
+    trimmed.toLowerCase() !== "sponsored"
+  );
+}
+
+function buildMcp402JsonRpcResponse(
+  c: any,
+  id: unknown,
+  resourcePath: string,
+  message: string,
+  status: 401 | 402 = 402
+): Response {
+  const upgrade = buildX402UpgradeBlock(c, resourcePath);
+  c.header("PAYMENT-REQUIRED", upgrade.encodedHeader);
+  c.header("X-Payment-Required", upgrade.encodedHeader);
+  c.header("Pay-To", upgrade.treasuryAddress);
+
+  return c.json(
+    {
+      jsonrpc: "2.0",
+      id,
+      error: {
+        code: status,
+        message
+      },
+      result: {
+        isError: true,
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify(
+              {
+                status: status === 401 ? "invalid_api_key" : "free_trial_exhausted",
+                rateLimited: status === 402,
+                message,
+                prepaidPassUrl: "POST https://api.nullclear.dev/v1/pass/buy",
+                x402Upgrade: upgrade.x402Upgrade,
+                paymentRequired: upgrade.paymentRequiredPayload,
+                _nullclear: buildNullClearMetadata(0)
+              },
+              null,
+              2
+            )
+          }
+        ]
+      }
+    },
+    status
+  );
+}
+
+/**
+ * Shared access gate for metered remote MCP tools:
+ * 1. Prepaid Pass Bearer key (`Authorization: Bearer nc_live_...` or `X-NullClear-Key`) -> <5ms, 1 credit
+ * 2. Per-call x402 EIP-3009 USDC payment (`PAYMENT-SIGNATURE` / `X-Payment`) -> $0.005 USDC
+ * 3. Daily zero-key free tier (10 calls/day/IP/session) -> HTTP 402 on call #11+
+ */
+async function resolveMcpToolAccess(
+  c: any,
+  id: unknown,
+  toolName: string,
+  bucket: "forensic" | "sponsored"
+): Promise<{
+  allowed: boolean;
+  remaining: number;
+  tier: string;
+  errorResponse?: Response;
+}> {
+  const resourcePath = `/mcp/${toolName}`;
+
+  if (bucket === "forensic") {
+    const access = await resolveForensicAccess(c, resourcePath);
+    if (access.errorResponse) {
+      let errMsg = `Payment Required: Daily free tier limit (${FORENSIC_FREE_TIER_DAILY_LIMIT} calls/day) reached. Mint a Prepaid Pass at POST https://api.nullclear.dev/v1/pass/buy (Bearer nc_live_...) or attach an X-Payment EIP-3009 header ($0.005 USDC).`;
+      try {
+        const parsed: any = await access.errorResponse.clone().json();
+        if (typeof parsed?.error === "string" && parsed.error) errMsg = parsed.error;
+      } catch {}
+      const status: 401 | 402 = access.errorResponse.status === 401 ? 401 : 402;
+      return {
+        allowed: false,
+        remaining: 0,
+        tier: status === 401 ? "invalid-pass" : "forensic-rate-limited",
+        errorResponse: buildMcp402JsonRpcResponse(c, id, resourcePath, errMsg, status)
+      };
+    }
+    if (!access.allowed && !access.paid) {
+      const msg = `Payment Required: Daily free tier limit (${FORENSIC_FREE_TIER_DAILY_LIMIT} calls/day) reached for ${toolName}. Mint a Prepaid Pass at POST https://api.nullclear.dev/v1/pass/buy (Authorization: Bearer nc_live_...) or attach an X-Payment / PAYMENT-SIGNATURE header ($0.005 USDC on Base).`;
+      return {
+        allowed: false,
+        remaining: 0,
+        tier: "forensic-rate-limited",
+        errorResponse: buildMcp402JsonRpcResponse(c, id, resourcePath, msg, 402)
+      };
+    }
+    return {
+      allowed: true,
+      remaining: access.remaining,
+      tier: access.paid ? (c.res?.headers?.get("x-nullclear-tier") || "paid") : "forensic-free"
+    };
+  }
+
+  // Sponsored / Bazaar MCP tools: check Prepaid Pass or X-Payment first, then 10/day sponsored quota
+  const passAuth = await authenticateAndDebitPass(c, 1);
+  if (passAuth.hasKey) {
+    if (passAuth.authenticated && passAuth.pass) {
+      return { allowed: true, remaining: passAuth.creditsRemaining, tier: "prepaid-pass" };
+    }
+    const status: 401 | 402 = passAuth.pass ? 402 : 401;
+    return {
+      allowed: false,
+      remaining: 0,
+      tier: passAuth.pass ? "prepaid-pass-exhausted" : "invalid-pass",
+      errorResponse: buildMcp402JsonRpcResponse(
+        c,
+        id,
+        resourcePath,
+        passAuth.errorReason || "Invalid or exhausted NullClear Prepaid Pass key",
+        status
+      )
+    };
+  }
+
+  if (hasMcpX402PaymentHeader(c)) {
+    const paidAccess = await resolveForensicAccess(c, resourcePath);
+    if (paidAccess.allowed && paidAccess.paid) {
+      return { allowed: true, remaining: paidAccess.remaining, tier: "x402-paid" };
+    }
+    let errMsg = "x402 payment settlement failed for MCP tool call.";
+    if (paidAccess.errorResponse) {
+      try {
+        const parsed: any = await paidAccess.errorResponse.clone().json();
+        if (typeof parsed?.error === "string" && parsed.error) errMsg = parsed.error;
+      } catch {}
+    }
+    return {
+      allowed: false,
+      remaining: 0,
+      tier: "payment-failed",
+      errorResponse: buildMcp402JsonRpcResponse(c, id, resourcePath, errMsg, 402)
+    };
+  }
+
+  const freeTier = await consumeSponsoredFreeCall(c, FREE_TIER_DAILY_LIMIT);
+  c.header("x-nullclear-tier", freeTier.allowed ? "free-trial" : "free-trial-exhausted");
+  c.header("x-nullclear-remaining-free-calls", String(freeTier.remaining));
+
+  if (!freeTier.allowed) {
+    const msg = `Payment Required: Daily free tier limit (${FREE_TIER_DAILY_LIMIT} calls/day) reached. Mint a Prepaid Pass at POST https://api.nullclear.dev/v1/pass/buy (Authorization: Bearer nc_live_...) or configure NULLCLEAR_PRIVATE_KEY / attach an X-Payment header ($0.005 USDC on Base) to continue.`;
+    return {
+      allowed: false,
+      remaining: 0,
+      tier: "free-trial-exhausted",
+      errorResponse: buildMcp402JsonRpcResponse(c, id, resourcePath, msg, 402)
+    };
+  }
+
+  return { allowed: true, remaining: freeTier.remaining, tier: "free-trial" };
+}
 
 export const TOOL_DISPATCH_ALIASES: Record<string, string> = {
   nullclear_preflight_guard: "guard_transaction_preflight",
@@ -698,9 +872,8 @@ mcpHttpRouter.post("/", async (c) => {
     try {
       // Zero-Key Tool 1: scan_token_forensics
       if (toolName === "scan_token_forensics") {
-        const freeTier = await consumeForensicFreeCall(c, FORENSIC_FREE_TIER_DAILY_LIMIT);
-        c.header("x-nullclear-tier", freeTier.allowed ? "forensic-free" : "forensic-rate-limited");
-        c.header("x-nullclear-remaining-free-calls", String(freeTier.remaining));
+        const access = await resolveMcpToolAccess(c, id, toolName, "forensic");
+        if (access.errorResponse) return access.errorResponse;
 
         const chain = String(args.chain || "base");
         const address = String(args.address || args.tokenAddress || "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913");
@@ -745,9 +918,8 @@ mcpHttpRouter.post("/", async (c) => {
 
       // Zero-Key Tool 0: guard_transaction_preflight (1-Call Pre-Sign Firewall)
       if (toolName === "guard_transaction_preflight") {
-        const freeTier = await consumeForensicFreeCall(c, FORENSIC_FREE_TIER_DAILY_LIMIT);
-        c.header("x-nullclear-tier", freeTier.allowed ? "forensic-free" : "forensic-rate-limited");
-        c.header("x-nullclear-remaining-free-calls", String(freeTier.remaining));
+        const access = await resolveMcpToolAccess(c, id, toolName, "forensic");
+        if (access.errorResponse) return access.errorResponse;
 
         const guard = await guardTransactionPreflight(
           {
@@ -780,8 +952,8 @@ mcpHttpRouter.post("/", async (c) => {
 
       // Zero-Key Tool 2: inspect_contract_abi_and_proxy
       if (toolName === "inspect_contract_abi_and_proxy") {
-        const freeTier = await consumeForensicFreeCall(c, FORENSIC_FREE_TIER_DAILY_LIMIT);
-        c.header("x-nullclear-remaining-free-calls", String(freeTier.remaining));
+        const access = await resolveMcpToolAccess(c, id, toolName, "forensic");
+        if (access.errorResponse) return access.errorResponse;
 
         const chain = String(args.chain || "base");
         const address = String(args.address || "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913");
@@ -825,8 +997,8 @@ mcpHttpRouter.post("/", async (c) => {
 
       // Zero-Key Tool 3: decode_calldata_or_failed_tx
       if (toolName === "decode_calldata_or_failed_tx") {
-        const freeTier = await consumeForensicFreeCall(c, FORENSIC_FREE_TIER_DAILY_LIMIT);
-        c.header("x-nullclear-remaining-free-calls", String(freeTier.remaining));
+        const access = await resolveMcpToolAccess(c, id, toolName, "forensic");
+        if (access.errorResponse) return access.errorResponse;
 
         const input = String(args.input || args.calldata || args.txHash || args.transaction || "");
         const chain = String(args.chain || "base");
@@ -850,8 +1022,8 @@ mcpHttpRouter.post("/", async (c) => {
 
       // Zero-Key Tool 4: simulate_transaction_preflight
       if (toolName === "simulate_transaction_preflight") {
-        const freeTier = await consumeForensicFreeCall(c, FORENSIC_FREE_TIER_DAILY_LIMIT);
-        c.header("x-nullclear-remaining-free-calls", String(freeTier.remaining));
+        const access = await resolveMcpToolAccess(c, id, toolName, "forensic");
+        if (access.errorResponse) return access.errorResponse;
 
         const sim = await simulateTransactionPreflight(
           {
@@ -893,8 +1065,8 @@ mcpHttpRouter.post("/", async (c) => {
           });
         }
 
-        const freeTier = await consumeForensicFreeCall(c, FORENSIC_FREE_TIER_DAILY_LIMIT);
-        c.header("x-nullclear-remaining-free-calls", String(freeTier.remaining));
+        const access = await resolveMcpToolAccess(c, id, toolName, "forensic");
+        if (access.errorResponse) return access.errorResponse;
 
         const mdRes = await readUrlCleanMarkdown(targetUrl, 900);
         return c.json({
@@ -969,41 +1141,9 @@ mcpHttpRouter.post("/", async (c) => {
 
       // Tool 1: nullclear_token_security_audit
       if (toolName === "nullclear_token_security_audit") {
-        const freeTier = await consumeSponsoredFreeCall(c);
-        c.header("x-nullclear-tier", freeTier.allowed ? "free-trial" : "free-trial-exhausted");
-        c.header("x-nullclear-remaining-free-calls", String(freeTier.remaining));
-
-        if (!freeTier.allowed) {
-          return c.json(
-            {
-              jsonrpc: "2.0",
-              id,
-              error: {
-                code: 402,
-                message:
-                  "Payment Required: Daily free tier limit (10 calls/day) reached. Configure NULLCLEAR_PRIVATE_KEY in your MCP environment or pass an X-Payment header to continue."
-              },
-              result: {
-                content: [
-                  {
-                    type: "text",
-                    text: JSON.stringify(
-                      {
-                        status: "free_trial_exhausted",
-                        message:
-                          "Daily free tier limit (10 calls/day) reached. Configure NULLCLEAR_PRIVATE_KEY in your MCP environment or pass an X-Payment header to continue with automatic $0.005 USDC x402 settlement.",
-                        _nullclear: buildNullClearMetadata(0)
-                      },
-                      null,
-                      2
-                    )
-                  }
-                ]
-              }
-            },
-            402
-          );
-        }
+        const access = await resolveMcpToolAccess(c, id, toolName, "sponsored");
+        if (access.errorResponse) return access.errorResponse;
+        const freeTier = { remaining: access.remaining, tier: access.tier };
 
         const tokenAddress = String(args.tokenAddress || "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913").toLowerCase();
         const knownTokens: Record<string, { symbol: string; name: string; decimals: number; verified: boolean; isHoneypot: boolean; buyTaxBps: number; sellTaxBps: number }> = {
@@ -1072,41 +1212,9 @@ mcpHttpRouter.post("/", async (c) => {
 
       // Tool 2: nullclear_wallet_risk_score
       if (toolName === "nullclear_wallet_risk_score") {
-        const freeTier = await consumeSponsoredFreeCall(c);
-        c.header("x-nullclear-tier", freeTier.allowed ? "free-trial" : "free-trial-exhausted");
-        c.header("x-nullclear-remaining-free-calls", String(freeTier.remaining));
-
-        if (!freeTier.allowed) {
-          return c.json(
-            {
-              jsonrpc: "2.0",
-              id,
-              error: {
-                code: 402,
-                message:
-                  "Payment Required: Daily free tier limit (10 calls/day) reached. Configure NULLCLEAR_PRIVATE_KEY in your MCP environment or pass an X-Payment header to continue."
-              },
-              result: {
-                content: [
-                  {
-                    type: "text",
-                    text: JSON.stringify(
-                      {
-                        status: "free_trial_exhausted",
-                        message:
-                          "Daily free tier limit (10 calls/day) reached. Configure NULLCLEAR_PRIVATE_KEY in your MCP environment or pass an X-Payment header to continue.",
-                        _nullclear: buildNullClearMetadata(0)
-                      },
-                      null,
-                      2
-                    )
-                  }
-                ]
-              }
-            },
-            402
-          );
-        }
+        const access = await resolveMcpToolAccess(c, id, toolName, "sponsored");
+        if (access.errorResponse) return access.errorResponse;
+        const freeTier = { remaining: access.remaining, tier: access.tier };
 
         const walletAddress = String(args.walletAddress || "0xB586eFcCa41dF27ad3873BEcA54da0c30bf04d5c");
         const chainId = Number(args.chainId || 8453);
@@ -1169,41 +1277,9 @@ mcpHttpRouter.post("/", async (c) => {
 
       // Tool 3: nullclear_crypto_market_oracle
       if (toolName === "nullclear_crypto_market_oracle") {
-        const freeTier = await consumeSponsoredFreeCall(c);
-        c.header("x-nullclear-tier", freeTier.allowed ? "free-trial" : "free-trial-exhausted");
-        c.header("x-nullclear-remaining-free-calls", String(freeTier.remaining));
-
-        if (!freeTier.allowed) {
-          return c.json(
-            {
-              jsonrpc: "2.0",
-              id,
-              error: {
-                code: 402,
-                message:
-                  "Payment Required: Daily free tier limit (10 calls/day) reached. Configure NULLCLEAR_PRIVATE_KEY in your MCP environment or pass an X-Payment header to continue."
-              },
-              result: {
-                content: [
-                  {
-                    type: "text",
-                    text: JSON.stringify(
-                      {
-                        status: "free_trial_exhausted",
-                        message:
-                          "Daily free tier limit (10 calls/day) reached. Configure NULLCLEAR_PRIVATE_KEY in your MCP environment or pass an X-Payment header to continue.",
-                        _nullclear: buildNullClearMetadata(0)
-                      },
-                      null,
-                      2
-                    )
-                  }
-                ]
-              }
-            },
-            402
-          );
-        }
+        const access = await resolveMcpToolAccess(c, id, toolName, "sponsored");
+        if (access.errorResponse) return access.errorResponse;
+        const freeTier = { remaining: access.remaining, tier: access.tier };
 
         const pair = String(args.pair || "ETH/USDC").toUpperCase();
         const priceMap: Record<string, number> = {
@@ -1282,9 +1358,9 @@ mcpHttpRouter.post("/", async (c) => {
           });
         }
 
-        const freeTier = await consumeSponsoredFreeCall(c);
-        c.header("x-nullclear-tier", "free-trial");
-        c.header("x-nullclear-remaining-free-calls", String(freeTier.remaining));
+        const access = await resolveMcpToolAccess(c, id, toolName, "sponsored");
+        if (access.errorResponse) return access.errorResponse;
+        const freeTier = { remaining: access.remaining, tier: access.tier };
 
         const clearingId = `mcp_fetch_${Date.now()}`;
         const probe = await executeUpstreamFetch(
@@ -1467,9 +1543,9 @@ mcpHttpRouter.post("/", async (c) => {
 
       if (toolName === "nullclear_escrow_x402_call") {
         const targetUrl = String(args.targetUrl || "");
-        const freeTier = await consumeSponsoredFreeCall(c);
-        c.header("x-nullclear-tier", "free-trial");
-        c.header("x-nullclear-remaining-free-calls", String(freeTier.remaining));
+        const access = await resolveMcpToolAccess(c, id, toolName, "sponsored");
+        if (access.errorResponse) return access.errorResponse;
+        const freeTier = { allowed: access.allowed, remaining: access.remaining, tier: access.tier };
 
         if (targetUrl && freeTier.allowed) {
           const ssrfCheck = validateTargetUrl(targetUrl, c.env.ENVIRONMENT);

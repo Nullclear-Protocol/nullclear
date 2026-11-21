@@ -116,7 +116,7 @@ Add to your MCP settings file (`claude_desktop_config.json`, `antigravity-ide`, 
 
 ### MCP Tools Available (13 Curated Tools)
 
-**Zero-Key On-Chain Forensics & URL Tools (100 free/day/IP):**
+**Zero-Key On-Chain Forensics & URL Tools (10 free/day/IP):**
 - **`scan_token_forensics`**: Multi-chain (`base`, `eth`, `solana`) token & proxy security, honeypot, and buy/sell tax scanner.
 - **`inspect_contract_abi_and_proxy`**: EVM proxy slot resolver (`EIP-1967/1822/1167`) and `PUSH4` bytecode selector disassembler.
 - **`decode_calldata_or_failed_tx`**: Decode historical hex calldata, custom reverts, or mined failed transaction hashes.

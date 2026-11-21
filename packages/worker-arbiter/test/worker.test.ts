@@ -2176,7 +2176,7 @@ describe("NullClear Worker Arbiter Test Suite", () => {
     expect(simJson.recommendedAgentAction).toBe("ABORT_DRAINER_APPROVAL");
   });
 
-  it("V2.2: Zero-Auth 10/day Free Tier + Request #11 graceful x402 upgrade & cached scan fallback", async () => {
+  it("V2.2: Zero-Auth 10/day Free Tier + Request #11 strict x402 402 challenge on /v1/scan, /v1/decode, and /mcp (with Prepaid Pass & X-Payment unlock)", async () => {
     const testIp = "198.51.100.250";
     // Exhaust 10 calls for this IP
     let lastStatus = 0;
@@ -2191,20 +2191,34 @@ describe("NullClear Worker Arbiter Test Suite", () => {
     }
     expect(lastStatus).toBe(200);
 
-    // Request #11 on cached /v1/scan returns cached scan with rateLimited: true + x402Upgrade
+    // Request #11 on /v1/scan returns strict HTTP 402 with x402 v2 amount field so SDK auto-pay succeeds
     const req11Scan = await app.fetch(
       new Request("https://api.nullclear.dev/v1/scan/base/0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", {
         headers: { "CF-Connecting-IP": testIp }
       }),
       testEnv
     );
-    expect(req11Scan.status).toBe(200);
+    expect(req11Scan.status).toBe(402);
+    const payReqHeader = req11Scan.headers.get("PAYMENT-REQUIRED");
+    expect(payReqHeader).toBeTruthy();
+    expect(req11Scan.headers.get("X-Payment-Required")).toBeTruthy();
     const body11 = (await req11Scan.json()) as any;
     expect(body11.rateLimited).toBe(true);
     expect(body11.x402Upgrade).toBeDefined();
     expect(body11.x402Upgrade.priceUsdc).toBe("0.005");
+    expect(body11.accepts?.[0]?.amount).toBe("5000");
+    expect(body11.accepts?.[0]?.maxAmountRequired).toBe("5000");
 
-    // Request #12 on live /v1/decode returns HTTP 402 Payment Required with agentPaymentInstructions
+    // Public SEO / Markdown page at /scan/:chain/:address remains free
+    const webScanRes = await app.fetch(
+      new Request("https://nullclear.com/scan/base/0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913.md", {
+        headers: { "CF-Connecting-IP": testIp, Accept: "text/markdown" }
+      }),
+      testEnv
+    );
+    expect(webScanRes.status).toBe(200);
+
+    // Request #12 on live /v1/decode returns HTTP 402 Payment Required with agentPaymentInstructions + amount
     const req12Decode = await app.fetch(
       new Request("https://api.nullclear.dev/v1/decode", {
         method: "POST",
@@ -2217,7 +2231,58 @@ describe("NullClear Worker Arbiter Test Suite", () => {
     expect(req12Decode.headers.get("PAYMENT-REQUIRED")).toBeTruthy();
     const err402 = (await req12Decode.json()) as any;
     expect(err402.rateLimited).toBe(true);
+    expect(err402.accepts?.[0]?.amount).toBe("5000");
     expect(err402.agentPaymentInstructions).toContain("EIP-3009");
+
+    // Remote HTTP MCP forensic tool call from the same exhausted IP also enforces 402
+    const mcpExhaustedRes = await app.fetch(
+      new Request("https://api.nullclear.dev/mcp", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "CF-Connecting-IP": testIp },
+        body: JSON.stringify({
+          jsonrpc: "2.0",
+          id: 99,
+          method: "tools/call",
+          params: {
+            name: "nullclear_scan_token",
+            arguments: { chain: "base", address: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913" }
+          }
+        })
+      }),
+      testEnv
+    );
+    expect(mcpExhaustedRes.status).toBe(402);
+    expect(mcpExhaustedRes.headers.get("PAYMENT-REQUIRED")).toBeTruthy();
+    const mcpExhaustedJson = (await mcpExhaustedRes.json()) as any;
+    expect(mcpExhaustedJson.error?.code).toBe(402);
+
+    // Attaching valid x402 PAYMENT-SIGNATURE unlocks remote /mcp forensic tool call immediately
+    const mcpSig = await createValidPaymentSignature(
+      "0xB586eFcCa41dF27ad3873BEcA54da0c30bf04d5c",
+      "5000"
+    );
+    const mcpPaidRes = await app.fetch(
+      new Request("https://api.nullclear.dev/mcp", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "CF-Connecting-IP": testIp,
+          "PAYMENT-SIGNATURE": mcpSig
+        },
+        body: JSON.stringify({
+          jsonrpc: "2.0",
+          id: 100,
+          method: "tools/call",
+          params: {
+            name: "nullclear_scan_token",
+            arguments: { chain: "base", address: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913" }
+          }
+        })
+      }),
+      testEnv
+    );
+    expect(mcpPaidRes.status).toBe(200);
+    expect(mcpPaidRes.headers.get("x-nullclear-tier")).toBe("x402-paid");
   });
 
   it("V2.2: Stateless Telegram Webhook & 5 Zero-Key MCP tools/call work end-to-end", async () => {
@@ -2604,7 +2669,11 @@ describe("NullClear Worker Arbiter Test Suite", () => {
     expect(x402Json.protocolVersion).toBe("1.7.0");
     expect(Array.isArray(x402Json.resources)).toBe(true);
     expect(x402Json.resources).toContain("https://api.nullclear.dev/v1/bazaar/token-security");
-    expect(x402Json.resources).toContain("https://api.nullclear.dev/v1/decode");
+    expect(x402Json.resources).toContain("https://api.nullclear.dev/v1/policy/cosign");
+    expect(x402Json.resources).toContain("https://api.nullclear.dev/v1/monitors");
+    expect(x402Json.resources).not.toContain("https://api.nullclear.dev/v1/decode");
+    expect(x402Json.resources).not.toContain("https://api.nullclear.dev/v1/simulate");
+    expect(x402Json.resources).not.toContain("https://api.nullclear.dev/v1/guard");
     expect(x402Json.guarantee?.zeroLossEscrow).toBe(true);
     expect(x402Json.endpoints?.bazaarTokenSecurity?.amountAtomic).toBe("5000");
     expect(x402Json.endpoints?.bazaarWalletRisk?.amountAtomic).toBe("5000");
@@ -4016,6 +4085,240 @@ describe("NullClear Worker Arbiter Test Suite", () => {
       );
     } finally {
       globalThis.fetch = origFetch;
+    }
+  });
+
+  it("serves ops@nullclear.dev across nullclear.com and nullclear.dev and provides real-time /history & /v1/telemetry/history payment diagnostics", async () => {
+    // 1. Check nullclear.com landing page & deal room for ops@nullclear.dev and organization branding
+    const comRes = await app.fetch(new Request("https://nullclear.com/"), testEnv);
+    expect(comRes.status).toBe(200);
+    const comHtml = await comRes.text();
+    expect(comHtml).toContain("ops@nullclear.dev");
+    expect(comHtml).toContain("NullClear Organization");
+    expect(comHtml).toContain("https://nullclear.dev/history");
+
+    // 2. Check nullclear.dev landing page & contact manifest for ops@nullclear.dev
+    const devRes = await app.fetch(new Request("https://nullclear.dev/"), testEnv);
+    expect(devRes.status).toBe(200);
+    const devHtml = await devRes.text();
+    expect(devHtml).toContain("ops@nullclear.dev");
+    expect(devHtml).toContain("/history");
+    expect(devHtml).toContain("Live History &amp; Diagnostics");
+
+    const contactRes = await app.fetch(new Request("https://nullclear.dev/contact"), testEnv);
+    expect(contactRes.status).toBe(200);
+    const contactJson = (await contactRes.json()) as any;
+    expect(contactJson.email).toBe("ops@nullclear.dev");
+    expect(contactJson.operationsEmail).toBe("ops@nullclear.dev");
+
+    // 3. Simulate real agent product usage + directory indexer 402 probe + unfunded agent 402 challenge
+    await app.fetch(
+      new Request("https://api.nullclear.dev/v1/scan/base/0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", {
+        headers: {
+          "User-Agent": "Claude-Code-Agent/1.0",
+          "CF-Connecting-IP": "198.51.100.88"
+        }
+      }),
+      testEnv
+    );
+
+    await app.fetch(
+      new Request("https://api.nullclear.dev/v1/bazaar/token-security", {
+        headers: {
+          "User-Agent": "PayAI-Bazaar/1.0 (+https://docs.payai.network/x402/facilitators/bazaar)"
+        }
+      }),
+      testEnv
+    );
+
+    await app.fetch(
+      new Request("https://api.nullclear.dev/v1/bazaar/wallet-risk?address=0xfd74fF802EA0E735514C070AF04E0D6528deD145", {
+        headers: {
+          "User-Agent": "python-requests/2.32.0"
+        }
+      }),
+      testEnv
+    );
+
+    // 4. Query /v1/telemetry/history JSON API
+    const histApiRes = await app.fetch(
+      new Request("https://nullclear.dev/v1/telemetry/history?filter=product_all"),
+      testEnv
+    );
+    expect(histApiRes.status).toBe(200);
+    const histJson = (await histApiRes.json()) as any;
+    expect(histJson.success).toBe(true);
+    expect(histJson.executiveDiagnosis.reasonsWhyNotPaying.length).toBeGreaterThanOrEqual(5);
+    expect(histJson.counters24h.realProductUses).toBeGreaterThanOrEqual(1);
+    expect(histJson.dailySeries.length).toBeGreaterThanOrEqual(1);
+    expect(histJson.counters24h.indexerBot402Probes).toBeGreaterThanOrEqual(1);
+    expect(histJson.quotaMeters.activeCallersToday).toBeGreaterThanOrEqual(1);
+
+    const scanEv = histJson.events.find((e: any) => e.productName === "GET /v1/scan");
+    expect(scanEv).toBeDefined();
+    expect(scanEv.targetSubject.toLowerCase()).toContain("base:0x833589fcd6edb6e08f4c7c32d4f71b54bda02913");
+    expect(scanEv.paymentBadge).toContain("FREE TIER");
+    expect(scanEv.diagnosticReason).toContain("FREE QUOTA");
+
+    const indexerEv = histJson.events.find((e: any) => e.paymentTier === "indexer-402-probe");
+    expect(indexerEv).toBeDefined();
+    expect(indexerEv.isIndexerBot).toBe(true);
+    expect(indexerEv.diagnosticReason).toContain("DIRECTORY INDEXER");
+
+    // 5. Render /history HTML tab on nullclear.dev
+    const histPageRes = await app.fetch(new Request("https://nullclear.dev/history"), testEnv);
+    expect(histPageRes.status).toBe(200);
+    const histHtml = await histPageRes.text();
+    expect(histHtml).toContain("Live Product History");
+    expect(histHtml).toContain("Why Callers Aren");
+    expect(histHtml).toContain("ops@nullclear.dev");
+  });
+
+  it("enforces 100% HTTP 402 conformance across /.well-known/x402 resources[], emits serviceName/tags/toolName/iconUrl, supports $1 Micro-Pass + safe BigInt, GET guard/due-diligence, and filters directory crawlers", async () => {
+    const prodEnv = {
+      ...testEnv,
+      ENVIRONMENT: "production"
+    };
+
+    // 1. Every URL in /.well-known/x402 resources[] must return HTTP 402 with PAYMENT-REQUIRED + resource metadata
+    const x402Res = await app.fetch(new Request("https://api.nullclear.dev/.well-known/x402"), prodEnv);
+    expect(x402Res.status).toBe(200);
+    const x402 = (await x402Res.json()) as any;
+    expect(x402.resources.length).toBeGreaterThanOrEqual(14);
+    for (const url of x402.resources as string[]) {
+      const probeRes = await app.fetch(new Request(url), prodEnv);
+      expect(probeRes.status, `Expected 402 for ${url}`).toBe(402);
+      const payReqB64 = probeRes.headers.get("PAYMENT-REQUIRED");
+      expect(payReqB64, `Expected PAYMENT-REQUIRED header on ${url}`).toBeTruthy();
+      const decoded = JSON.parse(Buffer.from(payReqB64!, "base64").toString("utf8"));
+      expect(decoded.resource?.serviceName).toBeTruthy();
+      expect(Array.isArray(decoded.resource?.tags)).toBe(true);
+      expect(decoded.resource?.tags?.length).toBeGreaterThan(0);
+      expect(decoded.resource?.toolName).toBeTruthy();
+      expect(decoded.resource?.iconUrl).toBe("https://nullclear.dev/logo.png");
+    }
+
+    // 2. $1.00 Micro-Pass tier (default & explicit) + malformed BigInt value returns clean 402 (never 500)
+    const micro402Res = await app.fetch(
+      new Request("https://api.nullclear.dev/v1/pass/buy", { method: "POST" }),
+      testEnv
+    );
+    expect(micro402Res.status).toBe(402);
+    const micro402 = (await micro402Res.json()) as any;
+    expect(micro402.amount).toBe("1000000");
+    expect(micro402.selectedTier?.id).toBe("micro");
+    expect(micro402.selectedTier?.credits).toBe(300);
+
+    const malformedValueHeader = Buffer.from(
+      JSON.stringify({
+        x402Version: 2,
+        payload: {
+          signature: "0x" + "11".repeat(65),
+          authorization: {
+            from: "0x1111111111111111111111111111111111111111",
+            to: "0xB586eFcCa41dF27ad3873BEcA54da0c30bf04d5c",
+            value: "1.00",
+            validAfter: "0",
+            validBefore: String(Math.floor(Date.now() / 1000) + 300),
+            nonce: "0x" + "22".repeat(32)
+          }
+        }
+      })
+    ).toString("base64");
+    const malformedRes = await app.fetch(
+      new Request("https://api.nullclear.dev/v1/pass/buy", {
+        method: "POST",
+        headers: { "PAYMENT-SIGNATURE": malformedValueHeader }
+      }),
+      prodEnv
+    );
+    expect(malformedRes.status).toBe(402);
+
+    const microSig = await createValidPaymentSignature(
+      "0xB586eFcCa41dF27ad3873BEcA54da0c30bf04d5c",
+      "1000000"
+    );
+    const microMintRes = await app.fetch(
+      new Request("https://api.nullclear.dev/v1/pass/buy", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "PAYMENT-SIGNATURE": microSig
+        },
+        body: JSON.stringify({ tier: "micro" })
+      }),
+      testEnv
+    );
+    expect(microMintRes.status).toBe(200);
+    const microMint = (await microMintRes.json()) as any;
+    expect(microMint.tier).toBe("micro");
+    expect(microMint.creditsRemaining).toBe(300);
+
+    // 3. GET /v1/bazaar/guard & GET /v1/bazaar/due-diligence work with defaults + query params
+    const guardGetRes = await app.fetch(
+      new Request("https://api.nullclear.dev/v1/bazaar/guard", {
+        headers: { Authorization: `Bearer ${microMint.apiKey}` }
+      }),
+      testEnv
+    );
+    expect(guardGetRes.status).toBe(200);
+    const guardGetJson = (await guardGetRes.json()) as any;
+    expect(guardGetJson.recommendedAgentAction).toBeTruthy();
+
+    const ddGetRes = await app.fetch(
+      new Request(
+        "https://api.nullclear.dev/v1/bazaar/due-diligence?chain=base&address=0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+        {
+          headers: { Authorization: `Bearer ${microMint.apiKey}` }
+        }
+      ),
+      testEnv
+    );
+    expect(ddGetRes.status).toBe(200);
+    const ddGetJson = (await ddGetRes.json()) as any;
+    expect(ddGetJson.symbol).toBe("USDC");
+    expect(ddGetJson.clearanceCertificate?.signature).toMatch(/^0x[a-fA-F0-9]+$/);
+
+    // 4. Directory crawlers are classified as indexers and excluded from real_agents / realProductUses
+    const crawlerUas = [
+      "MareLiberum/1.0 (open agent index)",
+      "x402scan-worker4/1 (research; read-only)",
+      "BrickBlueBot/0.1 (+https://brick.blue/bot)",
+      "Agent402-Probe/1.0",
+      "BotsRated-mcp-probe/0.5",
+      "FaceabotProbe/1.0",
+      "Mozilla/5.0 (compatible; P0-catalog/1.0)",
+      "Mozilla/5.0 (compatible; ZeroBot/1.0)",
+      "Mozilla/5.0 (compatible; verantis-verifier/0.2)",
+      "aegis-unserved-demand/1.0",
+      "tenet-boi-labels/0.1",
+      "402explorer/0.1"
+    ];
+    for (const ua of crawlerUas) {
+      await app.fetch(
+        new Request("https://api.nullclear.dev/v1/scan/base/0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", {
+          headers: { "User-Agent": ua, "CF-Connecting-IP": "198.51.100.77" }
+        }),
+        testEnv
+      );
+    }
+    const histAllRes = await app.fetch(
+      new Request("https://nullclear.dev/v1/telemetry/history?filter=product_all&limit=200"),
+      testEnv
+    );
+    const histAll = (await histAllRes.json()) as any;
+    for (const ua of crawlerUas) {
+      const ev = histAll.events.find((e: any) => e.userAgent === ua);
+      expect(ev, `Expected event for crawler ${ua}`).toBeDefined();
+      expect(ev.isIndexerBot, `Expected ${ua} to be marked isIndexerBot=true`).toBe(true);
+    }
+    const histRealRes = await app.fetch(
+      new Request("https://nullclear.dev/v1/telemetry/history?filter=real_agents&limit=200"),
+      testEnv
+    );
+    const histReal = (await histRealRes.json()) as any;
+    for (const ua of crawlerUas) {
+      expect(histReal.events.some((e: any) => e.userAgent === ua)).toBe(false);
     }
   });
 });

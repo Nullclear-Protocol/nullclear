@@ -135,7 +135,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       {
         name: "nullclear_scan_token",
         description:
-          "Perform a free 7-chain (Base, Ethereum, Arbitrum, Optimism, Polygon, BSC, Solana) token security, proxy resolution, Token-2022 extension/mint/freeze authority audit, honeypot, and buy/sell tax audit (100 free calls/day/IP, zero API key; then $0.005 USDC). Do NOT use for low-level bytecode inspection (use nullclear_inspect_contract).",
+          "Perform a free 7-chain (Base, Ethereum, Arbitrum, Optimism, Polygon, BSC, Solana) token security, proxy resolution, Token-2022 extension/mint/freeze authority audit, honeypot, and buy/sell tax audit (10 free calls/day/IP, zero API key; then $0.005 USDC). Do NOT use for low-level bytecode inspection (use nullclear_inspect_contract).",
         annotations: {
           title: "7-Chain Token Security, Token-2022 & Proxy Scanner (Free)",
           readOnlyHint: true,
@@ -164,7 +164,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       {
         name: "nullclear_inspect_contract",
         description:
-          "Disassemble deployed EVM bytecode across Base, Ethereum, Arbitrum, Optimism, Polygon, or BSC to resolve proxies (EIP-1967/1822/1167/Beacon/Diamond/Safe), query Sourcify v2 verified ABIs, batch-resolve PUSH4 selectors via OpenChain, and detect control-flow opcode risks (100 free calls/day/IP).",
+          "Disassemble deployed EVM bytecode across Base, Ethereum, Arbitrum, Optimism, Polygon, or BSC to resolve proxies (EIP-1967/1822/1167/Beacon/Diamond/Safe), query Sourcify v2 verified ABIs, batch-resolve PUSH4 selectors via OpenChain, and detect control-flow opcode risks (10 free calls/day/IP).",
         annotations: {
           title: "EVM Proxy, Sourcify ABI & Bytecode Inspector (Free)",
           readOnlyHint: true,
@@ -193,7 +193,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       {
         name: "nullclear_decode_calldata",
         description:
-          "Decode EVM calldata (recursively unwrapping Multicall3, Uniswap Universal Router, Safe execTransaction), EIP-712 typed-data signatures (Permit, Permit2, Seaport), Solana wire txs, custom Solidity revert bytes, or mined tx hashes (100 free calls/day/IP).",
+          "Decode EVM calldata (recursively unwrapping Multicall3, Uniswap Universal Router, Safe execTransaction), EIP-712 typed-data signatures (Permit, Permit2, Seaport), Solana wire txs, custom Solidity revert bytes, or mined tx hashes (10 free calls/day/IP).",
         annotations: {
           title: "Recursive Calldata, EIP-712, Solana Wire & Revert Decoder (Free)",
           readOnlyHint: true,
@@ -224,7 +224,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       {
         name: "nullclear_simulate_transaction",
         description:
-          "Execute stateful pre-flight simulation across EVM (eth_simulateV1 with stateOverrides, multi-tx bundles, and Transfer/Approval net asset diffs; fallback eth_call + eth_estimateGas) and Solana (simulateTransaction + wire instruction audit) BEFORE signing (100 free calls/day/IP).",
+          "Execute stateful pre-flight simulation across EVM (eth_simulateV1 with stateOverrides, multi-tx bundles, and Transfer/Approval net asset diffs; fallback eth_call + eth_estimateGas) and Solana (simulateTransaction + wire instruction audit) BEFORE signing (10 free calls/day/IP).",
         annotations: {
           title: "Stateful EVM & Solana Pre-Flight Simulator (Free)",
           readOnlyHint: true,
@@ -254,7 +254,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       {
         name: "nullclear_read_markdown",
         description:
-          "Fetch and convert any public web documentation URL or HTML article into clean, stripped Markdown (<400 tokens) with a SHA-256 content hash. Use this when reading documentation, blog posts, or web pages while minimizing context-window noise (100 free calls/day/IP). Returns markdown body and provenance hash. Do NOT use for JSON REST APIs or schema-enforced x402 data endpoints needing LLM-refusal/5xx protection (use nullclear_fetch_guarded or nullclear_execute_escrow).",
+          "Fetch and convert any public web documentation URL or HTML article into clean, stripped Markdown (<400 tokens) with a SHA-256 content hash. Use this when reading documentation, blog posts, or web pages while minimizing context-window noise (10 free calls/day/IP). Returns markdown body and provenance hash. Do NOT use for JSON REST APIs or schema-enforced x402 data endpoints needing LLM-refusal/5xx protection (use nullclear_fetch_guarded or nullclear_execute_escrow).",
         annotations: {
           title: "HTML Documentation to Clean Markdown Reader (Free)",
           readOnlyHint: true,
@@ -276,7 +276,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       {
         name: "nullclear_preflight_guard",
         description:
-          "All-in-one 1-call Pre-Sign Firewall across Base, Ethereum, Arbitrum, Optimism, Polygon, BSC, and Solana (100 free calls/day/IP). Unwraps nested Multicall3/Universal Router/Safe calldata or EIP-712 Permits or Solana wire txs, runs stateful eth_simulateV1 / Solana simulateTransaction with asset diffs, and scans touched tokens.",
+          "All-in-one 1-call Pre-Sign Firewall across Base, Ethereum, Arbitrum, Optimism, Polygon, BSC, and Solana (10 free calls/day/IP). Unwraps nested Multicall3/Universal Router/Safe calldata or EIP-712 Permits or Solana wire txs, runs stateful eth_simulateV1 / Solana simulateTransaction with asset diffs, and scans touched tokens.",
         annotations: {
           title: "1-Call Multi-Chain Pre-Sign Firewall (Free)",
           readOnlyHint: true,
@@ -347,7 +347,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       {
         name: "nullclear_audit_paid_token",
         description:
-          "Run NullClear's x402 Bazaar paid oracle for Base Mainnet (8453) ERC-20 tokens returning a cryptographically signed clearing receipt (10 free trial calls/day, then $0.005 USDC). Use this ONLY when you specifically require a Base Bazaar EIP-712/keccak256 settlement receipt alongside token LP and bytecode verification. For free (100/day) multi-chain Base/ETH/Solana token & proxy scanning, use nullclear_scan_token instead.",
+          "Run NullClear's x402 Bazaar paid oracle for Base Mainnet (8453) ERC-20 tokens returning a cryptographically signed clearing receipt (10 free trial calls/day, then $0.005 USDC). Use this ONLY when you specifically require a Base Bazaar EIP-712/keccak256 settlement receipt alongside token LP and bytecode verification. For free (10/day) multi-chain Base/ETH/Solana token & proxy scanning, use nullclear_scan_token instead.",
         annotations: {
           title: "Base Token x402 Bazaar Attested Audit ($0.005)",
           readOnlyHint: true,

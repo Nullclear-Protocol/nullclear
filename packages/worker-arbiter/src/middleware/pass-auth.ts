@@ -1,7 +1,7 @@
 import type { Context } from "hono";
 import { getArbiterStore, type ApiPassRecord, type Env } from "../env.js";
 
-export type PassTierId = "starter" | "pro" | "scale";
+export type PassTierId = "micro" | "starter" | "pro" | "scale";
 
 export interface PassTierSpec {
   id: PassTierId;
@@ -14,6 +14,19 @@ export interface PassTierSpec {
 }
 
 export const PASS_TIERS: Record<PassTierId, PassTierSpec> = {
+  micro: {
+    id: "micro",
+    label: "Micro Agent Safety Pass",
+    priceAtomic: "1000000", // $1.00 USDC
+    priceUsdc: "1.00",
+    credits: 300,
+    effectiveCostPerCreditUsdc: "0.00333",
+    includes: [
+      "300 low-latency (<5ms KV auth) API credits across all 7 chains — fits $1.00 autonomous agent spend caps",
+      "Drop-in Guarded JSON-RPC Safety Rail (/rpc/:chain/:key) for AI agents & wallets — 0-credit reads, 2 credits/broadcast",
+      "Instant access to /v1/guard, /v1/bazaar/*, /v1/policy/cosign, /v1/monitors"
+    ]
+  },
   starter: {
     id: "starter",
     label: "Starter Agent Safety Pass",
@@ -58,9 +71,12 @@ export const PASS_TIERS: Record<PassTierId, PassTierSpec> = {
 
 export function normalizePassTier(raw?: string | null): PassTierId {
   const v = (raw || "").trim().toLowerCase();
-  if (v === "pro" || v === "25" || v === "25000000") return "pro";
-  if (v === "scale" || v === "institutional" || v === "100" || v === "100000000") return "scale";
-  return "starter";
+  if (v === "starter" || v === "5" || v === "5.00" || v === "5000000") return "starter";
+  if (v === "pro" || v === "25" || v === "25.00" || v === "25000000") return "pro";
+  if (v === "scale" || v === "institutional" || v === "100" || v === "100.00" || v === "100000000") {
+    return "scale";
+  }
+  return "micro";
 }
 
 function bytesToHex(bytes: Uint8Array): string {

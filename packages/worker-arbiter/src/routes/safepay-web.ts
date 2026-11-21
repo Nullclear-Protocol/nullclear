@@ -130,8 +130,15 @@ export function renderSafePayLandingHtml(options: {
           "1.0% flat protocol fee ($0.50 USDC minimum, 0.75% for deals over $10,000 USDC)",
         provider: {
           "@type": "Organization",
-          name: "NullClear Protocol",
-          url: "https://nullclear.com"
+          name: "NullClear Organization",
+          url: "https://nullclear.com",
+          email: "ops@nullclear.dev",
+          sameAs: ["https://nullclear.dev", "https://github.com/Nullclear-Protocol/nullclear"],
+          contactPoint: {
+            "@type": "ContactPoint",
+            email: "ops@nullclear.dev",
+            contactType: "operations and enterprise support"
+          }
         }
       },
       {
@@ -461,14 +468,15 @@ export function renderSafePayLandingHtml(options: {
         <span class="base-badge mono">Base Mainnet · 8453</span>
       </a>
       <nav class="nav-links">
-        <a href="#forensics-omnibox" style="color:var(--emerald);font-weight:700;">🔍 On-Chain Forensics</a>
-        <a href="/x402" style="color:#38BDF8;font-weight:700;">⚡ /x402 Gateway</a>
+        <a href="#forensics-omnibox" style="color:var(--emerald);font-weight:700;">🔍 7-Chain Forensics</a>
+        <a href="/firewall" style="color:#38BDF8;font-weight:700;">🛡️ Pre-Sign Firewall</a>
+        <a href="/x402" style="color:#38BDF8;font-weight:600;">⚡ /x402 Gateway</a>
+        <a href="https://nullclear.dev/history" style="color:var(--emerald);font-weight:700;">📡 Live Agent History</a>
         <a href="/for/freelancers">Freelancers</a>
         <a href="/for/data-brokers">Data Brokers</a>
-        <a href="/for/ai-bounties">AI Bounties</a>
         <a href="/for/otc-digital">OTC Digital</a>
-        <a href="#calculator">Fee Calculator</a>
-        <a href="https://nullclear.dev" target="_blank" rel="noopener">A2A Protocol (nullclear.dev) ↗</a>
+        <a href="https://nullclear.dev">Developer Portal (nullclear.dev) ↗</a>
+        <a href="mailto:ops@nullclear.dev" class="mono" style="color:#60A5FA;">✉️ ops@nullclear.dev</a>
       </nav>
     </div>
   </header>
@@ -480,16 +488,16 @@ export function renderSafePayLandingHtml(options: {
         <span style="color:var(--emerald);font-weight:700;">$0.00 (EIP-3009 Wallet Hold)</span>
       </div>
       <div class="stat-item">
-        <span style="color:var(--muted)">AVG EDGE VERIFICATION</span>
-        <span style="color:var(--text);font-weight:700;">&lt; 140ms</span>
+        <span style="color:var(--muted)">PRE-SIGN FIREWALL &amp; RPC</span>
+        <span style="color:var(--text);font-weight:700;">7 Chains (&lt; 5ms Edge KV)</span>
       </div>
       <div class="stat-item">
         <span style="color:var(--muted)">PROTOCOL FEE</span>
         <span style="color:var(--emerald);font-weight:700;">1.0% Flat (0.75% &gt;$10k)</span>
       </div>
       <div class="stat-item">
-        <span style="color:var(--muted)">TREASURY</span>
-        <span style="color:#60A5FA;">0xB586...d5c</span>
+        <span style="color:var(--muted)">OPERATIONS DESK</span>
+        <a href="mailto:ops@nullclear.dev" style="color:#60A5FA;text-decoration:none;font-weight:700;">ops@nullclear.dev</a>
       </div>
     </div>
   </div>
@@ -499,18 +507,22 @@ export function renderSafePayLandingHtml(options: {
     <section id="forensics-omnibox" class="card card-emerald" style="margin-top:28px;padding:24px 28px;background:linear-gradient(180deg, rgba(16,185,129,0.06) 0%, rgba(12,16,24,0.95) 100%);">
       <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:12px;">
         <div>
-          <span class="pill-badge mono" style="margin-right:8px;">ZERO API KEY · 100 FREE REQ/DAY/IP</span>
-          <span style="font-weight:800;font-size:18px;">Universal On-Chain Forensics, Proxy-Aware Bytecode Inspector &amp; Calldata Decoder</span>
+          <span class="pill-badge mono" style="margin-right:8px;">7 CHAINS · ZERO API KEY (10 FREE/DAY) · PREPAID PASSES</span>
+          <span style="font-weight:800;font-size:18px;">Universal On-Chain Forensics, Proxy-Aware Bytecode Inspector &amp; 1-Call Pre-Sign Firewall</span>
         </div>
         <div class="mono" style="font-size:12px;color:#38BDF8;">
-          Supports Base · Ethereum · Solana · EIP-1967 Proxies · Revert Hex
+          Base · Ethereum · Arbitrum · Optimism · Polygon · BSC · Solana
         </div>
       </div>
 
       <form id="universalOmniboxForm" onsubmit="event.preventDefault(); executeOmniboxInput();" style="display:flex;gap:10px;flex-wrap:wrap;">
-        <select id="omniboxChain" class="mono" style="width:140px;font-weight:700;">
+        <select id="omniboxChain" class="mono" style="width:155px;font-weight:700;">
           <option value="base">Base (8453)</option>
           <option value="eth">Ethereum (1)</option>
+          <option value="arbitrum">Arbitrum (42161)</option>
+          <option value="optimism">Optimism (10)</option>
+          <option value="polygon">Polygon (137)</option>
+          <option value="bsc">BNB Chain (56)</option>
           <option value="solana">Solana</option>
         </select>
         <input
@@ -894,20 +906,63 @@ carol.cto@base.org,Base Ecosystem,sk_live_555666777aaaa,890000</textarea>
         </table>
       </div>
     </section>
+    <!-- NullClear Organization & Institutional Operations Desk -->
+    <section id="organization-desk" style="padding:12px 0 36px;">
+      <div class="card" style="border-color:rgba(56,189,248,0.35);background:linear-gradient(180deg, rgba(56,189,248,0.05) 0%, rgba(12,16,24,0.96) 100%);">
+        <div style="display:flex;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;gap:16px;margin-bottom:20px;">
+          <div>
+            <div class="pill-badge mono" style="margin-bottom:8px;">NULLCLEAR ORGANIZATION &bull; COMMERCIAL &amp; AGENT INFRASTRUCTURE</div>
+            <h2 style="font-size:24px;font-weight:800;">Unified Institutional Clearing, Pre-Execution Security &amp; Live Transparency</h2>
+            <p style="font-size:14px;color:var(--muted);max-width:780px;margin-top:4px;">
+              NullClear operates across both human commercial escrow (<code class="mono">nullclear.com</code>) and autonomous AI agent pre-execution security &amp; x402 clearing (<code class="mono">nullclear.dev</code>).
+            </p>
+          </div>
+          <div style="display:flex;gap:10px;flex-wrap:wrap;">
+            <a href="mailto:ops@nullclear.dev" class="btn-secondary mono" style="text-decoration:none;border-color:var(--emerald);color:var(--emerald);display:inline-flex;align-items:center;gap:6px;">
+              ✉️ Operations Desk: ops@nullclear.dev
+            </a>
+            <a href="https://nullclear.dev/history" class="btn-secondary" style="text-decoration:none;border-color:#38BDF8;color:#38BDF8;display:inline-flex;align-items:center;gap:6px;">
+              📡 Live Agent Usage History ↗
+            </a>
+          </div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px;">
+          <div style="background:#06080D;border:1px solid var(--border);border-radius:10px;padding:16px;">
+            <div class="mono" style="font-size:11px;color:var(--emerald);font-weight:700;">1. COMMERCIAL DELIVERABLE ESCROW</div>
+            <div style="font-weight:800;font-size:15px;margin:4px 0;">NullClear SafePay (nullclear.com)</div>
+            <p style="font-size:12.5px;color:var(--muted);">Zero-custody Base USDC deal rooms for datasets, code archives, AI bounties, and OTC digital transfers with 1.0% flat fee (0.75% &gt;$10k).</p>
+          </div>
+          <div style="background:#06080D;border:1px solid var(--border);border-radius:10px;padding:16px;">
+            <div class="mono" style="font-size:11px;color:#38BDF8;font-weight:700;">2. 7-CHAIN AGENT FIREWALL &amp; GUARDED RPC</div>
+            <div style="font-weight:800;font-size:15px;margin:4px 0;"><a href="https://nullclear.dev/firewall" style="color:var(--text);text-decoration:none;">Pre-Sign Security Suite (nullclear.dev) ↗</a></div>
+            <p style="font-size:12.5px;color:var(--muted);">1-call pre-sign guard (<code class="mono">/v1/guard</code>), drop-in guarded JSON-RPC (<code class="mono">/rpc/:chain/:key</code>), $5–$100 Prepaid Passes, Policy Co-Signer &amp; Watchtower.</p>
+          </div>
+          <div style="background:#06080D;border:1px solid var(--border);border-radius:10px;padding:16px;">
+            <div class="mono" style="font-size:11px;color:#F59E0B;font-weight:700;">3. PUBLIC TELEMETRY &amp; OPERATIONS</div>
+            <div style="font-weight:800;font-size:15px;margin:4px 0;"><a href="https://nullclear.dev/history" style="color:var(--text);text-decoration:none;">Live Product History &amp; Diagnostics ↗</a></div>
+            <p style="font-size:12.5px;color:var(--muted);">Real-time stream of every agent tool invocation, quota meter, and x402 conversion diagnostic. Enterprise &amp; OTC inquiries: <a href="mailto:ops@nullclear.dev" class="mono" style="color:var(--emerald);">ops@nullclear.dev</a>.</p>
+          </div>
+        </div>
+      </div>
+    </section>
   </main>
 
   <footer>
     <div class="container" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:16px;">
       <div>
-        <strong>NullClear SafePay</strong> · Zero-Custody Cryptographic Deliverable Escrow on Base Mainnet (<code class="mono">eip155:8453</code>).<br/>
-        Protocol Fee Treasury: <span class="mono">${SAFEPAY_TREASURY_ADDRESS}</span> · ERC-8004 Arbiter Agent #124595
+        <strong>NullClear Organization &amp; SafePay</strong> · Zero-Custody Cryptographic Deliverable Escrow &amp; 7-Chain Pre-Execution Firewall on Base Mainnet (<code class="mono">eip155:8453</code>).<br/>
+        Operations &amp; Enterprise Desk: <a href="mailto:ops@nullclear.dev" class="mono" style="color:var(--emerald);text-decoration:none;">ops@nullclear.dev</a> · Protocol Fee Treasury: <span class="mono">${SAFEPAY_TREASURY_ADDRESS}</span> · ERC-8004 Agent #124595
       </div>
-      <div style="display:flex;gap:16px;">
+      <div style="display:flex;gap:16px;flex-wrap:wrap;">
+        <a href="https://nullclear.dev" style="color:var(--emerald);font-weight:700;">nullclear.dev Portal</a>
+        <a href="https://nullclear.dev/history" style="color:#38BDF8;font-weight:700;">Live Agent History</a>
+        <a href="/firewall" style="color:var(--muted);">Pre-Sign Firewall</a>
         <a href="/for/freelancers" style="color:var(--muted);">Freelancers</a>
         <a href="/for/data-brokers" style="color:var(--muted);">Data Brokers</a>
         <a href="/for/ai-bounties" style="color:var(--muted);">AI Bounties</a>
         <a href="/for/otc-digital" style="color:var(--muted);">OTC Digital</a>
-        <a href="/sitemap.xml" style="color:var(--muted);">Sitemap</a>
+        <a href="mailto:ops@nullclear.dev" style="color:var(--muted);">ops@nullclear.dev</a>
       </div>
     </div>
   </footer>
@@ -1260,7 +1315,8 @@ export function renderSafePayDealRoomHtml(dealId: string): string {
         <span>NullClear <span style="color:var(--emerald)">SafePay</span></span>
         <span class="mono" style="font-size:12px;color:var(--muted);">/deal/${escapeHtml(dealId)}</span>
       </a>
-      <div style="display:flex;align-items:center;gap:10px;">
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+        <a href="mailto:ops@nullclear.dev" class="btn-secondary mono" style="text-decoration:none;color:var(--muted);">✉️ ops@nullclear.dev</a>
         <button type="button" id="openCashierBtn" class="btn-secondary" style="border-color:#0052FF;color:#60A5FA;">
           💳 Need Base USDC? Cross-Chain Cashier
         </button>
