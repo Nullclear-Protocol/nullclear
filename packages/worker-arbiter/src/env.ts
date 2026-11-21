@@ -36,6 +36,12 @@ export interface Env {
     MIN_ONCHAIN_ATOMIC?: string;
     MAX_DAILY_ONCHAIN_PER_WALLET?: string;
   };
+  Variables: {
+    passId?: string;
+    creditsDeducted?: number;
+    agentLabel?: string | null;
+    receiptUrl?: string | null;
+  };
 }
 
 export interface ForensicScanRecord {
@@ -168,6 +174,10 @@ export interface TrafficEventRecord {
   targetSubject?: string | null;
   diagnosticReason?: string | null;
   latencyMs?: number | null;
+  agentLabel?: string | null;
+  passId?: string | null;
+  creditsDeducted?: number | null;
+  receiptUrl?: string | null;
 }
 
 export interface EnrichedProductHistoryEvent extends TrafficEventRecord {
@@ -658,6 +668,11 @@ export interface IArbiterStore {
   getForensicScan(chain: string, address: string): Promise<ForensicScanRecord | null>;
   getForensicScansBatch(targets: Array<{ chain: string; address: string }>): Promise<Map<string, ForensicScanRecord>>;
   listRecentClearings(limit?: number): Promise<ClearingRecord[]>;
+  getClearingById(id: string): Promise<ClearingRecord | null>;
+  listPassUsageEvents(
+    passId: string,
+    options?: { days?: number; agentLabel?: string | null; limit?: number }
+  ): Promise<TrafficEventRecord[]>;
   listForensicScans(chain?: string, limit?: number): Promise<ForensicScanRecord[]>;
   createApiPass(pass: ApiPassRecord): Promise<void>;
   getApiPassByHash(keyHash: string): Promise<ApiPassRecord | null>;
@@ -1134,6 +1149,31 @@ export class MemoryArbiterStore implements IArbiterStore {
     return this.clearings.slice(-limit).reverse().map((r) => ({ ...r }));
   }
 
+  async getClearingById(id: string): Promise<ClearingRecord | null> {
+    const found = this.clearings.find((r) => r.id === id);
+    return found ? { ...found } : null;
+  }
+
+  async listPassUsageEvents(
+    passId: string,
+    options?: { days?: number; agentLabel?: string | null; limit?: number }
+  ): Promise<TrafficEventRecord[]> {
+    const days = Math.min(90, Math.max(1, Math.floor(options?.days ?? 30)));
+    const cutoff = Date.now() - days * 24 * 3600 * 1000;
+    const limit = Math.min(5000, Math.max(1, Math.floor(options?.limit ?? 1000)));
+    const targetAgent = options?.agentLabel ? options.agentLabel.trim() : null;
+    return this.trafficEvents
+      .filter((ev) => {
+        if (ev.passId !== passId) return false;
+        if (ev.timestamp < cutoff) return false;
+        if (targetAgent && ev.agentLabel !== targetAgent) return false;
+        return true;
+      })
+      .slice(-limit)
+      .reverse()
+      .map((ev) => ({ ...ev }));
+  }
+
   async createApiPass(pass: ApiPassRecord): Promise<void> {
     this.apiPassesByHash.set(pass.keyHash, { ...pass });
   }
@@ -1532,8 +1572,55 @@ const KNOWN_INDEXER_BOT_PATTERNS = [
   "smithery",
   "mcprush",
   "mcpservers",
-  "mcptry"
+  "mcptry",
+  "subpay.ai",
+  "toolvetprobe",
+  "x402-census",
+  "analoghubris",
+  "addrbook-probe",
+  "x402-index-liveness",
+  "mizan/",
+  "agent-deals-monitor",
+  "10x402-monitor",
+  "sml-authority-engine",
+  "agensus-probe",
+  "nightshift-census",
+  "ocean_observer",
+  "taifoonharvester",
+  "reflectionbot",
+  "ibou-search",
+  "crolbot",
+  "all_agents",
+  "payability",
+  "liveness",
+  "census",
+  "authority-engine",
+  "observer",
+  "x402-index",
+  "-liveness",
+  "-census",
+  "-monitor",
+  "_monitor",
+  "-probe",
+  "_probe",
+  "harvester",
+  "trustindex",
+  "ispettore"
 ];
+
+export function buildBalancedSqlAnd(clauses: string[]): string {
+  if (clauses.length === 0) return "1=1";
+  if (clauses.length === 1) return clauses[0];
+  const mid = Math.floor(clauses.length / 2);
+  return `(${buildBalancedSqlAnd(clauses.slice(0, mid))} AND ${buildBalancedSqlAnd(clauses.slice(mid))})`;
+}
+
+export function buildRealCallerSqlFilter(): string {
+  const notIndexerClauses = KNOWN_INDEXER_BOT_PATTERNS.map(
+    (pat) => `INSTR(LOWER(user_agent), '${pat.replace(/'/g, "''")}') = 0`
+  );
+  return `(payment_tier IN ('x402-paid', 'prepaid-pass') OR user_agent IS NULL OR ${buildBalancedSqlAnd(notIndexerClauses)})`;
+}
 
 export function isKnownDirectoryIndexerUa(uaRaw: string | null | undefined): boolean {
   const ua = (uaRaw || "").toLowerCase();
@@ -1589,11 +1676,17 @@ export function enrichTrafficEventDiagnostics(ev: TrafficEventRecord): EnrichedP
     productName = `${m} /v1/simulate`;
     targetSubject = targetSubject || "eth_simulateV1 / Solana Sim";
     isRealProductUse = m === "POST";
-  } else if (p.startsWith("/v1/pass/")) {
-    productCategory = "Prepaid Firewall Pass";
-    productName = p.includes("/buy") ? `${m} /v1/pass/buy` : `${m} ${p}`;
-    targetSubject = targetSubject || "nc_live_... Pass ($1 / $5 / $25 / $100)";
-    isRealProductUse = true;
+  } else if (p === "/v1/pass" || p.startsWith("/v1/pass/")) {
+    const isBuyPass = p.startsWith("/v1/pass/buy");
+    productCategory = isBuyPass ? "Prepaid Firewall Pass" : "Prepaid Pass Read";
+    productName = isBuyPass ? `${m} /v1/pass/buy` : `${m} ${p}`;
+    targetSubject = targetSubject || (isBuyPass ? "nc_live_... Pass ($1 / $5 / $25 / $100)" : "0-Credit Pass Balance / Export / Tiers");
+    isRealProductUse = isBuyPass;
+  } else if (p.startsWith("/receipt/") || p.startsWith("/v1/receipt/")) {
+    productCategory = "Public Clearing Receipt";
+    productName = p.startsWith("/v1/receipt/") ? "GET /v1/receipt/:id" : "GET /receipt/:id";
+    targetSubject = targetSubject || p.replace(/^\/(?:v1\/)?receipt\//, "");
+    isRealProductUse = false;
   } else if (p.startsWith("/rpc/")) {
     productCategory = "Drop-In Guarded RPC";
     const chainSeg = p.replace("/rpc/", "").split("/")[0] || "base";
@@ -1678,11 +1771,11 @@ export function enrichTrafficEventDiagnostics(ev: TrafficEventRecord): EnrichedP
     isRealProductUse = false;
   }
 
-  if (m === "HEAD" || m === "OPTIONS" || ev.status === 404) {
+  if (m === "HEAD" || m === "OPTIONS" || ev.status === 404 || (ev.status >= 300 && ev.status < 400)) {
     isRealProductUse = false;
   }
 
-  // Classify indexer 402 probes vs real callers
+  // Classify indexer 402 probes vs real callers (payment always overrides bot classification)
   const isPaidEndpoint =
     p.startsWith("/v1/bazaar/") ||
     p.startsWith("/v1/pass/buy") ||
@@ -1690,16 +1783,31 @@ export function enrichTrafficEventDiagnostics(ev: TrafficEventRecord): EnrichedP
     (p.startsWith("/v1/monitors") && m === "POST") ||
     p.startsWith("/g/");
 
-  const isIndexerBot =
-    isKnownIndexerUa ||
-    (ev.status === 402 && isPaidEndpoint && ev.actorType === "BOT_SCANNER" && !ev.isFreeTrial);
+  const rawTierLower = (ev.paymentTier || "").toLowerCase();
+  const isPassReadOnly =
+    p === "/v1/pass" ||
+    p === "/v1/pass/" ||
+    p.startsWith("/v1/pass/status") ||
+    p.startsWith("/v1/pass/tiers") ||
+    p.startsWith("/v1/pass/export");
+  const isPublicReceipt = p.startsWith("/receipt/") || p.startsWith("/v1/receipt/");
+  const hasPaidSettlement =
+    !isPassReadOnly &&
+    !isPublicReceipt &&
+    (rawTierLower === "x402-paid" || rawTierLower === "prepaid-pass");
 
-  let paymentTier = (ev.paymentTier || "").toLowerCase();
+  const isIndexerBot =
+    !hasPaidSettlement &&
+    rawTierLower !== "payment-failed" &&
+    (isKnownIndexerUa ||
+      (ev.status === 402 && isPaidEndpoint && ev.actorType === "BOT_SCANNER" && !ev.isFreeTrial));
+
+  let paymentTier = rawTierLower;
   let paymentBadge = "EXECUTED (200)";
   let diagnosticReason = ev.diagnosticReason || "";
   let isPaid = false;
 
-  if (paymentTier === "x402-paid" || paymentTier === "prepaid-pass") {
+  if (hasPaidSettlement) {
     isPaid = true;
     paymentBadge = paymentTier === "prepaid-pass" ? "PAID (PASS CREDIT)" : "PAID (x402 USDC)";
     if (!diagnosticReason) {
@@ -1707,6 +1815,24 @@ export function enrichTrafficEventDiagnostics(ev: TrafficEventRecord): EnrichedP
         paymentTier === "prepaid-pass"
           ? "PAID: Authenticated via Prepaid Pass (nc_live_...)"
           : "PAID: Settled on-chain x402 EIP-3009 USDC authorization on Base";
+    }
+  } else if (isPassReadOnly && ev.status === 200) {
+    paymentTier = "unmetered";
+    paymentBadge = "PASS READ (0 CREDITS)";
+    if (!diagnosticReason) {
+      diagnosticReason = "PASS READONLY (0 CREDITS): Read-only Prepaid Pass status/tiers/export lookup — not a paid settlement";
+    }
+  } else if (isPublicReceipt && ev.status === 200) {
+    paymentTier = "unmetered";
+    paymentBadge = "PUBLIC RECEIPT (FREE)";
+    if (!diagnosticReason) {
+      diagnosticReason = "PUBLIC RECEIPT: Cryptographic clearing verifier (/receipt/:id) is public and unmetered";
+    }
+  } else if (ev.status >= 300 && ev.status < 400) {
+    paymentTier = `http-${ev.status}`;
+    paymentBadge = `REDIRECT (${ev.status})`;
+    if (!diagnosticReason) {
+      diagnosticReason = `BROWSER REDIRECT (${ev.status}): Redirected interactive browser request to web UI`;
     }
   } else if (ev.status === 200) {
     if (
@@ -2802,9 +2928,13 @@ export class D1ArbiterStore implements IArbiterStore {
     };
   }
 
-  private trafficDiagEnsured = false;
+  private static ensuredTrafficDiagDbs = new WeakSet<D1Database>();
 
   private async ensureTelemetryAndFreeTierTables(): Promise<void> {
+    if (D1ArbiterStore.ensuredTrafficDiagDbs.has(this.db)) {
+      return;
+    }
+
     await this.db.batch([
       this.db.prepare(
         `CREATE TABLE IF NOT EXISTS traffic_events (
@@ -2827,7 +2957,11 @@ export class D1ArbiterStore implements IArbiterStore {
           client_id TEXT,
           target_subject TEXT,
           diagnostic_reason TEXT,
-          latency_ms INTEGER
+          latency_ms INTEGER,
+          agent_label TEXT,
+          pass_id TEXT,
+          credits_deducted INTEGER DEFAULT 0,
+          receipt_url TEXT
         )`
       ),
       this.db.prepare(
@@ -2841,25 +2975,27 @@ export class D1ArbiterStore implements IArbiterStore {
       )
     ]);
 
-    if (!this.trafficDiagEnsured) {
-      try {
-        const info = await this.db.prepare("PRAGMA table_info(traffic_events)").all<{ name: string }>();
-        const cols = new Set((info.results || []).map((c) => c.name));
-        const alters: string[] = [];
-        if (!cols.has("payment_tier")) alters.push("ALTER TABLE traffic_events ADD COLUMN payment_tier TEXT");
-        if (!cols.has("remaining_free")) alters.push("ALTER TABLE traffic_events ADD COLUMN remaining_free INTEGER");
-        if (!cols.has("client_id")) alters.push("ALTER TABLE traffic_events ADD COLUMN client_id TEXT");
-        if (!cols.has("target_subject")) alters.push("ALTER TABLE traffic_events ADD COLUMN target_subject TEXT");
-        if (!cols.has("diagnostic_reason")) alters.push("ALTER TABLE traffic_events ADD COLUMN diagnostic_reason TEXT");
-        if (!cols.has("latency_ms")) alters.push("ALTER TABLE traffic_events ADD COLUMN latency_ms INTEGER");
-        for (const sql of alters) {
-          try {
-            await this.db.prepare(sql).run();
-          } catch {}
-        }
-        this.trafficDiagEnsured = true;
-      } catch {}
-    }
+    try {
+      const info = await this.db.prepare("PRAGMA table_info(traffic_events)").all<{ name: string }>();
+      const cols = new Set((info.results || []).map((c) => c.name));
+      const alters: string[] = [];
+      if (!cols.has("payment_tier")) alters.push("ALTER TABLE traffic_events ADD COLUMN payment_tier TEXT");
+      if (!cols.has("remaining_free")) alters.push("ALTER TABLE traffic_events ADD COLUMN remaining_free INTEGER");
+      if (!cols.has("client_id")) alters.push("ALTER TABLE traffic_events ADD COLUMN client_id TEXT");
+      if (!cols.has("target_subject")) alters.push("ALTER TABLE traffic_events ADD COLUMN target_subject TEXT");
+      if (!cols.has("diagnostic_reason")) alters.push("ALTER TABLE traffic_events ADD COLUMN diagnostic_reason TEXT");
+      if (!cols.has("latency_ms")) alters.push("ALTER TABLE traffic_events ADD COLUMN latency_ms INTEGER");
+      if (!cols.has("agent_label")) alters.push("ALTER TABLE traffic_events ADD COLUMN agent_label TEXT");
+      if (!cols.has("pass_id")) alters.push("ALTER TABLE traffic_events ADD COLUMN pass_id TEXT");
+      if (!cols.has("credits_deducted")) alters.push("ALTER TABLE traffic_events ADD COLUMN credits_deducted INTEGER DEFAULT 0");
+      if (!cols.has("receipt_url")) alters.push("ALTER TABLE traffic_events ADD COLUMN receipt_url TEXT");
+      for (const sql of alters) {
+        try {
+          await this.db.prepare(sql).run();
+        } catch {}
+      }
+      D1ArbiterStore.ensuredTrafficDiagDbs.add(this.db);
+    } catch {}
   }
 
   private async ensureGatewayTable(): Promise<void> {
@@ -2904,7 +3040,12 @@ export class D1ArbiterStore implements IArbiterStore {
       clientId: r.client_id ?? null,
       targetSubject: r.target_subject ?? null,
       diagnosticReason: r.diagnostic_reason ?? null,
-      latencyMs: r.latency_ms !== null && r.latency_ms !== undefined ? Number(r.latency_ms) : null
+      latencyMs: r.latency_ms !== null && r.latency_ms !== undefined ? Number(r.latency_ms) : null,
+      agentLabel: r.agent_label ?? null,
+      passId: r.pass_id ?? null,
+      creditsDeducted:
+        r.credits_deducted !== null && r.credits_deducted !== undefined ? Number(r.credits_deducted) : null,
+      receiptUrl: r.receipt_url ?? null
     };
   }
 
@@ -2915,8 +3056,9 @@ export class D1ArbiterStore implements IArbiterStore {
         .prepare(
           `INSERT INTO traffic_events (
             id, timestamp, host, path, method, status, actor_type, mcp_method, tool_name, country, asn, referer, user_agent, is_free_trial,
-            payment_tier, remaining_free, client_id, target_subject, diagnostic_reason, latency_ms
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+            payment_tier, remaining_free, client_id, target_subject, diagnostic_reason, latency_ms,
+            agent_label, pass_id, credits_deducted, receipt_url
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
         )
         .bind(
           event.id,
@@ -2938,7 +3080,11 @@ export class D1ArbiterStore implements IArbiterStore {
           event.clientId || null,
           event.targetSubject || null,
           event.diagnosticReason || null,
-          typeof event.latencyMs === "number" ? event.latencyMs : null
+          typeof event.latencyMs === "number" ? event.latencyMs : null,
+          event.agentLabel || null,
+          event.passId || null,
+          typeof event.creditsDeducted === "number" ? event.creditsDeducted : 0,
+          event.receiptUrl || null
         )
         .run();
     } catch (err: any) {
@@ -3019,25 +3165,21 @@ export class D1ArbiterStore implements IArbiterStore {
     const cutoff14d = now - 14 * 24 * 3600 * 1000;
     const cutoff14dDate = new Date(cutoff14d).toISOString().slice(0, 10);
 
-    const notIndexerUaSql = KNOWN_INDEXER_BOT_PATTERNS.map(
-      (pat) => `LOWER(COALESCE(user_agent, '')) NOT LIKE '%${pat.replace(/'/g, "''")}%'`
-    ).join(" AND ");
-    const realCallerSqlFilter = `(user_agent IS NULL OR (${notIndexerUaSql}))`;
+    const realCallerSqlFilter = buildRealCallerSqlFilter();
 
     const aggSelectCols = `
       COUNT(*) as total_hits,
       SUM(CASE WHEN path LIKE '/mcp%' AND mcp_method IN ('initialize', 'tools/list', 'notifications/initialized', 'prompts/list', 'resources/list', 'server/discover') THEN 1 ELSE 0 END) as mcp_handshakes,
-      SUM(CASE WHEN mcp_method = 'tools/call' AND status = 200 AND ${realCallerSqlFilter} THEN 1 ELSE 0 END) as mcp_calls,
-      SUM(CASE WHEN status = 200 AND method != 'HEAD' AND ${realCallerSqlFilter} AND (path LIKE '/v1/scan%' OR path LIKE '/v1/inspect%' OR path LIKE '/v1/guard%' OR path LIKE '/v1/decode%' OR path LIKE '/v1/simulate%' OR path LIKE '/rpc%' OR path LIKE '/v1/policy%' OR path LIKE '/v1/monitors%') THEN 1 ELSE 0 END) as forensics_firewall,
+      SUM(CASE WHEN mcp_method = 'tools/call' AND status = 200 AND is_real_caller = 1 THEN 1 ELSE 0 END) as mcp_calls,
+      SUM(CASE WHEN status = 200 AND method != 'HEAD' AND is_real_caller = 1 AND (path LIKE '/v1/scan%' OR path LIKE '/v1/inspect%' OR path LIKE '/v1/guard%' OR path LIKE '/v1/decode%' OR path LIKE '/v1/simulate%' OR path LIKE '/rpc%' OR path LIKE '/v1/policy%' OR path LIKE '/v1/monitors%') THEN 1 ELSE 0 END) as forensics_firewall,
       SUM(CASE WHEN status = 200 AND method != 'HEAD' AND path LIKE '/scan/%' THEN 1 ELSE 0 END) as scorecards,
-      SUM(CASE WHEN status = 200 AND method != 'HEAD' AND mcp_method IS NULL AND (path LIKE '/v1/bazaar/%' OR path LIKE '/v1/clear%' OR path LIKE '/v1/escrow%' OR path LIKE '/v1/pass/%' OR path LIKE '/v1/score%' OR path LIKE '/v1/kya%' OR path LIKE '/v1/proxy%' OR path LIKE '/https:%' OR path LIKE '/http:%' OR path LIKE '/g/%' OR path LIKE '/api/safepay/deals%' OR (path LIKE '/a2a%' AND method = 'POST')) AND path NOT LIKE '/v1/bazaar/directory%' AND ${realCallerSqlFilter} THEN 1 ELSE 0 END) as bazaar_escrow,
+      SUM(CASE WHEN status = 200 AND method != 'HEAD' AND mcp_method IS NULL AND (path LIKE '/v1/bazaar/%' OR path LIKE '/v1/clear%' OR path LIKE '/v1/escrow%' OR path LIKE '/v1/pass/buy%' OR path LIKE '/v1/score%' OR path LIKE '/v1/kya%' OR path LIKE '/v1/proxy%' OR path LIKE '/https:%' OR path LIKE '/http:%' OR path LIKE '/g/%' OR path LIKE '/api/safepay/deals%' OR (path LIKE '/a2a%' AND method = 'POST')) AND path NOT LIKE '/v1/bazaar/directory%' AND is_real_caller = 1 THEN 1 ELSE 0 END) as bazaar_escrow,
       SUM(CASE WHEN status = 402 THEN 1 ELSE 0 END) as count_402,
       SUM(CASE WHEN status = 400 AND (path LIKE '/v1/%' OR path LIKE '/rpc%') THEN 1 ELSE 0 END) as count_400
     `;
 
     const [
-      dailySqlRes,
-      rolling24hSqlRes,
+      dailyAnd24hRes,
       realExecutedEventsRes,
       productEventsRes,
       recentAllEventsRes,
@@ -3048,22 +3190,24 @@ export class D1ArbiterStore implements IArbiterStore {
     ] = await Promise.all([
       this.db
         .prepare(
-          `SELECT strftime('%Y-%m-%d', timestamp / 1000, 'unixepoch') as day, ${aggSelectCols}
-           FROM traffic_events
-           WHERE timestamp >= ?
-           GROUP BY day
+          `SELECT strftime('%Y-%m-%d', timestamp / 1000, 'unixepoch') as day, is_24h, ${aggSelectCols}
+           FROM (
+             SELECT
+               timestamp,
+               path,
+               method,
+               status,
+               mcp_method,
+               CASE WHEN timestamp >= ? THEN 1 ELSE 0 END as is_24h,
+               CASE WHEN ${realCallerSqlFilter} THEN 1 ELSE 0 END as is_real_caller
+             FROM traffic_events
+             WHERE timestamp >= ?
+           )
+           GROUP BY day, is_24h
            ORDER BY day ASC`
         )
-        .bind(cutoff14d)
-        .all<SqlAggregatedDayRow>(),
-      this.db
-        .prepare(
-          `SELECT '24h' as day, ${aggSelectCols}
-           FROM traffic_events
-           WHERE timestamp >= ?`
-        )
-        .bind(cutoff24h)
-        .first<SqlAggregatedDayRow>(),
+        .bind(cutoff24h, cutoff14d)
+        .all<SqlAggregatedDayRow & { is_24h: number }>(),
       this.db
         .prepare(
           `SELECT * FROM traffic_events
@@ -3083,7 +3227,7 @@ export class D1ArbiterStore implements IArbiterStore {
                OR path LIKE '/http:%'
                OR (path LIKE '/v1/bazaar/%' AND status = 200)
                OR (path LIKE '/v1/clear%' AND status = 200)
-               OR (path LIKE '/v1/pass/%' AND status = 200)
+               OR (path LIKE '/v1/pass/buy%' AND status = 200)
              )
              AND path NOT LIKE '/v1/bazaar/directory%'
              AND (user_agent IS NULL OR user_agent NOT LIKE '%NullClear-Canary-Auditor%')
@@ -3156,6 +3300,57 @@ export class D1ArbiterStore implements IArbiterStore {
       updatedAt: Number(r.updated_at || 0)
     }));
 
+    const dailyMap = new Map<string, SqlAggregatedDayRow>();
+    const rolling24hSqlRow: SqlAggregatedDayRow = {
+      day: "24h",
+      total_hits: 0,
+      mcp_handshakes: 0,
+      mcp_calls: 0,
+      forensics_firewall: 0,
+      scorecards: 0,
+      bazaar_escrow: 0,
+      count_402: 0,
+      count_400: 0
+    };
+    let has24hRows = false;
+
+    for (const r of dailyAnd24hRes.results || []) {
+      const existing = dailyMap.get(r.day) || {
+        day: r.day,
+        total_hits: 0,
+        mcp_handshakes: 0,
+        mcp_calls: 0,
+        forensics_firewall: 0,
+        scorecards: 0,
+        bazaar_escrow: 0,
+        count_402: 0,
+        count_400: 0
+      };
+      existing.total_hits += Number(r.total_hits || 0);
+      existing.mcp_handshakes += Number(r.mcp_handshakes || 0);
+      existing.mcp_calls += Number(r.mcp_calls || 0);
+      existing.forensics_firewall += Number(r.forensics_firewall || 0);
+      existing.scorecards += Number(r.scorecards || 0);
+      existing.bazaar_escrow += Number(r.bazaar_escrow || 0);
+      existing.count_402 += Number(r.count_402 || 0);
+      existing.count_400 += Number(r.count_400 || 0);
+      dailyMap.set(r.day, existing);
+
+      if (Number(r.is_24h) === 1) {
+        has24hRows = true;
+        rolling24hSqlRow.total_hits += Number(r.total_hits || 0);
+        rolling24hSqlRow.mcp_handshakes += Number(r.mcp_handshakes || 0);
+        rolling24hSqlRow.mcp_calls += Number(r.mcp_calls || 0);
+        rolling24hSqlRow.forensics_firewall += Number(r.forensics_firewall || 0);
+        rolling24hSqlRow.scorecards += Number(r.scorecards || 0);
+        rolling24hSqlRow.bazaar_escrow += Number(r.bazaar_escrow || 0);
+        rolling24hSqlRow.count_402 += Number(r.count_402 || 0);
+        rolling24hSqlRow.count_400 += Number(r.count_400 || 0);
+      }
+    }
+
+    const dailySqlRows = Array.from(dailyMap.values()).sort((a, b) => a.day.localeCompare(b.day));
+
     return buildPaymentDiagnosticsReport({
       events: mergedEvents,
       freeTierRows,
@@ -3163,8 +3358,8 @@ export class D1ArbiterStore implements IArbiterStore {
       activePrepaidPasses: Number(passesRes?.total_passes || 0),
       totalPassCreditsRemaining: Number(passesRes?.total_credits || 0),
       recentForensicScans: scans,
-      dailySqlRows: dailySqlRes.results || [],
-      rolling24hSqlRow: rolling24hSqlRes || null,
+      dailySqlRows,
+      rolling24hSqlRow: has24hRows ? rolling24hSqlRow : null,
       options
     });
   }
@@ -3834,6 +4029,62 @@ export class D1ArbiterStore implements IArbiterStore {
       queryType: row.query_type || undefined,
       createdAt: Number(row.created_at || 0)
     }));
+  }
+
+  async getClearingById(id: string): Promise<ClearingRecord | null> {
+    await this.ensureClearingsParamColumns();
+    const row = await this.db
+      .prepare("SELECT * FROM clearings WHERE id = ? LIMIT 1")
+      .bind(id)
+      .first<any>();
+    if (!row) return null;
+    return {
+      id: row.id,
+      network: row.network,
+      buyerAddress: row.buyer_address,
+      sellerAgentId: row.seller_agent_id,
+      amount: String(row.amount || "0"),
+      fee: String(row.fee || "0"),
+      targetUrl: row.target_url,
+      status: row.status,
+      responseHash: row.response_hash || undefined,
+      attestationSignature: row.attestation_signature || undefined,
+      errorReason: row.error_reason || undefined,
+      eip3009Nonce: row.eip3009_nonce || undefined,
+      targetAddress: row.target_address || undefined,
+      targetChain: row.target_chain || undefined,
+      queryType: row.query_type || undefined,
+      createdAt: Number(row.created_at || 0)
+    };
+  }
+
+  async listPassUsageEvents(
+    passId: string,
+    options?: { days?: number; agentLabel?: string | null; limit?: number }
+  ): Promise<TrafficEventRecord[]> {
+    await this.ensureTelemetryAndFreeTierTables();
+    const days = Math.min(90, Math.max(1, Math.floor(options?.days ?? 30)));
+    const cutoff = Date.now() - days * 24 * 3600 * 1000;
+    const limit = Math.min(5000, Math.max(1, Math.floor(options?.limit ?? 1000)));
+    const targetAgent = options?.agentLabel ? options.agentLabel.trim() : null;
+    try {
+      const res = targetAgent
+        ? await this.db
+            .prepare(
+              "SELECT * FROM traffic_events WHERE pass_id = ? AND timestamp >= ? AND agent_label = ? ORDER BY timestamp DESC LIMIT ?"
+            )
+            .bind(passId, cutoff, targetAgent, limit)
+            .all<any>()
+        : await this.db
+            .prepare(
+              "SELECT * FROM traffic_events WHERE pass_id = ? AND timestamp >= ? ORDER BY timestamp DESC LIMIT ?"
+            )
+            .bind(passId, cutoff, limit)
+            .all<any>();
+      return (res.results || []).map((r) => this.mapTrafficEventRow(r));
+    } catch {
+      return [];
+    }
   }
 
   private async ensureFirewallProTables(): Promise<void> {

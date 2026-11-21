@@ -4,7 +4,7 @@ import { getArbiterStore, type Env } from "./env.js";
 import { clearRouter } from "./routes/clear.js";
 import { scoreRouter } from "./routes/score.js";
 import { kyaRouter } from "./routes/kya.js";
-import { discoveryRouter } from "./routes/discovery.js";
+import { discoveryRouter, getAgentsMd } from "./routes/discovery.js";
 import { mcpHttpRouter } from "./routes/mcp-http.js";
 import { sandboxRouter } from "./routes/sandbox.js";
 import { bazaarRouter } from "./routes/bazaar.js";
@@ -15,14 +15,15 @@ import { proxyRouter, handleUrlProxyRequest } from "./routes/proxy.js";
 import { gatewaysRouter, gatewayProxyRouter } from "./routes/gateways.js";
 import { radarRouter } from "./routes/radar.js";
 import { forensicsRouter } from "./routes/forensics.js";
-import { passesRouter } from "./routes/passes.js";
+import { passesRouter, renderBuyPassHtmlPage } from "./routes/passes.js";
 import { rpcFirewallRouter } from "./routes/rpc-firewall.js";
 import { policyRouter } from "./routes/policy.js";
 import { monitorsRouter, runWatchtowerCronTick } from "./routes/monitors.js";
+import { receiptRouter } from "./routes/receipt.js";
 import {
   telemetryMiddleware,
   telemetryRouter,
-  renderLiveHistoryDiagnosticsHtml
+  serveLiveHistoryResponse
 } from "./middleware/telemetry.js";
 import { buildNullClearMetadata } from "./middleware/free-tier.js";
 import { runEcosystemCrawlAndAudit } from "./services/ecosystem-crawler.js";
@@ -58,6 +59,8 @@ app.use(
       "x-nullclear-free-trial",
       "X-NullClear-Key",
       "x-nullclear-key",
+      "X-Agent-Label",
+      "x-agent-label",
       "x-mcp-session",
       "mcp-session-id"
     ],
@@ -66,20 +69,25 @@ app.use(
       "PAYMENT-REQUIRED",
       "Payment-Required",
       "X-Payment-Required",
+      "WWW-Authenticate",
       "X-Payment-Response",
       "Pay-To",
       "X-NullClear-Attestation",
       "X-NullClear-Deliverable-SHA256",
       "X-NullClear-Receipt-Signature",
+      "X-NullClear-Receipt-Url",
       "X-NullClear-Verified",
       "X-NullClear-Verified-KYA",
       "X-NullClear-KYA-Signature",
       "X-NullClear-Receipt-Id",
       "X-NullClear-Gateway",
       "X-NullClear-Firewall",
+      "X-NullClear-Low-Balance",
+      "X-NullClear-Renew-Url",
       "x-nullclear-tier",
       "x-nullclear-pass-tier",
       "x-nullclear-credits-remaining",
+      "X-NullClear-Credits-Remaining",
       "x-nullclear-remaining-free-calls"
     ]
   })
@@ -87,6 +95,18 @@ app.use(
 
 // Zero-latency D1 Traffic Attribution & Funnel Telemetry Middleware
 app.use("*", telemetryMiddleware);
+
+// Direct /agents.md & /.well-known/agents.md handlers (bypassing proxy routing and schema validators)
+const serveAgentsMarkdown = (c: any) =>
+  c.body(getAgentsMd(), 200, {
+    "Content-Type": "text/markdown; charset=utf-8",
+    "Cache-Control": "public, max-age=3600"
+  });
+app.get("/agents.md", serveAgentsMarkdown);
+app.get("/.well-known/agents.md", serveAgentsMarkdown);
+
+// Interactive Prepaid Pass Checkout UI (/buy-pass)
+app.get("/buy-pass", (c) => c.html(renderBuyPassHtmlPage(c.req.query("tier"))));
 
 // Jina-Reader style URL-Prefix Proxy (/https://... and /http://...)
 app.use("*", async (c, next) => {
@@ -168,15 +188,12 @@ app.route("/safepay", safepayWebRouter);
 app.get("/deal/:dealId", (c) => safepayWebRouter.fetch(c.req.raw, c.env));
 app.get("/for/:vertical", (c) => safepayWebRouter.fetch(c.req.raw, c.env));
 
+// Public Cryptographic Receipt Verifier (/receipt/:id & /v1/receipt/:id)
+app.route("/", receiptRouter);
+
 // Telemetry, Live History & Diagnostics, Proxy, Seller Gateway, and Radar Routes
 app.route("/v1/telemetry", telemetryRouter);
-app.get("/history", async (c) => {
-  const store = getArbiterStore(c.env);
-  const filter = c.req.query("filter") || "real_agents";
-  const search = c.req.query("search") || "";
-  const report = await store.getProductHistoryAndDiagnostics({ limit: 120, filter, search });
-  return c.html(renderLiveHistoryDiagnosticsHtml(report));
-});
+app.get("/history", (c) => serveLiveHistoryResponse(c, "html"));
 app.route("/v1/proxy", proxyRouter);
 app.route("/v1/gateways", gatewaysRouter);
 app.route("/g", gatewayProxyRouter);

@@ -7,8 +7,13 @@ import {
 } from "../middleware/free-tier.js";
 import { authenticateAndDebitPass } from "../middleware/pass-auth.js";
 import { settleTransfer } from "../services/facilitator.js";
-import { extractPaymentAuthorization, attachDualX402Headers } from "../utils/x402-headers.js";
+import {
+  extractPaymentAuthorization,
+  attachDualX402Headers,
+  buildWwwAuthenticateX402Header
+} from "../utils/x402-headers.js";
 import { keccak256, stringToHex } from "viem";
+import { attachReceiptHeader } from "./receipt.js";
 import {
   scanTokenForensics,
   inspectContractAbiAndProxy,
@@ -152,6 +157,13 @@ export function buildForensic402Response(c: any, resourcePath: string, errorMess
   c.header("PAYMENT-REQUIRED", upgrade.encodedHeader);
   c.header("X-Payment-Required", upgrade.encodedHeader);
   c.header("Pay-To", upgrade.treasuryAddress);
+  c.header(
+    "WWW-Authenticate",
+    buildWwwAuthenticateX402Header({
+      amount: "5000",
+      recipient: upgrade.treasuryAddress
+    })
+  );
   return c.json(
     {
       error: errorMessage || `Free tier limit (${FORENSIC_FREE_TIER_DAILY_LIMIT} requests/day/IP) exceeded.`,
@@ -313,27 +325,31 @@ export async function resolveForensicAccess(
     }
 
     const store = getArbiterStore(c.env);
-    await store.recordPassedClearing(
-      c.env?.ERC8004_AGENT_ID || "124595",
-      parsedAuth.from,
-      "5000",
-      "25",
-      {
-        id: `forensic_${Date.now()}_${txHash.slice(2, 10)}`,
-        network: "eip155:8453",
-        buyerAddress: parsedAuth.from,
-        sellerAgentId: c.env?.ERC8004_AGENT_ID || "124595",
-        amount: "5000",
-        fee: "25",
-        targetUrl: `https://api.nullclear.dev${resourcePath}`,
-        status: "PASSED",
-        responseHash: txHash,
-        attestationSignature: txHash,
-        eip3009Nonce: parsedAuth.nonce,
-        createdAt: Date.now()
-      }
-    );
+    const clearingId = `forensic_${Date.now()}_${txHash.slice(2, 10)}`;
+    await store
+      .recordPassedClearing(
+        c.env?.ERC8004_AGENT_ID || "124595",
+        parsedAuth.from,
+        "5000",
+        "25",
+        {
+          id: clearingId,
+          network: "eip155:8453",
+          buyerAddress: parsedAuth.from,
+          sellerAgentId: c.env?.ERC8004_AGENT_ID || "124595",
+          amount: "5000",
+          fee: "25",
+          targetUrl: `https://api.nullclear.dev${resourcePath}`,
+          status: "PASSED",
+          responseHash: txHash,
+          attestationSignature: txHash,
+          eip3009Nonce: parsedAuth.nonce,
+          createdAt: Date.now()
+        }
+      )
+      .catch(() => {});
 
+    attachReceiptHeader(c, clearingId);
     attachDualX402Headers(c, {
       status: 200,
       transaction: txHash,
@@ -1193,22 +1209,68 @@ export function renderForensicScanHtmlPage(scan: ForensicScanPayload): string {
 </html>`;
 }
 
+const PUBLIC_SCORECARD_CACHE_CONTROL =
+  "public, max-age=3600, s-maxage=86400, stale-while-revalidate=604800";
+const PUBLIC_SCORECARD_KV_MAX_AGE_MS = 24 * 60 * 60 * 1000;
+
 async function handleWebScanRoute(c: any, rawChain: string, rawAddressParam: string) {
   const isMd = shouldServeMarkdown(c, rawAddressParam);
   const cleanAddress = rawAddressParam.toLowerCase().endsWith(".md")
     ? rawAddressParam.slice(0, -3)
     : rawAddressParam;
+  const normChain = normalizeChain(rawChain);
+  const normAddr = normChain === "solana" ? cleanAddress.trim() : cleanAddress.trim().toLowerCase();
 
-  const scan = await scanTokenForensics(rawChain, cleanAddress, c.env);
-  c.header("X-NullClear-Attestation", scan.provenance.attestationSha256);
-  c.header("Vary", "Accept, User-Agent");
+  // Check Cloudflare Edge Cache API first so crawler traffic (e.g. AhrefsBot) serves in <50ms
+  const edgeCache =
+    typeof caches !== "undefined" && (caches as any)?.default
+      ? ((caches as any).default as Cache)
+      : null;
+  const cacheKeyUrl = `https://cache.nullclear.dev/scan/${encodeURIComponent(normChain)}/${encodeURIComponent(normAddr)}.${isMd ? "md" : "html"}`;
+  const edgeCacheReq = new Request(cacheKeyUrl, { method: "GET" });
 
-  if (isMd) {
-    c.header("Content-Type", "text/markdown; charset=utf-8");
-    return c.body(formatScanMarkdown(scan));
+  if (edgeCache) {
+    try {
+      const cachedRes = await edgeCache.match(edgeCacheReq);
+      if (cachedRes) {
+        const hitHeaders = new Headers(cachedRes.headers);
+        hitHeaders.set("Cache-Control", PUBLIC_SCORECARD_CACHE_CONTROL);
+        hitHeaders.set("X-NullClear-Cache", "EDGE_HIT");
+        return new Response(cachedRes.body, {
+          status: cachedRes.status,
+          headers: hitHeaders
+        });
+      }
+    } catch {}
   }
 
-  return c.html(renderForensicScanHtmlPage(scan));
+  const scan = await scanTokenForensics(rawChain, cleanAddress, c.env, {
+    maxCacheAgeMs: PUBLIC_SCORECARD_KV_MAX_AGE_MS
+  });
+
+  const bodyText = isMd ? formatScanMarkdown(scan) : renderForensicScanHtmlPage(scan);
+  const contentType = isMd ? "text/markdown; charset=utf-8" : "text/html; charset=utf-8";
+  const responseHeaders = new Headers({
+    "Content-Type": contentType,
+    "Cache-Control": PUBLIC_SCORECARD_CACHE_CONTROL,
+    Vary: "Accept, User-Agent",
+    "X-NullClear-Attestation": scan.provenance.attestationSha256,
+    "X-NullClear-Cache": scan.cached ? "KV_HIT" : "MISS"
+  });
+
+  const res = new Response(bodyText, {
+    status: 200,
+    headers: responseHeaders
+  });
+
+  if (edgeCache) {
+    const putPromise = edgeCache.put(edgeCacheReq, res.clone()).catch(() => {});
+    if (c.executionCtx && typeof c.executionCtx.waitUntil === "function") {
+      c.executionCtx.waitUntil(putPromise);
+    }
+  }
+
+  return res;
 }
 
 forensicsRouter.get("/scan/:chain/:address", (c) => {
@@ -1274,7 +1336,7 @@ forensicsRouter.get("/x402", (c) => {
     <div class="card">
       <h2 style="font-size:20px;margin-bottom:8px;color:var(--cyan);">🚀 Register a 1-Click x402 Seller Gateway (<code>/g/:slug</code>)</h2>
       <p style="color:var(--muted);font-size:14px;margin-bottom:12px;">
-        Monetize any REST API or unlock unlimited rate limits (>100 req/day) via Base Mainnet USDC EIP-3009 TransferWithAuthorization ($0.005 USDC/call).
+        Monetize any REST API or unlock unlimited rate limits (&gt;10 free calls/day) via Base Mainnet USDC EIP-3009 TransferWithAuthorization ($0.005 USDC/call) or a Prepaid Pass.
       </p>
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px;">
         <div>

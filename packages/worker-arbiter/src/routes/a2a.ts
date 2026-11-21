@@ -63,7 +63,7 @@ function getExtendedCard(c: any) {
         id: "nullclear-bazaar-suite",
         name: "x402 Payable Intelligence Oracles ($0.005-$0.025 USDC / Free Trial)",
         description:
-          "Live 7-chain Bazaar endpoints ($0.005-$0.10 USDC with 2 free trial calls/day) plus zero-key forensic endpoints (10 free daily calls, then $0.005 USDC or Prepaid Pass): guard, token-security, inspect, wallet-risk, verified-fetch, market-oracle, audit, verify, scan-batch, due-diligence, scan, decode, simulate.",
+          "Live 7-chain Bazaar endpoints ($0.005-$0.10 USDC with 10 free calls/day/IP) plus zero-key forensic endpoints (10 free daily calls, then $0.005 USDC or Prepaid Pass): guard, token-security, inspect, wallet-risk, verified-fetch, market-oracle, audit, verify, scan-batch, due-diligence, scan, decode, simulate.",
         endpoint: "https://api.nullclear.dev/openapi.json",
         tags: ["x402", "bazaar", "defi", "oracle", "security"],
         examples: ["Scan 0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913 on Base for honeypot taxes and proxy safety"]

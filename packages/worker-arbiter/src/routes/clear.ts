@@ -34,6 +34,7 @@ import {
 import { inspectSoftPaywallAndContent } from "../services/soft-paywall-guard.js";
 import { getVerifiedKyaHeaderForBuyer } from "../services/kya-verifier.js";
 import { SOFT_PAYWALL_SANDBOX_HTML } from "./sandbox.js";
+import { attachReceiptHeader } from "./receipt.js";
 
 export const clearRouter = new Hono<Env>();
 
@@ -329,7 +330,7 @@ clearRouter.get("/", (c) => {
   return c.json({
     service: "NullClear Deferred Schema-Escrow Clearinghouse Proxy",
     method: "POST",
-    usage: "Submit POST /v1/clear with targetUrl (and optional paymentSignatureHeader; omit for 10 free daily Bazaar/Sandbox calls) to execute zero-loss x402 settlement",
+    usage: "Submit POST /v1/clear with targetUrl and paymentSignatureHeader (or pass x-nullclear-free-trial: true for 10 free daily sandbox calls) to execute zero-loss x402 settlement",
     documentation: "https://api.nullclear.dev/openapi.json",
     _nullclear: buildNullClearMetadata()
   });
@@ -555,6 +556,7 @@ clearRouter.post("/", async (c) => {
   let winningSettlement: X402PaymentResponse | null = null;
   let winningSettlementRouting = "";
   let winningClearingId = "";
+  let lastVoidedClearingId = "";
   let winningRawText = "";
   let winningJson: unknown = null;
   let winningFeeAtomic = "0";
@@ -837,9 +839,10 @@ clearRouter.post("/", async (c) => {
         });
 
         if (i === 0 && allCandidates.length === 1) {
+          const receiptUrl = attachReceiptHeader(c, candidateClearingId);
           c.header("X-NullClear-Verified", "false");
           c.header("X-NullClear-Payment-Shredded", "true");
-          return c.json(softPaywallCheck.errorPayload, 502);
+          return c.json({ ...softPaywallCheck.errorPayload, clearingId: candidateClearingId, receiptUrl }, 502);
         }
 
         failedCandidates.push({
@@ -881,6 +884,7 @@ clearRouter.post("/", async (c) => {
         createdAt: Date.now()
       });
 
+      lastVoidedClearingId = candidateClearingId;
       failedCandidates.push({
         targetUrl: candidate.targetUrl,
         sellerAgentId: candidate.sellerAgentId,
@@ -1056,12 +1060,14 @@ clearRouter.post("/", async (c) => {
       paymentResponse: paymentResponsePayload,
       verified: true
     });
+    const receiptUrl = attachReceiptHeader(c, winningClearingId);
     c.header("X-NullClear-Attestation", encodeBase64Json(winningSignedReceipt));
 
     return c.json({
       cleared: true,
       settled: true,
       clearingId: winningClearingId,
+      receiptUrl,
       buyerCharged: winningPaymentPayload.accepted.amount,
       clearingFee: winningFeeAtomic,
       settlementRouting: winningSettlementRouting,
@@ -1087,11 +1093,13 @@ clearRouter.post("/", async (c) => {
     errorReason: "nullclear_schema_validation_failed"
   };
 
+  const voidReceiptUrl = lastVoidedClearingId ? attachReceiptHeader(c, lastVoidedClearingId) : undefined;
   c.header("PAYMENT-RESPONSE", encodeBase64Json(voidResponse));
   return c.json(
     {
       cleared: false,
       settled: false,
+      ...(lastVoidedClearingId ? { clearingId: lastVoidedClearingId, receiptUrl: voidReceiptUrl } : {}),
       buyerCharged: "0",
       stage,
       failoverAttempts: failedCandidates.length,

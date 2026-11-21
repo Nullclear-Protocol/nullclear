@@ -54,29 +54,48 @@ export function classifyActorType(
     return "MCP_CLIENT";
   }
 
-  // 3. Check SDK Agents (exclude known x402 directory indexers so they classify cleanly)
+  // 3. Explicit payment/pass credentials always classify as a real SDK_AGENT (payment overrides bot UAs)
+  const hasExplicitPaymentOrPass =
+    headers.has("payment-signature") ||
+    headers.has("x-payment") ||
+    headers.has("x-nullclear-authorization") ||
+    (headers.get("authorization") || "").includes("nc_live_") ||
+    (headers.get("x-nullclear-key") || "").includes("nc_live_") ||
+    path.includes("/nc_live_");
+  if (hasExplicitPaymentOrPass) {
+    return "SDK_AGENT";
+  }
+
+  // 4. Check known directory indexers & unpaid probe/monitor bots BEFORE `ua.includes("x402")`
+  const isProbeOrMonitorUa =
+    isKnownDirectoryIndexerUa(ua) ||
+    /(?:payability|liveness|census|harvester|trustindex|ispettore|authority-engine|observer|all_agents|reflectionbot|ibou-search|crolbot|-monitor|_monitor|-probe|_probe|\bprobe\b)/i.test(
+      ua
+    );
+  if (isProbeOrMonitorUa) {
+    return "BOT_SCANNER";
+  }
+
+  // 5. Check SDK Agents
   if (
-    !isKnownDirectoryIndexerUa(ua) &&
-    (ua.includes("nullclear") ||
-      ua.includes("x402") ||
-      ua.includes("agentcash") ||
-      ua.includes("viem") ||
-      ua.includes("axios") ||
-      ua.includes("undici") ||
-      ua.includes("node-fetch") ||
-      ua.includes("python-requests") ||
-      ua.includes("httpx") ||
-      ua.includes("aiohttp") ||
-      ua.includes("go-http-client") ||
-      ua.includes("langchain") ||
-      ua.includes("autogen") ||
-      ua.includes("crewai") ||
-      headers.has("payment-signature") ||
-      headers.has("x-payment") ||
-      headers.has("x-nullclear-escrow-hold") ||
-      headers.has("x-nullclear-verified-escrow") ||
-      headers.has("x-nullclear-free-trial") ||
-      path.startsWith("/a2a"))
+    ua.includes("nullclear") ||
+    ua.includes("x402") ||
+    ua.includes("agentcash") ||
+    ua.includes("viem") ||
+    ua.includes("axios") ||
+    ua.includes("undici") ||
+    ua.includes("node-fetch") ||
+    ua.includes("python-requests") ||
+    ua.includes("httpx") ||
+    ua.includes("aiohttp") ||
+    ua.includes("go-http-client") ||
+    ua.includes("langchain") ||
+    ua.includes("autogen") ||
+    ua.includes("crewai") ||
+    headers.has("x-nullclear-escrow-hold") ||
+    headers.has("x-nullclear-verified-escrow") ||
+    headers.has("x-nullclear-free-trial") ||
+    path.startsWith("/a2a")
   ) {
     return "SDK_AGENT";
   }
@@ -257,9 +276,22 @@ export async function telemetryMiddleware(c: Context<Env>, next: Next) {
       toolName = "forensics:decode";
       const qIn = c.req.query("input") || c.req.query("data") || c.req.query("tx");
       if (qIn) targetSubject = sanitizeDiagnosticField(`${c.req.query("chain") || "base"}:${qIn.slice(0, 26)}…`);
-    } else if (path.startsWith("/v1/pass/")) {
-      toolName = path.includes("/buy") ? "pass:buy" : "pass:status";
-      targetSubject = sanitizeDiagnosticField(`tier:${c.req.query("tier") || "starter"}`);
+    } else if (path === "/v1/pass" || path === "/v1/pass/" || path.startsWith("/v1/pass/")) {
+      toolName = path.includes("/buy")
+        ? "pass:buy"
+        : path.includes("/export")
+          ? "pass:export"
+          : path.includes("/status")
+            ? "pass:status"
+            : "pass:catalog";
+      targetSubject = sanitizeDiagnosticField(
+        path.includes("/export")
+          ? `format:${c.req.query("format") || "csv"}`
+          : `tier:${c.req.query("tier") || "starter"}`
+      );
+    } else if (path.startsWith("/receipt/") || path.startsWith("/v1/receipt/")) {
+      toolName = "public:receipt";
+      targetSubject = sanitizeDiagnosticField(path.replace(/^\/(?:v1\/)?receipt\//, ""));
     } else if (path.startsWith("/v1/score/")) {
       toolName = "reputation:score";
       targetSubject = sanitizeDiagnosticField(path.replace("/v1/score/", ""));
@@ -319,10 +351,28 @@ export async function telemetryMiddleware(c: Context<Env>, next: Next) {
   const actorType = classifyActorType(rawUa, c.req.raw.headers, path, method);
   const clientId = maskClientKeyForDisplay(getClientIdentifier(c));
 
+  const isPassReadOnly =
+    path === "/v1/pass" ||
+    path === "/v1/pass/" ||
+    path.startsWith("/v1/pass/status") ||
+    path.startsWith("/v1/pass/tiers") ||
+    path.startsWith("/v1/pass/export");
+  const isPublicReceipt = path.startsWith("/receipt/") || path.startsWith("/v1/receipt/");
   let paymentTier: string | null = resTier || null;
   let diagnosticReason: string | null = null;
 
-  if (resTier === "x402-paid" || (hasPayHeader && status === 200 && !isFreeTrial)) {
+  if (status >= 300 && status < 400) {
+    paymentTier = `http-${status}`;
+    diagnosticReason = `BROWSER REDIRECT (${status}): Redirected interactive browser navigation to web UI`;
+  } else if (isPassReadOnly && status === 200) {
+    paymentTier = "unmetered";
+    diagnosticReason =
+      "PASS READONLY (0 CREDITS): Read-only Prepaid Pass status/tiers/export lookup — not a paid settlement";
+  } else if (isPublicReceipt && status === 200) {
+    paymentTier = "unmetered";
+    diagnosticReason =
+      "PUBLIC RECEIPT: Cryptographic clearing verifier (/receipt/:id) is public and unmetered";
+  } else if (resTier === "x402-paid" || (hasPayHeader && status === 200 && !isFreeTrial)) {
     paymentTier = "x402-paid";
     diagnosticReason = "PAID: Settled on-chain x402 EIP-3009 USDC authorization on Base";
   } else if (resTier === "prepaid-pass" || (hasPassKey && status === 200)) {
@@ -373,6 +423,13 @@ export async function telemetryMiddleware(c: Context<Env>, next: Next) {
   const asn = c.req.header("cf-connecting-asn") || (cf?.asn ? String(cf.asn) : "0");
   const referer = c.req.header("referer") || c.req.header("referrer") || "";
 
+  const passId = c.get("passId") || null;
+  const creditsDeducted =
+    typeof c.get("creditsDeducted") === "number" ? (c.get("creditsDeducted") as number) : 0;
+  const agentLabel = c.get("agentLabel") ?? null;
+  const receiptUrl =
+    c.get("receiptUrl") || c.res?.headers?.get("x-nullclear-receipt-url") || null;
+
   const event: TrafficEventRecord = {
     id: `evt_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`,
     timestamp: Date.now(),
@@ -393,7 +450,11 @@ export async function telemetryMiddleware(c: Context<Env>, next: Next) {
     clientId,
     targetSubject,
     diagnosticReason,
-    latencyMs
+    latencyMs,
+    agentLabel,
+    passId,
+    creditsDeducted,
+    receiptUrl
   };
 
   const store = getArbiterStore(c.env);
@@ -1041,7 +1102,7 @@ export function renderLiveHistoryDiagnosticsHtml(report: PaymentDiagnosticsRepor
           </p>
         </div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
-          <button type="button" id="toggleLiveBtn" class="btn" onclick="toggleAutoPoll()">⏸ Pause Live (5s)</button>
+          <button type="button" id="toggleLiveBtn" class="btn" onclick="toggleAutoPoll()">⏸ Pause Live (15s)</button>
           <button type="button" class="btn" onclick="fetchLiveHistory()">🔄 Refresh Now</button>
           <button type="button" class="btn btn-emerald" onclick="triggerLiveTestScan(this)">🧪 Fire Live Test Scan</button>
           <a href="/v1/telemetry/history" target="_blank" class="btn mono">JSON API ↗</a>
@@ -1336,7 +1397,7 @@ export function renderLiveHistoryDiagnosticsHtml(report: PaymentDiagnosticsRepor
       isLivePolling = !isLivePolling;
       const btn = document.getElementById('toggleLiveBtn');
       if (isLivePolling) {
-        btn.textContent = '⏸ Pause Live (5s)';
+        btn.textContent = '⏸ Pause Live (15s)';
         fetchLiveHistory();
       } else {
         btn.textContent = '▶ Resume Live';
@@ -1438,8 +1499,8 @@ export function renderLiveHistoryDiagnosticsHtml(report: PaymentDiagnosticsRepor
     }
 
     livePollTimer = setInterval(() => {
-      if (isLivePolling) fetchLiveHistory();
-    }, 5000);
+      if (isLivePolling && !document.hidden) fetchLiveHistory();
+    }, 15000);
   </script>
 </body>
 </html>`;
@@ -1457,36 +1518,74 @@ telemetryRouter.get("/funnel", async (c) => {
   });
 });
 
-telemetryRouter.get("/history", async (c) => {
-  const store = getArbiterStore(c.env);
-  const limit = Number(c.req.query("limit") || 120);
-  const filter = c.req.query("filter") || "real_agents";
-  const search = c.req.query("search") || "";
-  const report = await store.getProductHistoryAndDiagnostics({ limit, filter, search });
-  return c.json({
-    success: true,
-    ...report,
-    _nullclear: buildNullClearMetadata({ verified: true })
-  });
-});
+const TELEMETRY_HISTORY_CACHE_CONTROL = "public, max-age=15, s-maxage=15";
 
-telemetryRouter.get("/diagnostics", async (c) => {
-  const store = getArbiterStore(c.env);
-  const limit = Number(c.req.query("limit") || 120);
+export async function serveLiveHistoryResponse(
+  c: {
+    req: { query: (name: string) => string | undefined };
+    env: Env["Bindings"];
+    executionCtx?: { waitUntil?: (promise: Promise<unknown>) => void };
+  },
+  mode: "html" | "json"
+): Promise<Response> {
+  const limitRaw = Number(c.req.query("limit") || 120);
+  const limit = Number.isFinite(limitRaw) && limitRaw > 0 ? Math.min(Math.floor(limitRaw), 500) : 120;
   const filter = c.req.query("filter") || "real_agents";
   const search = c.req.query("search") || "";
-  const report = await store.getProductHistoryAndDiagnostics({ limit, filter, search });
-  return c.json({
-    success: true,
-    ...report,
-    _nullclear: buildNullClearMetadata({ verified: true })
-  });
-});
 
-telemetryRouter.get("/dashboard", async (c) => {
+  const edgeCache =
+    typeof caches !== "undefined" && (caches as any)?.default
+      ? ((caches as any).default as Cache)
+      : null;
+  const cacheKeyUrl = `https://cache.nullclear.dev/telemetry/history.${mode}?limit=${limit}&filter=${encodeURIComponent(filter)}&search=${encodeURIComponent(search)}`;
+  const edgeCacheReq = new Request(cacheKeyUrl, { method: "GET" });
+
+  if (edgeCache) {
+    try {
+      const cachedRes = await edgeCache.match(edgeCacheReq);
+      if (cachedRes) {
+        const hitHeaders = new Headers(cachedRes.headers);
+        hitHeaders.set("Cache-Control", TELEMETRY_HISTORY_CACHE_CONTROL);
+        hitHeaders.set("X-NullClear-Cache", "EDGE_HIT");
+        return new Response(cachedRes.body, {
+          status: cachedRes.status,
+          headers: hitHeaders
+        });
+      }
+    } catch {}
+  }
+
   const store = getArbiterStore(c.env);
-  const filter = c.req.query("filter") || "real_agents";
-  const search = c.req.query("search") || "";
-  const report = await store.getProductHistoryAndDiagnostics({ limit: 120, filter, search });
-  return c.html(renderLiveHistoryDiagnosticsHtml(report));
-});
+  const report = await store.getProductHistoryAndDiagnostics({ limit, filter, search });
+
+  const body =
+    mode === "html"
+      ? renderLiveHistoryDiagnosticsHtml(report)
+      : JSON.stringify({
+          success: true,
+          ...report,
+          _nullclear: buildNullClearMetadata({ verified: true })
+        });
+
+  const headers = new Headers({
+    "Content-Type": mode === "html" ? "text/html; charset=utf-8" : "application/json; charset=utf-8",
+    "Cache-Control": TELEMETRY_HISTORY_CACHE_CONTROL,
+    "X-NullClear-Cache": "MISS"
+  });
+  const res = new Response(body, { status: 200, headers });
+
+  if (edgeCache) {
+    const putPromise = edgeCache.put(edgeCacheReq, res.clone()).catch(() => {});
+    if (c.executionCtx && typeof c.executionCtx.waitUntil === "function") {
+      c.executionCtx.waitUntil(putPromise);
+    }
+  }
+
+  return res;
+}
+
+telemetryRouter.get("/history", async (c) => serveLiveHistoryResponse(c, "json"));
+
+telemetryRouter.get("/diagnostics", async (c) => serveLiveHistoryResponse(c, "json"));
+
+telemetryRouter.get("/dashboard", async (c) => serveLiveHistoryResponse(c, "html"));

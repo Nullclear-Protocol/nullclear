@@ -402,10 +402,11 @@ describe("Next-Gen Protocol Upgrades: x402 V1/V2 Headers, Soft-Paywall Guard & P
       expect(verifyJson.payload.arbiterAgentId).toBe(124595);
     });
 
-    it("GET /v1/bazaar/audit strictly returns 402 Payment Required by default even on production host / client IP", async () => {
-      const res = await app.fetch(
+    it("GET /v1/bazaar/audit returns strict 402 by default (including to directory indexers) and 200 only with explicit x-nullclear-free-trial: true", async () => {
+      const indexerRes = await app.fetch(
         new Request("https://api.nullclear.dev/v1/bazaar/audit", {
           headers: {
+            "User-Agent": "PayAI-Bazaar/1.0",
             "cf-connecting-ip": "203.0.113.195",
             "x-forwarded-for": "203.0.113.195"
           }
@@ -413,16 +414,42 @@ describe("Next-Gen Protocol Upgrades: x402 V1/V2 Headers, Soft-Paywall Guard & P
         testEnv
       );
 
-      expect(res.status).toBe(402);
-      expect(res.headers.get("PAYMENT-REQUIRED")).toBeTruthy();
-      expect(res.headers.get("X-Payment-Required")).toBeTruthy();
+      expect(indexerRes.status).toBe(402);
+      expect(indexerRes.headers.get("PAYMENT-REQUIRED")).toBeTruthy();
+      expect(indexerRes.headers.get("X-Payment-Required")).toBeTruthy();
+      expect(indexerRes.headers.get("WWW-Authenticate")).toContain("x402 realm=\"NullClear\"");
 
-      const json = (await res.json()) as any;
+      const json = (await indexerRes.json()) as any;
       expect(json.error).toBe("Payment Required");
       expect(json.x402Version).toBe(2);
       expect(Array.isArray(json.accepts)).toBe(true);
       expect(json.accepts[0].scheme).toBe("exact");
       expect(json.accepts[0].amount).toBe("5000");
+
+      const unauthDefaultRes = await app.fetch(
+        new Request("https://api.nullclear.dev/v1/bazaar/audit", {
+          headers: {
+            "User-Agent": "BlockchainIQ-ETL/1.0",
+            "cf-connecting-ip": "203.0.113.196"
+          }
+        }),
+        testEnv
+      );
+      expect(unauthDefaultRes.status).toBe(402);
+      expect(unauthDefaultRes.headers.get("PAYMENT-REQUIRED")).toBeTruthy();
+
+      const explicitTrialRes = await app.fetch(
+        new Request("https://api.nullclear.dev/v1/bazaar/audit", {
+          headers: {
+            "User-Agent": "BlockchainIQ-ETL/1.0",
+            "cf-connecting-ip": "203.0.113.196",
+            "x-nullclear-free-trial": "true"
+          }
+        }),
+        testEnv
+      );
+      expect(explicitTrialRes.status).toBe(200);
+      expect(explicitTrialRes.headers.get("x-nullclear-remaining-free-calls")).toBe("9");
     });
 
     it("URL-prefix proxy returns 403 Publisher Opt-Out for blacklisted domain x402-trust.com", async () => {

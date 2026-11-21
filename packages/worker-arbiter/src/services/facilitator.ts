@@ -13,6 +13,7 @@ import {
   EIP3009_ABI,
   getChainConfig,
   type EIP3009Authorization,
+  type SettlementErrorCode,
   type X402PaymentOption,
   type X402PaymentResponse
 } from "@nullclear/shared";
@@ -21,6 +22,7 @@ import { generateCdpJwt } from "./cdp-auth.js";
 export interface VerificationResult {
   valid: boolean;
   error?: string;
+  errorCode?: SettlementErrorCode;
 }
 
 export interface SettlementOptions {
@@ -31,6 +33,7 @@ export interface SettlementOptions {
   cdpApiKeyId?: string;
   cdpApiKeySecret?: string;
   settlementMode?: "onchain" | "facilitator" | "simulated";
+  onchainMethod?: "transferWithAuthorization" | "receiveWithAuthorization";
   arbiterPrivateKey?: string;
   rpcUrl?: string;
   environment?: string;
@@ -44,6 +47,57 @@ export interface SettlementOptions {
     iconUrl?: string;
   };
   bazaarExtension?: unknown;
+}
+
+const MIN_RELAYER_GAS_WEI = 10_000_000_000_000n; // 0.00001 ETH on Base
+
+/**
+ * Classifies EIP-3009 / facilitator / on-chain settlement error strings into explicit HTTP status codes
+ * and protocol error codes so relayer failures (502) never masquerade as 402 payment rejections.
+ */
+export function classifySettlementErrorReason(reason: string): {
+  errorCode: SettlementErrorCode;
+  httpStatus: 400 | 402 | 502;
+} {
+  const lower = (reason || "").toLowerCase();
+
+  if (
+    /relayer_insufficient_gas|arbiter_private_key_missing|facilitator_url_required|insufficient funds for gas|insufficient funds for intrinsic|intrinsic transaction cost|http 5\d{2}|http 429|settlement_pending|connection error|fetch failed|timeout|aborted|econnrefused|network error|nonce too low|replacement transaction underpriced|rpc/i.test(
+      lower
+    )
+  ) {
+    return { errorCode: "RELAYER_ERROR", httpStatus: 502 };
+  }
+
+  if (
+    /authorization expired|authorization is expired|validbefore|expired|not yet active|validafter/i.test(
+      lower
+    )
+  ) {
+    return { errorCode: "AUTHORIZATION_EXPIRED", httpStatus: 400 };
+  }
+
+  if (
+    /authorization is used|authorization_used|nonce_already_used|nonce already used|nonce_used|already used|transfer amount exceeds balance|exceeds balance|insufficient_funds|insufficient funds|insufficient usdc|insufficient balance/i.test(
+      lower
+    )
+  ) {
+    return { errorCode: "NONCE_USED_OR_INSUFFICIENT_FUNDS", httpStatus: 402 };
+  }
+
+  if (
+    /invalid signature|invalid_exact_evm_payload_signature|signature verification failed|ecrecover|wrong domain|domain separator|verifyingcontract|chainid|does not match accepted payto|bad_request|invalid signer/i.test(
+      lower
+    )
+  ) {
+    return { errorCode: "INVALID_SIGNATURE", httpStatus: 400 };
+  }
+
+  if (/less than required|insufficient.*value/i.test(lower)) {
+    return { errorCode: "INSUFFICIENT_VALUE", httpStatus: 402 };
+  }
+
+  return { errorCode: "RELAYER_ERROR", httpStatus: 502 };
 }
 
 const AUTHORIZATION_USED_TOPIC0 =
@@ -138,16 +192,25 @@ export async function verifyEIP3009Local(
     const validAfter = BigInt(authorization.validAfter);
 
     if (validBefore <= now) {
-      return { valid: false, error: `Authorization expired: validBefore ${validBefore} <= current ${now}` };
+      return {
+        valid: false,
+        errorCode: "AUTHORIZATION_EXPIRED",
+        error: `Authorization expired: validBefore ${validBefore} <= current ${now}`
+      };
     }
 
     if (validAfter > now) {
-      return { valid: false, error: `Authorization not yet active: validAfter ${validAfter} > current ${now}` };
+      return {
+        valid: false,
+        errorCode: "AUTHORIZATION_NOT_YET_ACTIVE",
+        error: `Authorization not yet active: validAfter ${validAfter} > current ${now}`
+      };
     }
 
     if (authorization.to.toLowerCase() !== accepted.payTo.toLowerCase()) {
       return {
         valid: false,
+        errorCode: "INVALID_SIGNATURE",
         error: `Authorization recipient ${authorization.to} does not match accepted payTo ${accepted.payTo}`
       };
     }
@@ -155,6 +218,7 @@ export async function verifyEIP3009Local(
     if (BigInt(authorization.value) < BigInt(accepted.amount)) {
       return {
         valid: false,
+        errorCode: "INSUFFICIENT_VALUE",
         error: `Authorization value ${authorization.value} is less than required ${accepted.amount}`
       };
     }
@@ -184,12 +248,20 @@ export async function verifyEIP3009Local(
     });
 
     if (!isSigValid) {
-      return { valid: false, error: "Cryptographic signature verification failed for EIP-3009 typed data" };
+      return {
+        valid: false,
+        errorCode: "INVALID_SIGNATURE",
+        error: `Cryptographic signature verification failed for EIP-3009 typed data (expected domain name="${domain.name}", version="${domain.version}", chainId=${domain.chainId}, verifyingContract=${domain.verifyingContract})`
+      };
     }
 
     return { valid: true };
   } catch (err: any) {
-    return { valid: false, error: `Verification error: ${err.message || String(err)}` };
+    return {
+      valid: false,
+      errorCode: "INVALID_SIGNATURE",
+      error: `Verification error: ${err.message || String(err)}`
+    };
   }
 }
 
@@ -215,6 +287,7 @@ export async function settleOnChain(options: SettlementOptions): Promise<X402Pay
         success: false,
         network: accepted.network,
         payer: authorization.from,
+        errorCode: "RELAYER_ERROR",
         errorReason: "ARBITER_PRIVATE_KEY_MISSING: Cannot settle on-chain without private key"
       };
     }
@@ -233,6 +306,24 @@ export async function settleOnChain(options: SettlementOptions): Promise<X402Pay
     const targetRpc = rpcUrl || chainConfig.rpcUrl;
     const account = privateKeyToAccount(arbiterPrivateKey as `0x${string}`);
     const targetChain = chainConfig.chainId === 8453 ? base : baseSepolia;
+
+    // Pre-flight check: in production, verify facilitator/relayer signer has sufficient Base ETH for gas
+    if (isProduction) {
+      const balanceHex = await jsonRpcPost(targetRpc, "eth_getBalance", [account.address, "latest"], 2500);
+      if (typeof balanceHex === "string" && /^0x[0-9a-fA-F]+$/.test(balanceHex)) {
+        const ethBalanceWei = BigInt(balanceHex);
+        if (ethBalanceWei < MIN_RELAYER_GAS_WEI) {
+          return {
+            success: false,
+            network: accepted.network,
+            payer: authorization.from,
+            errorCode: "RELAYER_ERROR",
+            errorReason: `RELAYER_INSUFFICIENT_GAS: Facilitator signer ${account.address} has insufficient Base ETH (${ethBalanceWei.toString()} wei) for gas`
+          };
+        }
+      }
+    }
+
     const walletClient = createWalletClient({
       account,
       chain: targetChain,
@@ -240,11 +331,17 @@ export async function settleOnChain(options: SettlementOptions): Promise<X402Pay
     });
 
     const { r, s, v } = hexToSignature(signature);
+    const normalizedV = Number(v === 0n || v === 1n ? v + 27n : v ?? 27n);
+    const fnName =
+      options.onchainMethod === "receiveWithAuthorization" ||
+      authorization.to.toLowerCase() === account.address.toLowerCase()
+        ? "receiveWithAuthorization"
+        : "transferWithAuthorization";
 
     const txHash = await walletClient.writeContract({
       address: chainConfig.usdc,
       abi: EIP3009_ABI,
-      functionName: "transferWithAuthorization",
+      functionName: fnName,
       args: [
         authorization.from,
         authorization.to,
@@ -252,7 +349,7 @@ export async function settleOnChain(options: SettlementOptions): Promise<X402Pay
         BigInt(authorization.validAfter),
         BigInt(authorization.validBefore),
         authorization.nonce,
-        Number(v),
+        normalizedV,
         r,
         s
       ]
@@ -265,12 +362,15 @@ export async function settleOnChain(options: SettlementOptions): Promise<X402Pay
       payer: authorization.from
     };
   } catch (err: any) {
+    const errMsg = err.message || String(err);
+    const classified = classifySettlementErrorReason(errMsg);
     if (isProduction) {
       return {
         success: false,
         network: accepted.network,
         payer: authorization.from,
-        errorReason: `On-chain settlement failed: ${err.message || String(err)}`
+        errorCode: classified.errorCode,
+        errorReason: `On-chain settlement failed: ${errMsg}`
       };
     }
     const txHash = keccak256(
@@ -384,12 +484,20 @@ export async function settleViaFacilitator(options: SettlementOptions): Promise<
         postHeaders.Authorization = `Bearer ${jwt}`;
       }
 
-      const postSettle = async () =>
-        fetch(endpoint, {
-          method: "POST",
-          headers: postHeaders,
-          body: JSON.stringify(requestBody)
-        });
+      const postSettle = async () => {
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), 12000);
+        try {
+          return await fetch(endpoint, {
+            method: "POST",
+            headers: postHeaders,
+            body: JSON.stringify(requestBody),
+            signal: controller.signal
+          });
+        } finally {
+          clearTimeout(timer);
+        }
+      };
 
       let res = await postSettle();
 
@@ -414,11 +522,13 @@ export async function settleViaFacilitator(options: SettlementOptions): Promise<
             payer: authorization.from
           };
         }
+        const errorReason = `Facilitator settlement failed: HTTP ${res.status} ${errorText}`;
         return {
           success: false,
           network: accepted.network,
           payer: authorization.from,
-          errorReason: `Facilitator settlement failed: HTTP ${res.status} ${errorText}`
+          errorCode: classifySettlementErrorReason(errorReason).errorCode,
+          errorReason
         };
       }
 
@@ -489,20 +599,24 @@ export async function settleViaFacilitator(options: SettlementOptions): Promise<
             payer: authorization.from
           };
         }
+        const errorReason = data.errorReason || data.errorMessage || "Facilitator rejected settlement";
         return {
           success: false,
           network: data.network || accepted.network,
           payer: data.payer || authorization.from,
-          errorReason: data.errorReason || data.errorMessage || "Facilitator rejected settlement"
+          errorCode: classifySettlementErrorReason(errorReason).errorCode,
+          errorReason
         };
       }
 
       if (!finalTxHash) {
+        const errorReason = data.errorReason || "Facilitator response missing transaction hash";
         return {
           success: false,
           network: accepted.network,
           payer: authorization.from,
-          errorReason: data.errorReason || "Facilitator response missing transaction hash"
+          errorCode: classifySettlementErrorReason(errorReason).errorCode,
+          errorReason
         };
       }
 
@@ -530,11 +644,13 @@ export async function settleViaFacilitator(options: SettlementOptions): Promise<
         };
       }
       if (isProduction) {
+        const errorReason = `Facilitator connection error in production: ${err.message || String(err)}`;
         return {
           success: false,
           network: accepted.network,
           payer: authorization.from,
-          errorReason: `Facilitator connection error in production: ${err.message || String(err)}`
+          errorCode: "RELAYER_ERROR",
+          errorReason
         };
       }
     }
@@ -545,6 +661,7 @@ export async function settleViaFacilitator(options: SettlementOptions): Promise<
       success: false,
       network: accepted.network,
       payer: authorization.from,
+      errorCode: "RELAYER_ERROR",
       errorReason: "FACILITATOR_URL_REQUIRED: Live facilitator settlement required in production"
     };
   }

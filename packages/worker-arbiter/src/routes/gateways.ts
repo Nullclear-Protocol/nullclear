@@ -22,6 +22,7 @@ import { verifyEIP3009Local, settleTransfer, settleOnChain, settleViaFacilitator
 import { signClearingReceipt } from "../services/attestation.js";
 import { executeUpstreamFetch } from "./clear.js";
 import { runAutoGuard } from "./proxy.js";
+import { attachReceiptHeader } from "./receipt.js";
 import {
   buildNullClearMetadata,
   consumeSponsoredFreeCall,
@@ -708,11 +709,14 @@ async function executeGatewayProxy(c: Context<Env>): Promise<Response> {
       payer: authorization.from,
       errorReason: "nullclear_gateway_validation_failed"
     };
+    const receiptUrl = attachReceiptHeader(c, clearingId);
     c.header("PAYMENT-RESPONSE", encodeBase64Json(voidResponse));
     c.header("X-NullClear-Verified", "false");
 
     return c.json(
       {
+        clearingId,
+        receiptUrl,
         cleared: false,
         settled: false,
         buyerCharged: "0",
@@ -802,6 +806,7 @@ async function executeGatewayProxy(c: Context<Env>): Promise<Response> {
     paymentResponse: settlement,
     verified: true
   });
+  const receiptUrl = attachReceiptHeader(c, clearingId);
   c.header("X-NullClear-Receipt-Id", clearingId);
   c.header("X-NullClear-Attestation", encodeBase64Json(signedReceipt));
 
@@ -809,6 +814,7 @@ async function executeGatewayProxy(c: Context<Env>): Promise<Response> {
     cleared: true,
     settled: true,
     clearingId,
+    receiptUrl,
     gatewaySlug: gateway.slug,
     sellerAddress: gateway.sellerAddress,
     buyerCharged: accepted.amount,

@@ -1275,7 +1275,7 @@ export async function scanTokenForensics(
   rawChain: string,
   rawAddress: string,
   env?: Env["Bindings"],
-  options?: { forceFresh?: boolean }
+  options?: { forceFresh?: boolean; maxCacheAgeMs?: number }
 ): Promise<ForensicScanPayload> {
   const requestedChain = normalizeChain(rawChain);
   const trimmedAddress = (rawAddress || "").trim();
@@ -1301,22 +1301,25 @@ export async function scanTokenForensics(
   const store = getArbiterStore(env);
   const kv = env?.NULLCLEAR_CACHE || env?.KV;
   const cacheKey = `scan_v22:${effectiveChain}:${normAddress}`;
-  const FIVE_MIN_MS = 5 * 60 * 1000;
+  const maxCacheAgeMs = options?.maxCacheAgeMs ?? 5 * 60 * 1000;
 
-  // 1. Check 5-minute TTL Cache in KV / D1 unless forceFresh is requested
+  // 1. Check KV / D1 Cache unless forceFresh is requested (prevents redundant Solana/EVM RPC calls)
   if (!options?.forceFresh) {
     if (kv) {
       try {
         const cachedStr = await kv.get(cacheKey);
         if (cachedStr) {
           const parsed = JSON.parse(cachedStr) as ForensicScanPayload;
-          return { ...parsed, cached: true };
+          const tsMs = parsed.provenance?.timestampIso ? Date.parse(parsed.provenance.timestampIso) : NaN;
+          if (!Number.isFinite(tsMs) || Date.now() - tsMs <= maxCacheAgeMs) {
+            return { ...parsed, cached: true };
+          }
         }
       } catch {}
     }
 
     const d1Cached = await store.getForensicScan(effectiveChain, normAddress);
-    if (d1Cached && Date.now() - d1Cached.scannedAt <= FIVE_MIN_MS) {
+    if (d1Cached && Date.now() - d1Cached.scannedAt <= maxCacheAgeMs) {
       try {
         const parsed = JSON.parse(d1Cached.payloadJson) as ForensicScanPayload;
         return { ...parsed, cached: true };
@@ -1594,7 +1597,7 @@ async function persistScanResult(
 
   if (kv) {
     try {
-      await kv.put(cacheKey, payloadStr, { expirationTtl: 300 });
+      await kv.put(cacheKey, payloadStr, { expirationTtl: 86400 });
     } catch {}
   }
 }

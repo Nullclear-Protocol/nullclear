@@ -10,7 +10,7 @@ import {
 } from "@nullclear/shared";
 import { getArbiterStore, type Env } from "../env.js";
 import { computeTrustScore } from "../services/reputation.js";
-import { settleTransfer } from "../services/facilitator.js";
+import { classifySettlementErrorReason, settleTransfer } from "../services/facilitator.js";
 import { validateTargetUrl } from "../services/ssrf-guard.js";
 import {
   scanTokenForensics,
@@ -38,11 +38,39 @@ import { authenticateAndDebitPass, PASS_TIERS } from "../middleware/pass-auth.js
 import { handleBuyPassRequest, buildBuyPassBazaarExtension } from "./passes.js";
 import {
   extractPaymentAuthorization,
-  attachDualX402Headers
+  attachDualX402Headers,
+  buildWwwAuthenticateX402Header,
+  isHumanBrowserRequest
 } from "../utils/x402-headers.js";
 import { getBazaarResourceMetadata } from "./bazaar-metadata.js";
+import { attachReceiptHeader } from "./receipt.js";
 
 export const bazaarRouter = new Hono<Env>();
+
+// Content negotiation for human browsers clicking /v1/bazaar/* links directly
+bazaarRouter.use("*", async (c, next) => {
+  const path = new URL(c.req.url).pathname;
+  if (path.endsWith("/buy-pass")) {
+    await next();
+    return;
+  }
+  if (isHumanBrowserRequest(c)) {
+    if (
+      path.endsWith("/guard") ||
+      path.endsWith("/inspect") ||
+      path.endsWith("/token-security") ||
+      path.endsWith("/due-diligence") ||
+      path.endsWith("/scan-batch")
+    ) {
+      return c.redirect("/firewall", 302);
+    }
+    if (path.endsWith("/directory")) {
+      return c.redirect("/leaderboard", 302);
+    }
+    return c.redirect("/x402", 302);
+  }
+  await next();
+});
 
 export const MAX_BATCH_TOKENS = 15;
 const BATCH_CHUNK_SIZE = 5;
@@ -1249,7 +1277,8 @@ function createPaymentRequiredHeader(
   resourcePath: string,
   description: string,
   bazaarExtension: any,
-  amountAtomic = "10000"
+  amountAtomic = "10000",
+  exactResourceUrl?: string
 ) {
   const meta = getBazaarResourceMetadata(resourcePath);
   const payload = {
@@ -1261,7 +1290,7 @@ function createPaymentRequiredHeader(
     payTo: NULLCLEAR_TREASURY_ADDRESS,
     maxTimeoutSeconds: 300,
     resource: {
-      url: `https://api.nullclear.dev${resourcePath}`,
+      url: exactResourceUrl || `https://api.nullclear.dev${resourcePath}`,
       description,
       mimeType: "application/json",
       ...meta
@@ -1288,6 +1317,8 @@ interface SettlementResult {
   settled: boolean;
   payer?: `0x${string}`;
   transaction?: `0x${string}`;
+  clearingId?: string;
+  receiptUrl?: string;
   tier?: "free-trial" | "paid" | "escrow" | "prepaid-pass";
   freeTrialRemaining?: number;
   creditsRemaining?: number;
@@ -1308,11 +1339,38 @@ async function handleBazaarPayment(
   const allowFreeTier = options?.allowFreeTier ?? true;
   const passCreditCost = options?.passCreditCost ?? Math.max(1, Math.round(numericAmount / 5000));
   const resourceMeta = getBazaarResourceMetadata(resourcePath);
+  const schemaPreview = bazaarExtension?.schema;
+  const examplePreview = bazaarExtension?.info?.output?.example;
 
-  // Always expose x402 payment challenge, Prepaid Pass, and Free Tier headers
+  let exactResourceUrl = `https://api.nullclear.dev${resourcePath}`;
+  try {
+    const reqUrl = new URL(c.req.url);
+    exactResourceUrl = `${reqUrl.origin}${reqUrl.pathname}${reqUrl.search}`;
+  } catch {}
+
+  const set402ChallengeHeaders = () => {
+    const paymentReqHeader = createPaymentRequiredHeader(
+      resourcePath,
+      description,
+      bazaarExtension,
+      amountAtomic,
+      exactResourceUrl
+    );
+    c.header("PAYMENT-REQUIRED", paymentReqHeader);
+    c.header("X-Payment-Required", paymentReqHeader);
+    c.header(
+      "WWW-Authenticate",
+      buildWwwAuthenticateX402Header({
+        amount: amountAtomic,
+        recipient: NULLCLEAR_TREASURY_ADDRESS
+      })
+    );
+  };
+
+  // Always expose x402 payment challenge, Prepaid Pass, Receipt, and Free Tier headers
   c.header(
     "Access-Control-Expose-Headers",
-    "PAYMENT-REQUIRED, Payment-Required, X-Payment-Required, X-Payment-Response, Pay-To, PAYMENT-RESPONSE, X-NullClear-Attestation, X-NullClear-Verified, x-nullclear-tier, x-nullclear-pass-tier, x-nullclear-credits-remaining, x-nullclear-remaining-free-calls"
+    "PAYMENT-REQUIRED, Payment-Required, X-Payment-Required, WWW-Authenticate, X-Payment-Response, Pay-To, PAYMENT-RESPONSE, X-NullClear-Attestation, X-NullClear-Verified, X-NullClear-Receipt-Url, X-NullClear-Low-Balance, X-NullClear-Renew-Url, x-nullclear-tier, x-nullclear-pass-tier, x-nullclear-credits-remaining, x-nullclear-remaining-free-calls"
   );
   c.header("Pay-To", NULLCLEAR_TREASURY_ADDRESS);
 
@@ -1331,20 +1389,15 @@ async function handleBazaarPayment(
         payer: passAuth.pass.ownerAddress as `0x${string}`
       };
     }
-    const paymentReqHeader = createPaymentRequiredHeader(
-      resourcePath,
-      description,
-      bazaarExtension,
-      amountAtomic
-    );
-    c.header("PAYMENT-REQUIRED", paymentReqHeader);
-    c.header("X-Payment-Required", paymentReqHeader);
+    set402ChallengeHeaders();
     return {
       settled: false,
       errorResponse: c.json(
         {
           error: passAuth.pass ? "Payment Required" : "Unauthorized",
           message: passAuth.errorReason || "Invalid or exhausted Prepaid Pass key",
+          schema: schemaPreview,
+          example: examplePreview,
           prepaidPassOption: {
             buyUrl: "POST https://api.nullclear.dev/v1/pass/buy",
             tiers: "micro ($1 / 300 credits), starter ($5 / 2,000 credits), pro ($25 / 15,000 credits), scale ($100 / 100,000 credits)"
@@ -1355,11 +1408,12 @@ async function handleBazaarPayment(
     };
   }
 
+  const authHdr = (c.req.header("authorization") || "").trim();
   const rawPaymentHeader =
     c.req.header("payment-signature") ||
     c.req.header("x-payment") ||
     c.req.header("x-nullclear-authorization") ||
-    c.req.header("authorization");
+    (/^x402\s+/i.test(authHdr) ? authHdr : undefined);
   const paymentHeader =
     rawPaymentHeader &&
     rawPaymentHeader.toLowerCase() !== "free-trial" &&
@@ -1371,8 +1425,8 @@ async function handleBazaarPayment(
     c.req.header("x-nullclear-escrow-hold") === "true" ||
     c.req.header("x-nullclear-verified-escrow");
 
-  // Sponsored Free Tier: tightened to 2 free trial calls/day per IP/session on Bazaar routes
-  // so exploratory callers can verify the response format and seamlessly upgrade to $0.005 x402
+  // Strict HTTP 402 by default on /v1/bazaar/* so x402 payability verifiers and funded buyers
+  // always receive 402 PAYMENT-REQUIRED on call #1 (opt-in free trial via x-nullclear-free-trial: true or MCP session).
   if (allowFreeTier && !paymentHeader && !isEscrowPassThrough && shouldUseFreeTierForBazaar(c)) {
     const freeTier = await consumeSponsoredFreeCall(c, BAZAAR_FREE_TIER_DAILY_LIMIT);
     if (freeTier.allowed) {
@@ -1401,22 +1455,15 @@ async function handleBazaarPayment(
       };
     }
 
-    // Free tier exhausted -> return 402 guiding to NULLCLEAR_PRIVATE_KEY / X-Payment
-    const paymentReqHeader = createPaymentRequiredHeader(
-      resourcePath,
-      description,
-      bazaarExtension,
-      amountAtomic
-    );
-    c.header("PAYMENT-REQUIRED", paymentReqHeader);
-    c.header("X-Payment-Required", paymentReqHeader);
+    // Free tier exhausted -> return compliant 402 with WWW-Authenticate + schema/example
+    set402ChallengeHeaders();
     return {
       settled: false,
       errorResponse: c.json(
         {
           error: "Payment Required",
           message:
-            `Daily Bazaar Sponsored Free Trial limit (${BAZAAR_FREE_TIER_DAILY_LIMIT}/${BAZAAR_FREE_TIER_DAILY_LIMIT} free calls) reached. Configure NULLCLEAR_PRIVATE_KEY or include an X-Payment EIP-3009 header ($${priceUsd} USDC on Base Mainnet) to continue.`,
+            `Daily free quota (${BAZAAR_FREE_TIER_DAILY_LIMIT}/${BAZAAR_FREE_TIER_DAILY_LIMIT} calls/day/IP) exhausted. Mint a Prepaid Pass at POST https://api.nullclear.dev/v1/pass/buy OR attach an X-Payment / PAYMENT-SIGNATURE EIP-3009 header ($${priceUsd} USDC on Base Mainnet) to continue.`,
           tier: "free-trial-exhausted",
           freeTrialRemaining: 0,
           x402Version: 2,
@@ -1424,8 +1471,10 @@ async function handleBazaarPayment(
           network: "eip155:8453",
           amount: amountAtomic,
           payTo: NULLCLEAR_TREASURY_ADDRESS,
+          schema: schemaPreview,
+          example: examplePreview,
           resource: {
-            url: `https://api.nullclear.dev${resourcePath}`,
+            url: exactResourceUrl,
             description,
             mimeType: "application/json",
             ...resourceMeta
@@ -1451,16 +1500,9 @@ async function handleBazaarPayment(
     };
   }
 
-  // Rule: "402 Before 400" — Unauthenticated x402 probes hit 402 before any query/body validation
+  // Rule: "402 Before 400" — Unauthenticated x402 probes (e.g. directory indexers) hit 402 before any query/body validation
   if (!paymentHeader && !isEscrowPassThrough) {
-    const paymentReqHeader = createPaymentRequiredHeader(
-      resourcePath,
-      description,
-      bazaarExtension,
-      amountAtomic
-    );
-    c.header("PAYMENT-REQUIRED", paymentReqHeader);
-    c.header("X-Payment-Required", paymentReqHeader);
+    set402ChallengeHeaders();
     return {
       settled: false,
       errorResponse: c.json(
@@ -1472,8 +1514,10 @@ async function handleBazaarPayment(
           network: "eip155:8453",
           amount: amountAtomic,
           payTo: NULLCLEAR_TREASURY_ADDRESS,
+          schema: schemaPreview,
+          example: examplePreview,
           resource: {
-            url: `https://api.nullclear.dev${resourcePath}`,
+            url: exactResourceUrl,
             description,
             mimeType: "application/json",
             ...resourceMeta
@@ -1516,14 +1560,7 @@ async function handleBazaarPayment(
     parsedAuth = null;
   }
   if (!parsedAuth || !parsedAuth.from || !parsedAuth.signature) {
-    const paymentReqHeader = createPaymentRequiredHeader(
-      resourcePath,
-      description,
-      bazaarExtension,
-      amountAtomic
-    );
-    c.header("PAYMENT-REQUIRED", paymentReqHeader);
-    c.header("X-Payment-Required", paymentReqHeader);
+    set402ChallengeHeaders();
     return {
       settled: false,
       errorResponse: c.json(
@@ -1534,7 +1571,9 @@ async function handleBazaarPayment(
           scheme: "exact",
           network: "eip155:8453",
           amount: amountAtomic,
-          payTo: NULLCLEAR_TREASURY_ADDRESS
+          payTo: NULLCLEAR_TREASURY_ADDRESS,
+          schema: schemaPreview,
+          example: examplePreview
         },
         402
       )
@@ -1571,6 +1610,37 @@ async function handleBazaarPayment(
     const simulatedTx = keccak256(
       stringToHex(`bazaar_simulated:${payer}:${authorization.nonce}:${Date.now()}`)
     );
+    const clearingId = `bazaar_${Date.now()}_${simulatedTx.slice(2, 10)}`;
+    const feeAtomic = String(Math.max(1, Math.floor((Number(amountAtomic) * 50) / 10000)));
+    const clearingParams = await extractBazaarClearingParams(c, resourcePath);
+    const store = getArbiterStore(c.env);
+    await store
+      .recordPassedClearing(
+        c.env?.ERC8004_AGENT_ID || "124595",
+        authorization.from,
+        amountAtomic,
+        feeAtomic,
+        {
+          id: clearingId,
+          network: "eip155:8453",
+          buyerAddress: authorization.from,
+          sellerAgentId: c.env?.ERC8004_AGENT_ID || "124595",
+          amount: amountAtomic,
+          fee: feeAtomic,
+          targetUrl: exactResourceUrl,
+          status: "PASSED",
+          responseHash: simulatedTx,
+          attestationSignature: simulatedTx,
+          eip3009Nonce: authorization.nonce,
+          targetAddress: clearingParams.targetAddress,
+          targetChain: clearingParams.targetChain,
+          queryType: clearingParams.queryType,
+          createdAt: Date.now()
+        }
+      )
+      .catch(() => {});
+    const receiptUrl = attachReceiptHeader(c, clearingId);
+    c.header("x-nullclear-tier", "x402-paid");
     attachDualX402Headers(c, {
       status: 200,
       transaction: simulatedTx,
@@ -1578,7 +1648,7 @@ async function handleBazaarPayment(
       payer: authorization.from,
       verified: true
     });
-    return { settled: true, transaction: simulatedTx, payer: authorization.from };
+    return { settled: true, transaction: simulatedTx, payer: authorization.from, clearingId, receiptUrl };
   }
 
   // Real on-chain settlement via PayAI or Coinbase CDP Facilitator (with on-chain fallback if 5xx)
@@ -1597,7 +1667,7 @@ async function handleBazaarPayment(
     : c.env?.FACILITATOR_URL || "https://facilitator.payai.network";
   const rpcUrl = c.env?.BASE_MAINNET_RPC_URL || c.env?.BASE_RPC_URL || "https://mainnet.base.org";
 
-  const resourceUrl = `https://api.nullclear.dev${resourcePath}`;
+  const resourceUrl = exactResourceUrl;
   const settlement = await settleTransfer({
     authorization: {
       from: authorization.from,
@@ -1632,26 +1702,50 @@ async function handleBazaarPayment(
   });
 
   if (!settlement.success || !settlement.transaction) {
-    const paymentReqHeader = createPaymentRequiredHeader(
-      resourcePath,
-      description,
-      bazaarExtension,
-      amountAtomic
-    );
-    c.header("PAYMENT-REQUIRED", paymentReqHeader);
-    c.header("X-Payment-Required", paymentReqHeader);
+    const reason = settlement.errorReason || "On-chain payment rejection";
+    const code = settlement.errorCode || classifySettlementErrorReason(reason).errorCode;
+    if (code === "RELAYER_ERROR") {
+      return {
+        settled: false,
+        errorResponse: c.json(
+          {
+            error: "RELAYER_ERROR",
+            code,
+            message: `Facilitator/relayer execution failure: ${reason}`
+          },
+          502
+        )
+      };
+    }
+    if (code === "INVALID_SIGNATURE" || code === "AUTHORIZATION_EXPIRED" || code === "AUTHORIZATION_NOT_YET_ACTIVE") {
+      return {
+        settled: false,
+        errorResponse: c.json(
+          {
+            error: "BAD_REQUEST",
+            code,
+            message: reason
+          },
+          400
+        )
+      };
+    }
+    set402ChallengeHeaders();
     return {
       settled: false,
       errorResponse: c.json(
         {
-          error: "Payment Required",
-          message: `Settlement failed: ${settlement.errorReason || "On-chain payment rejection"}`,
+          error: "PAYMENT FAILED: NONCE_USED_OR_INSUFFICIENT_FUNDS",
+          code,
+          message: `Settlement failed: ${reason}`,
           x402Version: 2,
           scheme: "exact",
           network: "eip155:8453",
           amount: amountAtomic,
           payTo: NULLCLEAR_TREASURY_ADDRESS,
-          details: settlement.errorReason
+          schema: schemaPreview,
+          example: examplePreview,
+          details: reason
         },
         402
       )
@@ -1664,30 +1758,34 @@ async function handleBazaarPayment(
   const feeAtomic = String(Math.max(1, Math.floor((Number(amountAtomic) * 50) / 10000)));
   const clearingParams = await extractBazaarClearingParams(c, resourcePath);
 
-  await store.recordPassedClearing(
-    c.env?.ERC8004_AGENT_ID || "124595",
-    authorization.from,
-    amountAtomic,
-    feeAtomic,
-    {
-      id: clearingId,
-      network: "eip155:8453",
-      buyerAddress: authorization.from,
-      sellerAgentId: c.env?.ERC8004_AGENT_ID || "124595",
-      amount: amountAtomic,
-      fee: feeAtomic,
-      targetUrl: `https://api.nullclear.dev${resourcePath}`,
-      status: "PASSED",
-      responseHash: settlement.transaction,
-      attestationSignature: settlement.transaction,
-      eip3009Nonce: authorization.nonce,
-      targetAddress: clearingParams.targetAddress,
-      targetChain: clearingParams.targetChain,
-      queryType: clearingParams.queryType,
-      createdAt: Date.now()
-    }
-  );
+  await store
+    .recordPassedClearing(
+      c.env?.ERC8004_AGENT_ID || "124595",
+      authorization.from,
+      amountAtomic,
+      feeAtomic,
+      {
+        id: clearingId,
+        network: "eip155:8453",
+        buyerAddress: authorization.from,
+        sellerAgentId: c.env?.ERC8004_AGENT_ID || "124595",
+        amount: amountAtomic,
+        fee: feeAtomic,
+        targetUrl: exactResourceUrl,
+        status: "PASSED",
+        responseHash: settlement.transaction,
+        attestationSignature: settlement.transaction,
+        eip3009Nonce: authorization.nonce,
+        targetAddress: clearingParams.targetAddress,
+        targetChain: clearingParams.targetChain,
+        queryType: clearingParams.queryType,
+        createdAt: Date.now()
+      }
+    )
+    .catch(() => {});
 
+  const receiptUrl = attachReceiptHeader(c, clearingId);
+  c.header("x-nullclear-tier", "x402-paid");
   attachDualX402Headers(c, {
     status: 200,
     transaction: settlement.transaction,
@@ -1696,7 +1794,7 @@ async function handleBazaarPayment(
     verified: true
   });
 
-  return { settled: true, transaction: settlement.transaction, payer: authorization.from };
+  return { settled: true, transaction: settlement.transaction, payer: authorization.from, clearingId, receiptUrl };
 }
 
 // 1. GET & POST /v1/bazaar/market-oracle ($0.005 USDC / 5000 atomic)
@@ -1777,6 +1875,7 @@ bazaarRouter.all("/market-oracle", async (c) => {
     invariantCheck: priceUsd > 0 ? "PASSED" : "FAILED",
     attestation,
     settlementTransaction: result.transaction,
+    ...(result.receiptUrl ? { receiptUrl: result.receiptUrl } : {}),
     timestamp,
     executionReceipt: result.executionReceipt,
     relatedEndpoints: BAZAAR_RELATED_ENDPOINTS,
@@ -1882,6 +1981,7 @@ bazaarRouter.all("/token-security", async (c) => {
     network: networkId,
     attestation,
     settlementTransaction: result.transaction,
+    ...(result.receiptUrl ? { receiptUrl: result.receiptUrl } : {}),
     timestamp,
     executionReceipt: result.executionReceipt,
     relatedEndpoints: BAZAAR_RELATED_ENDPOINTS,
@@ -1900,7 +2000,7 @@ bazaarRouter.all("/scan-batch", async (c) => {
     BAZAAR_SCAN_BATCH_EXTENSION.description,
     BAZAAR_SCAN_BATCH_EXTENSION,
     "25000",
-    { allowFreeTier: false }
+    { passCreditCost: 5 }
   );
   if (!result.settled) {
     return result.errorResponse!;
@@ -2079,6 +2179,7 @@ bazaarRouter.all("/scan-batch", async (c) => {
     results,
     attestation,
     settlementTransaction: result.transaction,
+    ...(result.receiptUrl ? { receiptUrl: result.receiptUrl } : {}),
     timestamp,
     executionReceipt: result.executionReceipt,
     relatedEndpoints: BAZAAR_RELATED_ENDPOINTS,
@@ -2201,6 +2302,7 @@ bazaarRouter.all("/wallet-risk", async (c) => {
     network: "eip155:8453",
     attestation,
     settlementTransaction: result.transaction,
+    ...(result.receiptUrl ? { receiptUrl: result.receiptUrl } : {}),
     timestamp,
     executionReceipt: result.executionReceipt,
     relatedEndpoints: BAZAAR_RELATED_ENDPOINTS,
@@ -2315,6 +2417,7 @@ bazaarRouter.all("/verified-fetch", async (c) => {
     validationErrors: validation.errors.length > 0 ? validation.errors : undefined,
     attestation,
     settlementTransaction: result.transaction,
+    ...(result.receiptUrl ? { receiptUrl: result.receiptUrl } : {}),
     timestamp,
     executionReceipt: result.executionReceipt,
     relatedEndpoints: BAZAAR_RELATED_ENDPOINTS,
@@ -2366,6 +2469,7 @@ bazaarRouter.all("/audit", async (c) => {
     sybilRisk: scoreResult.sybilFlags.length > 0 ? "high" : "low",
     escrowReady: true,
     settlementTransaction: result.transaction,
+    ...(result.receiptUrl ? { receiptUrl: result.receiptUrl } : {}),
     attestation,
     metrics: scoreResult.metrics,
     sybilFlags: scoreResult.sybilFlags,
@@ -2411,6 +2515,7 @@ bazaarRouter.all("/verify", async (c) => {
     agentId,
     escrowSupported: true,
     settlementTransaction: result.transaction,
+    ...(result.receiptUrl ? { receiptUrl: result.receiptUrl } : {}),
     attestation,
     features: [
       "deferred_schema_escrow",
@@ -2430,21 +2535,50 @@ bazaarRouter.all("/verify", async (c) => {
 
 // 6b. POST & GET /v1/bazaar/guard ($0.005 USDC / 5000 atomic — 1-Call Pre-Sign Firewall)
 bazaarRouter.all("/guard", async (c) => {
+  const method = c.req.method.toUpperCase();
+  const isGetLike = method === "GET" || method === "HEAD";
+  const hasPaymentOrPass = Boolean(
+    c.req.header("payment-signature") ||
+      c.req.header("x-payment") ||
+      c.req.header("x-nullclear-authorization") ||
+      c.req.header("x-nullclear-key") ||
+      /^(?:bearer\s+nc_live_|x402\s+)/i.test((c.req.header("authorization") || "").trim())
+  );
+
+  // Pre-settlement payload validation for paid POST calls so we NEVER settle on-chain and then return 400
+  if (!isGetLike && hasPaymentOrPass) {
+    const preBody = await parseJsonBodySafe(c);
+    const hasTarget = Boolean(
+      sanitizeParamString(preBody.to || c.req.query("to"), 128) ||
+        preBody.typedData ||
+        sanitizeParamString(preBody.transaction || c.req.query("transaction"), 32768) ||
+        (Array.isArray(preBody.transactions) && preBody.transactions.length > 0)
+    );
+    if (!hasTarget) {
+      return c.json(
+        {
+          error: "Invalid guard payload",
+          message:
+            "Provide EVM tx ({ chain, from, to, data, value }), EIP-712 { typedData }, or Solana { chain: 'solana', transaction }.",
+          example: GUARD_POST_EXAMPLE_BODY
+        },
+        400
+      );
+    }
+  }
+
   const result = await handleBazaarPayment(
     c,
     "/v1/bazaar/guard",
     BAZAAR_GUARD_EXTENSION.description,
     BAZAAR_GUARD_EXTENSION,
-    "5000",
-    { allowFreeTier: false }
+    "5000"
   );
   if (!result.settled) {
     return result.errorResponse!;
   }
 
   const body = await parseJsonBodySafe(c);
-  const method = c.req.method.toUpperCase();
-  const isGetLike = method === "GET" || method === "HEAD";
   let to = sanitizeParamString(body.to || c.req.query("to"), 128);
   let from = sanitizeParamString(body.from || c.req.query("from"), 128);
   let data = sanitizeParamString(body.data || c.req.query("data"), 32768);
@@ -2499,6 +2633,7 @@ bazaarRouter.all("/guard", async (c) => {
     ...guardResult,
     attestation,
     settlementTransaction: result.transaction,
+    ...(result.receiptUrl ? { receiptUrl: result.receiptUrl } : {}),
     timestamp: Date.now(),
     executionReceipt: result.executionReceipt,
     relatedEndpoints: BAZAAR_RELATED_ENDPOINTS,
@@ -2516,8 +2651,7 @@ bazaarRouter.all("/inspect", async (c) => {
     "/v1/bazaar/inspect",
     BAZAAR_INSPECT_EXTENSION.description,
     BAZAAR_INSPECT_EXTENSION,
-    "5000",
-    { allowFreeTier: false }
+    "5000"
   );
   if (!result.settled) {
     return result.errorResponse!;
@@ -2554,6 +2688,7 @@ bazaarRouter.all("/inspect", async (c) => {
     ...inspection,
     attestation,
     settlementTransaction: result.transaction,
+    ...(result.receiptUrl ? { receiptUrl: result.receiptUrl } : {}),
     timestamp: Date.now(),
     executionReceipt: result.executionReceipt,
     relatedEndpoints: BAZAAR_RELATED_ENDPOINTS,
@@ -2572,7 +2707,7 @@ bazaarRouter.all("/due-diligence", async (c) => {
     BAZAAR_DUE_DILIGENCE_EXTENSION.description,
     BAZAAR_DUE_DILIGENCE_EXTENSION,
     "100000",
-    { allowFreeTier: false, passCreditCost: 10 }
+    { passCreditCost: 10 }
   );
   if (!result.settled) {
     return result.errorResponse!;
@@ -2704,6 +2839,7 @@ bazaarRouter.all("/due-diligence", async (c) => {
     },
     attestation: certHash,
     settlementTransaction: result.transaction,
+    ...(result.receiptUrl ? { receiptUrl: result.receiptUrl } : {}),
     timestamp: Date.now(),
     executionReceipt: result.executionReceipt,
     relatedEndpoints: BAZAAR_RELATED_ENDPOINTS,

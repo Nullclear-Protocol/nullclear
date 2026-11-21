@@ -102,6 +102,18 @@ export function generateRawApiPassKey(): { rawKey: string; keyPrefix: string } {
 }
 
 /**
+ * Strictly sanitizes optional `X-Agent-Label` fleet header:
+ * trim, max 64 chars, allow only `[a-zA-Z0-9._:-]`, fallback to `null` if invalid/empty.
+ */
+export function sanitizeAgentLabel(raw: string | undefined | null): string | null {
+  if (typeof raw !== "string") return null;
+  const trimmed = raw.trim();
+  if (!trimmed) return null;
+  if (!/^[a-zA-Z0-9._:-]+$/.test(trimmed)) return null;
+  return trimmed.slice(0, 64);
+}
+
+/**
  * Extracts a NullClear Prepaid Pass key (`nc_live_...`) from:
  * - `Authorization: Bearer nc_live_...`
  * - `X-NullClear-Key: nc_live_...`
@@ -232,9 +244,23 @@ export async function authenticateAndDebitPass(
       errorReason: `Insufficient pass credits (need ${costCredits}, remaining ${debit.creditsRemaining}). Refill at POST https://api.nullclear.dev/v1/pass/buy`
     };
   }
+  const agentLabel = sanitizeAgentLabel(c.req.header("x-agent-label") || c.req.header("X-Agent-Label"));
+  c.set("passId", debit.pass.id);
+  c.set("creditsDeducted", Math.max(0, Math.floor(costCredits)));
+  c.set("agentLabel", agentLabel);
+
   c.header("x-nullclear-tier", "prepaid-pass");
   c.header("x-nullclear-pass-tier", debit.pass.tier);
-  c.header("x-nullclear-credits-remaining", String(debit.creditsRemaining));
+  c.header("X-NullClear-Credits-Remaining", String(debit.creditsRemaining));
+
+  const isLowBalance =
+    debit.creditsRemaining <= 100 ||
+    (debit.pass.creditsTotal > 0 && debit.creditsRemaining / debit.pass.creditsTotal <= 0.15);
+  if (isLowBalance) {
+    c.header("X-NullClear-Low-Balance", "true");
+    c.header("X-NullClear-Renew-Url", "https://api.nullclear.dev/v1/pass/buy");
+  }
+
   return {
     hasKey: true,
     authenticated: true,

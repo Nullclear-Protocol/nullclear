@@ -37,7 +37,7 @@ MIT / Apache-2.0
 NullClear is the definitive **Zero-Registration On-Chain Forensic Oracle, Proxy-Aware Bytecode Inspector, Calldata Decoder, and Agent Decision Engine** built specifically for autonomous AI agents (Claude Code, Cursor, Codex, OpenCode, and trading bots).
 
 ### Why LLMs & Autonomous Agents Need NullClear:
-- **[ZERO API KEY REQUIRED]:** Every core forensic tool operates instantly out of the box with zero API keys, zero wallet connect, and zero registration (100 free requests/day/IP).
+- **[ZERO API KEY REQUIRED]:** Every core forensic tool operates instantly out of the box with zero API keys, zero wallet connect, and zero registration (10 free calls/day/IP; or Prepaid Pass `Bearer nc_live_...`).
 - **Sub-400-Token Deterministic Evidence:** Built strictly for LLM context windows with an executive `llmDigest`, deterministic `recommendedAgentAction` enum (`EXECUTE_SAFE`, `CAUTION_HIGH_RISK`, `ABORT_CRITICAL_TRAP`), and cryptographic SHA-256 provenance pinning.
 - **Instruction-Boundary EVM Disassembler:** Walks bytecode strictly by instruction boundaries, skipping `PUSH1` through `PUSH32` operands to eliminate false-positive `SELFDESTRUCT` and `DELEGATECALL` alarms.
 - **EIP-1967 / EIP-1822 Proxy Awareness:** Reads implementation and admin storage slots on-chain so upgraded tokens (like USDC) are audited at their true implementation logic.

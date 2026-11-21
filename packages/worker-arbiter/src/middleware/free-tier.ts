@@ -1,8 +1,8 @@
 import type { Context, Next } from "hono";
-import { getArbiterStore, type Env } from "../env.js";
+import { getArbiterStore, isKnownDirectoryIndexerUa, type Env } from "../env.js";
 
 export const FREE_TIER_DAILY_LIMIT = 10;
-export const BAZAAR_FREE_TIER_DAILY_LIMIT = 2;
+export const BAZAAR_FREE_TIER_DAILY_LIMIT = 10;
 export const FORENSIC_FREE_TIER_DAILY_LIMIT = 10;
 
 export interface NullClearMetadata {
@@ -85,12 +85,20 @@ export function isExplicitFreeTrialRequest(c: Context<Env>): boolean {
 
 export function shouldUseFreeTierForBazaar(c: Context<Env>): boolean {
   const paymentHdr =
-    c.req.header("payment-signature") || c.req.header("x-payment") || "";
+    c.req.header("payment-signature") ||
+    c.req.header("x-payment") ||
+    c.req.header("x-nullclear-authorization") ||
+    "";
   if (
     paymentHdr &&
     paymentHdr.toLowerCase() !== "free-trial" &&
     paymentHdr.toLowerCase() !== "sponsored"
   ) {
+    return false;
+  }
+
+  const authHdr = (c.req.header("authorization") || "").trim();
+  if (/^x402\s+/i.test(authHdr) || /^bearer\s+nc_live_/i.test(authHdr)) {
     return false;
   }
 
@@ -101,8 +109,15 @@ export function shouldUseFreeTierForBazaar(c: Context<Env>): boolean {
     return false;
   }
 
-  // Strictly require an explicit free trial opt-in (header, query param, or active MCP session).
-  // Paid routes must always emit a 402 Payment Required challenge by default to comply with x402 specifications.
+  // Paid /v1/bazaar/* endpoints are strict HTTP 402 by default so x402 payability verifiers
+  // and funded buyer SDKs receive 402 PAYMENT-REQUIRED on call #1.
+  // Callers (such as MCP stdio clients and the interactive /x402 UI) can still opt into the
+  // 10/day sponsored free trial explicitly via x-nullclear-free-trial: true or x-mcp-session.
+  const ua = c.req.header("user-agent") || "";
+  if (isKnownDirectoryIndexerUa(ua) && (c.req.header("x-nullclear-free-trial") || "").toLowerCase() !== "true") {
+    return false;
+  }
+
   return isExplicitFreeTrialRequest(c);
 }
 

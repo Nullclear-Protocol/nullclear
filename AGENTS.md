@@ -64,8 +64,8 @@ To equip your agent environment with native NullClear forensic tools:
 ---
 
 ## Free-Tier & Rate-Limit Protocol
-- **Zero-Key Forensic Free Tier:** 10 requests / day / IP with zero headers and zero keys (`2` free trial calls/day on x402 Bazaar endpoints).
-- **Rate-Limit, x402 Paywall & Prepaid Passes:** On request #11+ on any programmatic `/v1/*` or `/mcp` endpoint, an HTTP 402 challenge is returned with x402 v2 EIP-3009 micro-settlement instructions (`$0.005 USDC` on Base) OR instant `$5/$25/$100` Prepaid Pass minting (`POST /v1/pass/buy`). Public HTML/Markdown scorecards at `https://nullclear.com/scan/:chain/:address` remain free.
+- **Zero-Key Forensic Free Tier:** 10 requests / day / IP with zero headers and zero keys on `/v1/guard`, `/v1/scan`, `/v1/inspect`, `/v1/decode`, `/v1/simulate`, and `/mcp` (explicit opt-in `x-nullclear-free-trial: true` on `/v1/bazaar/*`; strict HTTP 402 by default on `/v1/bazaar/*`).
+- **Rate-Limit, x402 Paywall & Prepaid Passes:** On request #11+ on any free-tier `/v1/*` or `/mcp` endpoint (and on call #1 on `/v1/bazaar/*`), an HTTP 402 challenge is returned with x402 v2 EIP-3009 micro-settlement instructions (`$0.005 USDC` on Base) OR instant `$1/$5/$25/$100` Prepaid Pass minting (`POST /v1/pass/buy`). Public HTML/Markdown scorecards at `https://nullclear.com/scan/:chain/:address` remain free.
 - **Live Agent Usage History & Diagnostics:** Real-time product invocation stream and conversion diagnostics are publicly available at `https://nullclear.dev/history` (JSON API: `GET https://api.nullclear.dev/v1/telemetry/history`).
 - **Operations & Enterprise Support:** `ops@nullclear.dev`
 

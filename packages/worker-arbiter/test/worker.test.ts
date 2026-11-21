@@ -11,7 +11,7 @@ import {
   type X402PaymentSignaturePayload
 } from "@nullclear/shared";
 import app from "../src/index.js";
-import { getArbiterStore } from "../src/env.js";
+import { getArbiterStore, buildBalancedSqlAnd, buildRealCallerSqlFilter } from "../src/env.js";
 import { syncBaseEip3009Logs } from "../src/services/base-eip3009-indexer.js";
 import { canaryProbeEndpoint } from "../src/services/ecosystem-crawler.js";
 
@@ -945,8 +945,13 @@ describe("NullClear Worker Arbiter Test Suite", () => {
   });
 
   // 12. Bazaar Endpoints
-  it("GET /v1/bazaar/audit returns 402 without payment and 200 with simulated test payment", async () => {
-    const res402 = await app.fetch(new Request("http://localhost/v1/bazaar/audit?agentId=124595"), testEnv);
+  it("GET /v1/bazaar/audit returns 402 to directory indexers (or after 10/day quota) and 200 with simulated test payment", async () => {
+    const res402 = await app.fetch(
+      new Request("http://localhost/v1/bazaar/audit?agentId=124595", {
+        headers: { "User-Agent": "x402scan-worker4/1" }
+      }),
+      testEnv
+    );
     expect(res402.status).toBe(402);
     expect(res402.headers.get("PAYMENT-REQUIRED")).toBeTruthy();
     const json402 = (await res402.json()) as any;
@@ -968,8 +973,13 @@ describe("NullClear Worker Arbiter Test Suite", () => {
     expect(json200.settlementTransaction).toBeDefined();
   });
 
-  it("GET /v1/bazaar/token-security returns 402 without payment and 200 with payment", async () => {
-    const res402 = await app.fetch(new Request("http://localhost/v1/bazaar/token-security"), testEnv);
+  it("GET /v1/bazaar/token-security returns 402 to directory indexers and 200 with payment", async () => {
+    const res402 = await app.fetch(
+      new Request("http://localhost/v1/bazaar/token-security", {
+        headers: { "User-Agent": "x402scan-worker4/1" }
+      }),
+      testEnv
+    );
     expect(res402.status).toBe(402);
     expect(res402.headers.get("PAYMENT-REQUIRED")).toBeTruthy();
 
@@ -987,8 +997,8 @@ describe("NullClear Worker Arbiter Test Suite", () => {
     expect(json200.x402Compatible).toBe(true);
   });
 
-  it("GET /v1/bazaar/market-oracle, /wallet-risk, /verified-fetch, and POST /verify enforce 402 Before 400 and settle with test payment", async () => {
-    // 1. Unauthenticated probes (empty query/body) MUST return 402 Before 400 with full bazaar schema
+  it("GET /v1/bazaar/market-oracle, /wallet-risk, /verified-fetch, and POST /verify enforce 402 Before 400 for indexers/exhausted callers and settle with test payment", async () => {
+    // 1. Directory indexer probes (empty query/body) MUST return 402 Before 400 with full bazaar schema
     for (const [method, path] of [
       ["GET", "/v1/bazaar/market-oracle"],
       ["GET", "/v1/bazaar/wallet-risk"],
@@ -997,7 +1007,13 @@ describe("NullClear Worker Arbiter Test Suite", () => {
       ["POST", "/v1/bazaar/audit"],
       ["POST", "/v1/bazaar/verify"]
     ] as const) {
-      const probeRes = await app.fetch(new Request(`http://localhost${path}`, { method }), testEnv);
+      const probeRes = await app.fetch(
+        new Request(`http://localhost${path}`, {
+          method,
+          headers: { "User-Agent": "x402scan-worker4/1" }
+        }),
+        testEnv
+      );
       expect(probeRes.status).toBe(402);
       expect(probeRes.headers.get("PAYMENT-REQUIRED")).toBeTruthy();
       const probeJson = (await probeRes.json()) as any;
@@ -2693,7 +2709,12 @@ describe("NullClear Worker Arbiter Test Suite", () => {
       "/v1/bazaar/wallet-risk",
       "/v1/bazaar/verified-fetch"
     ]) {
-      const challengeRes = await app.fetch(new Request(`https://api.nullclear.dev${microPath}`), testEnv);
+      const challengeRes = await app.fetch(
+        new Request(`https://api.nullclear.dev${microPath}`, {
+          headers: { "User-Agent": "x402scan-worker4/1" }
+        }),
+        testEnv
+      );
       expect(challengeRes.status).toBe(402);
       const challengeJson = (await challengeRes.json()) as any;
       expect(challengeJson.amount).toBe("5000");
@@ -2804,13 +2825,13 @@ describe("NullClear Worker Arbiter Test Suite", () => {
     const treasuryAddr = "0xB586eFcCa41dF27ad3873BEcA54da0c30bf04d5c" as Address;
     const settledHash = ("0x" + "cd".repeat(32)) as `0x${string}`;
 
-    // 1. 402 Before 400 (even with empty body or spoofed free-trial header)
+    // 1. 402 Before 400 for directory indexers
     const unpaidRes = await app.fetch(
       new Request("https://api.nullclear.dev/v1/bazaar/scan-batch", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "x-nullclear-free-trial": "true"
+          "User-Agent": "x402scan-worker4/1"
         },
         body: JSON.stringify({ tokens: [] })
       }),
@@ -3367,13 +3388,13 @@ describe("NullClear Worker Arbiter Test Suite", () => {
     expect(guardInfo.supportedChains).toContain("solana");
     expect(guardInfo.examples?.evmApprovalGuard?.method).toBe("POST");
 
-    // 2. POST /v1/bazaar/guard & GET /v1/bazaar/inspect enforce 402 Before 400 (even with spoofed free-trial header)
+    // 2. POST /v1/bazaar/guard & GET /v1/bazaar/inspect enforce 402 Before 400 for directory indexers
     const guard402 = await app.fetch(
       new Request("https://api.nullclear.dev/v1/bazaar/guard", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "x-nullclear-free-trial": "true"
+          "User-Agent": "x402scan-worker4/1"
         },
         body: JSON.stringify({})
       }),
@@ -3384,7 +3405,7 @@ describe("NullClear Worker Arbiter Test Suite", () => {
 
     const inspect402 = await app.fetch(
       new Request("https://api.nullclear.dev/v1/bazaar/inspect?chain=base&address=not-an-address", {
-        headers: { "x-nullclear-free-trial": "true" }
+        headers: { "User-Agent": "x402scan-worker4/1" }
       }),
       prodEnv
     );
@@ -3463,37 +3484,72 @@ describe("NullClear Worker Arbiter Test Suite", () => {
     expect(inspectPaid.address).toBe("0x833589fcd6edb6e08f4c7c32d4f71b54bda02913");
     expect(inspectPaid.relatedEndpoints?.batchScan?.url).toBe("https://api.nullclear.dev/v1/bazaar/scan-batch");
 
-    // 5. Bazaar free-trial cap tightened to 2/day: calls 1 & 2 succeed, call 3 hits 402
+    // 5. Bazaar is strict 402 by default; opt-in x-nullclear-free-trial: true grants 10/day quota before 402 on call 11
     const trialIp = "198.51.100.91";
-    const t1 = await app.fetch(
-      new Request("https://api.nullclear.dev/v1/bazaar/token-security?address=0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913&trial=true", {
+    const strictDefault = await app.fetch(
+      new Request("https://api.nullclear.dev/v1/bazaar/token-security?address=0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", {
         headers: { "CF-Connecting-IP": trialIp, "User-Agent": "NullClearTrialProbe/2.4" }
+      }),
+      prodEnv
+    );
+    expect(strictDefault.status).toBe(402);
+    expect(strictDefault.headers.get("PAYMENT-REQUIRED")).toBeTruthy();
+
+    const t1 = await app.fetch(
+      new Request("https://api.nullclear.dev/v1/bazaar/token-security?address=0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", {
+        headers: {
+          "CF-Connecting-IP": trialIp,
+          "User-Agent": "NullClearTrialProbe/2.4",
+          "x-nullclear-free-trial": "true"
+        }
       }),
       prodEnv
     );
     expect(t1.status).toBe(200);
     expect(t1.headers.get("x-nullclear-tier")).toBe("free-trial");
-    expect(t1.headers.get("x-nullclear-remaining-free-calls")).toBe("1");
+    expect(t1.headers.get("x-nullclear-remaining-free-calls")).toBe("9");
 
     const t2 = await app.fetch(
-      new Request("https://api.nullclear.dev/v1/bazaar/market-oracle?symbol=ETH&trial=true", {
-        headers: { "CF-Connecting-IP": trialIp, "User-Agent": "NullClearTrialProbe/2.4" }
+      new Request("https://api.nullclear.dev/v1/bazaar/market-oracle?symbol=ETH", {
+        headers: {
+          "CF-Connecting-IP": trialIp,
+          "User-Agent": "NullClearTrialProbe/2.4",
+          "x-nullclear-free-trial": "true"
+        }
       }),
       prodEnv
     );
     expect(t2.status).toBe(200);
-    expect(t2.headers.get("x-nullclear-remaining-free-calls")).toBe("0");
+    expect(t2.headers.get("x-nullclear-remaining-free-calls")).toBe("8");
 
-    const t3 = await app.fetch(
-      new Request("https://api.nullclear.dev/v1/bazaar/wallet-risk?trial=true", {
-        headers: { "CF-Connecting-IP": trialIp, "User-Agent": "NullClearTrialProbe/2.4" }
+    for (let i = 3; i <= 10; i++) {
+      const ti = await app.fetch(
+        new Request("https://api.nullclear.dev/v1/bazaar/audit?agentId=124595", {
+          headers: {
+            "CF-Connecting-IP": trialIp,
+            "User-Agent": "NullClearTrialProbe/2.4",
+            "x-nullclear-free-trial": "true"
+          }
+        }),
+        prodEnv
+      );
+      expect(ti.status).toBe(200);
+    }
+
+    const t11 = await app.fetch(
+      new Request("https://api.nullclear.dev/v1/bazaar/wallet-risk", {
+        headers: {
+          "CF-Connecting-IP": trialIp,
+          "User-Agent": "NullClearTrialProbe/2.4",
+          "x-nullclear-free-trial": "true"
+        }
       }),
       prodEnv
     );
-    expect(t3.status).toBe(402);
-    const t3Json = (await t3.json()) as any;
-    expect(t3Json.tier).toBe("free-trial-exhausted");
-    expect(t3Json.message).toContain("2/2");
+    expect(t11.status).toBe(402);
+    const t11Json = (await t11.json()) as any;
+    expect(t11Json.tier).toBe("free-trial-exhausted");
+    expect(t11Json.message).toContain("10/10");
 
     // 6. Telemetry funnel exposes topUserAgents and freeTrialCalls
     const funnelRes = await app.fetch(new Request("https://api.nullclear.dev/v1/telemetry/funnel"), prodEnv);
@@ -3522,7 +3578,7 @@ describe("NullClear Worker Arbiter Test Suite", () => {
     expect(x402.endpoints?.bazaarGuard?.amountAtomic).toBe("5000");
     expect(x402.endpoints?.bazaarInspect?.amountAtomic).toBe("5000");
 
-    expect(catalog.freeTierDailyLimit).toBe(2);
+    expect(catalog.freeTierDailyLimit).toBe(10);
     expect(catalog.resources[0]?.id).toBe("bazaar-guard");
     expect(catalog.resources[1]?.id).toBe("bazaar-inspect");
 
@@ -3941,7 +3997,10 @@ describe("NullClear Worker Arbiter Test Suite", () => {
       const dd402 = await app.fetch(
         new Request("https://api.nullclear.dev/v1/bazaar/due-diligence", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: {
+            "Content-Type": "application/json",
+            "User-Agent": "x402scan-worker4/1"
+          },
           body: JSON.stringify({ chain: "base", address: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913" })
         }),
         rpcEnv
@@ -4186,7 +4245,10 @@ describe("NullClear Worker Arbiter Test Suite", () => {
     const x402 = (await x402Res.json()) as any;
     expect(x402.resources.length).toBeGreaterThanOrEqual(14);
     for (const url of x402.resources as string[]) {
-      const probeRes = await app.fetch(new Request(url), prodEnv);
+      const probeRes = await app.fetch(
+        new Request(url, { headers: { "User-Agent": "x402scan-worker4/1" } }),
+        prodEnv
+      );
       expect(probeRes.status, `Expected 402 for ${url}`).toBe(402);
       const payReqB64 = probeRes.headers.get("PAYMENT-REQUIRED");
       expect(payReqB64, `Expected PAYMENT-REQUIRED header on ${url}`).toBeTruthy();
@@ -4320,6 +4382,412 @@ describe("NullClear Worker Arbiter Test Suite", () => {
     for (const ua of crawlerUas) {
       expect(histReal.events.some((e: any) => e.userAgent === ua)).toBe(false);
     }
+  });
+
+  it("enforces strict 402 on /v1/bazaar/* for unauthenticated callers/probes, hardens bot/302/pass-status telemetry, and lets X-Payment override bot UAs", async () => {
+    const prodEnv = {
+      ...testEnv,
+      ENVIRONMENT: "production"
+    };
+
+    // 1. All newly identified payability/monitor/probe UAs receive strict 402 on call #1 (even with Accept: text/html)
+    //    and generic HTTP clients (axios/1.20.0, undici) also receive strict 402 on call #1.
+    const probeAndClientUas = [
+      "subPAY.ai-payability-check/1.0",
+      "AnalogHubris-TrustIndex/0.2",
+      "x402-census/0.1 (+https://goodmeta.co)",
+      "ToolVetProbe/1.0",
+      "addrbook-probe/1",
+      "x402-index-liveness/1.0",
+      "Mizan/0.1 (ispettore x402)",
+      "agent-deals-monitor/1.0",
+      "10x402-monitor/0.1",
+      "SML-Authority-Engine/1.0",
+      "Agensus-Probe/1.0",
+      "nightshift-census/1.0",
+      "OCEAN_OBSERVER/1.0",
+      "TaifoonHarvester/1.0",
+      "Reflectionbot/1.0",
+      "ibou-search/1.0",
+      "CrolBot/1.0",
+      "all_agents/1.0"
+    ];
+
+    for (const ua of probeAndClientUas) {
+      const res = await app.fetch(
+        new Request("https://api.nullclear.dev/v1/bazaar/market-oracle?symbol=ETH", {
+          headers: {
+            "User-Agent": ua,
+            Accept: "text/html,application/json",
+            "CF-Connecting-IP": "198.51.100.201"
+          }
+        }),
+        prodEnv
+      );
+      expect(res.status, `Expected strict 402 for ${ua}`).toBe(402);
+      expect(res.headers.get("PAYMENT-REQUIRED")).toBeTruthy();
+    }
+
+    // Generic axios/1.20.0 and spoofed browser UA without Accept: text/html get 402 (never 200 free or 302 redirect)
+    const axios402 = await app.fetch(
+      new Request("https://api.nullclear.dev/v1/bazaar/verified-fetch?url=https://api.coinbase.com/v2/prices/ETH-USD/spot", {
+        headers: { "User-Agent": "axios/1.20.0", "CF-Connecting-IP": "198.51.100.202" }
+      }),
+      prodEnv
+    );
+    expect(axios402.status).toBe(402);
+
+    const spoofedChrome402 = await app.fetch(
+      new Request("https://api.nullclear.dev/v1/bazaar/inspect", {
+        headers: {
+          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/125.0.0.0 Safari/537.36",
+          Accept: "*/*"
+        }
+      }),
+      prodEnv
+    );
+    expect(spoofedChrome402.status).toBe(402);
+
+    // 2. Real browser navigation (Accept: text/html) gets 302 redirect, and 302 is excluded from isRealProductUse
+    const browserRedirect = await app.fetch(
+      new Request("https://api.nullclear.dev/v1/bazaar/inspect", {
+        headers: {
+          "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/125.0.0.0 Safari/537.36",
+          Accept: "text/html,application/xhtml+xml"
+        }
+      }),
+      testEnv
+    );
+    expect(browserRedirect.status).toBe(302);
+
+    // 3. Payment overrides bot classification: a paid probe settles 200 and counts as SDK_AGENT + isPaid + paidSettled200
+    const paidProbeSig = await createValidPaymentSignature(sellerAccount.address, "5000");
+    const paidProbeRes = await app.fetch(
+      new Request("https://api.nullclear.dev/v1/bazaar/market-oracle?symbol=ETH", {
+        headers: {
+          "User-Agent": "probe.x402jp.com/1.0",
+          "PAYMENT-SIGNATURE": paidProbeSig
+        }
+      }),
+      testEnv
+    );
+    expect(paidProbeRes.status).toBe(200);
+
+    // 4. GET /v1/pass/status does NOT count as paidSettled200 or isRealProductUse
+    const passSig = await createValidPaymentSignature(
+      "0xB586eFcCa41dF27ad3873BEcA54da0c30bf04d5c",
+      "1000000"
+    );
+    const mintRes = await app.fetch(
+      new Request("https://api.nullclear.dev/v1/pass/buy", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "PAYMENT-SIGNATURE": passSig },
+        body: JSON.stringify({ tier: "micro" })
+      }),
+      testEnv
+    );
+    expect(mintRes.status).toBe(200);
+    const mintJson = (await mintRes.json()) as any;
+
+    const passStatusRes = await app.fetch(
+      new Request("https://api.nullclear.dev/v1/pass/status", {
+        headers: { Authorization: `Bearer ${mintJson.apiKey}` }
+      }),
+      testEnv
+    );
+    expect(passStatusRes.status).toBe(200);
+
+    // Verify telemetry classification in /v1/telemetry/history
+    const histAllRes = await app.fetch(
+      new Request("https://nullclear.dev/v1/telemetry/history?filter=all&limit=200"),
+      testEnv
+    );
+    const histAll = (await histAllRes.json()) as any;
+
+    for (const ua of probeAndClientUas) {
+      const ev = histAll.events.find((e: any) => e.userAgent === ua);
+      expect(ev, `Expected event for ${ua}`).toBeDefined();
+      expect(ev.actorType, `Expected ${ua} to classify as BOT_SCANNER`).toBe("BOT_SCANNER");
+      expect(ev.isIndexerBot, `Expected ${ua} to have isIndexerBot=true`).toBe(true);
+    }
+
+    const paidProbeEv = histAll.events.find((e: any) => e.userAgent === "probe.x402jp.com/1.0");
+    expect(paidProbeEv).toBeDefined();
+    expect(paidProbeEv.actorType).toBe("SDK_AGENT");
+    expect(paidProbeEv.isIndexerBot).toBe(false);
+    expect(paidProbeEv.isPaid).toBe(true);
+    expect(paidProbeEv.isRealProductUse).toBe(true);
+
+    const passStatusEv = histAll.events.find((e: any) => e.path === "/v1/pass/status");
+    expect(passStatusEv).toBeDefined();
+    expect(passStatusEv.isPaid).toBe(false);
+    expect(passStatusEv.isRealProductUse).toBe(false);
+
+    const redirectEv = histAll.events.find((e: any) => e.path === "/v1/bazaar/inspect" && e.status === 302);
+    expect(redirectEv).toBeDefined();
+    expect(redirectEv.isRealProductUse).toBe(false);
+
+    const histRealRes = await app.fetch(
+      new Request("https://nullclear.dev/v1/telemetry/history?filter=real_agents&limit=200"),
+      testEnv
+    );
+    const histReal = (await histRealRes.json()) as any;
+    for (const ua of probeAndClientUas) {
+      expect(histReal.events.some((e: any) => e.userAgent === ua)).toBe(false);
+    }
+    expect(histReal.events.some((e: any) => e.userAgent === "probe.x402jp.com/1.0" && e.isPaid)).toBe(true);
+    expect(histReal.events.some((e: any) => e.path === "/v1/pass/status")).toBe(false);
+    expect(histReal.events.some((e: any) => e.status === 302)).toBe(false);
+  });
+
+  it("keeps SQLite expression tree depth shallow for /history D1 queries and sets edge Cache-Control headers", async () => {
+    const filterSql = buildRealCallerSqlFilter();
+    // Compute max paren nesting depth (must stay well below SQLite's 100-level limit)
+    let depth = 0;
+    let maxDepth = 0;
+    for (const ch of filterSql) {
+      if (ch === "(") {
+        depth += 1;
+        if (depth > maxDepth) maxDepth = depth;
+      } else if (ch === ")") {
+        depth -= 1;
+      }
+    }
+    expect(depth).toBe(0);
+    expect(maxDepth).toBeLessThanOrEqual(15);
+    expect(filterSql).toContain("INSTR(LOWER(user_agent)");
+
+    const balanced = buildBalancedSqlAnd(["a", "b", "c", "d"]);
+    expect(balanced).toBe("((a AND b) AND (c AND d))");
+
+    // Verify /history and /v1/telemetry/history emit 15s edge Cache-Control headers
+    const htmlRes = await app.fetch(new Request("https://nullclear.dev/history"), testEnv);
+    expect(htmlRes.status).toBe(200);
+    expect(htmlRes.headers.get("Cache-Control")).toContain("max-age=15");
+    const html = await htmlRes.text();
+    expect(html).toContain("Pause Live (15s)");
+
+    const jsonRes = await app.fetch(new Request("https://nullclear.dev/v1/telemetry/history"), testEnv);
+    expect(jsonRes.status).toBe(200);
+    expect(jsonRes.headers.get("Cache-Control")).toContain("max-age=15");
+  });
+
+  it("Sprint: enforces exact resource.url on 402 PAYMENT-REQUIRED, serves /receipt/:id & /v1/receipt/:id, tracks X-Agent-Label + low-balance headers, and exports /v1/pass/export (CSV/JSON) at 0 credits", async () => {
+    const prodEnv = {
+      ...testEnv,
+      ENVIRONMENT: "production"
+    };
+
+    // 1. Unauthenticated GET /v1/bazaar/token-security returns 402 + valid PAYMENT-REQUIRED with exact requested URL
+    const reqUrl =
+      "https://api.nullclear.dev/v1/bazaar/token-security?chain=base&address=0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913";
+    const unauth402 = await app.fetch(
+      new Request(reqUrl, {
+        headers: { "User-Agent": "axios/1.20.0", "CF-Connecting-IP": "198.51.100.210" }
+      }),
+      prodEnv
+    );
+    expect(unauth402.status).toBe(402);
+    const payReqB64 = unauth402.headers.get("PAYMENT-REQUIRED");
+    expect(payReqB64).toBeTruthy();
+    const decoded402 = JSON.parse(Buffer.from(payReqB64!, "base64").toString("utf8"));
+    expect(decoded402.x402Version).toBe(2);
+    expect(decoded402.resource.url).toBe(reqUrl);
+    expect(Array.isArray(decoded402.accepts) && decoded402.accepts.length > 0).toBe(true);
+
+    // 2. Same route with x-nullclear-free-trial: true returns 200 and decrements free quota
+    const trial200 = await app.fetch(
+      new Request(reqUrl, {
+        headers: {
+          "User-Agent": "axios/1.20.0",
+          "x-nullclear-free-trial": "true",
+          "CF-Connecting-IP": "198.51.100.210"
+        }
+      }),
+      testEnv
+    );
+    expect(trial200.status).toBe(200);
+    expect(trial200.headers.get("x-nullclear-remaining-free-calls")).toBe("9");
+
+    // 3. Paid Bazaar call emits X-NullClear-Receipt-Url + receiptUrl and /receipt/:id & /v1/receipt/:id return 200 (404 for unknown)
+    const paidSig = await createValidPaymentSignature(
+      "0xB586eFcCa41dF27ad3873BEcA54da0c30bf04d5c",
+      "5000"
+    );
+    const paidRes = await app.fetch(
+      new Request("https://api.nullclear.dev/v1/bazaar/audit?agentId=124595", {
+        headers: {
+          "User-Agent": "probe.x402jp.com/1.0",
+          "PAYMENT-SIGNATURE": paidSig
+        }
+      }),
+      testEnv
+    );
+    expect(paidRes.status).toBe(200);
+    const receiptHdr = paidRes.headers.get("X-NullClear-Receipt-Url");
+    expect(receiptHdr).toMatch(/^https:\/\/nullclear\.dev\/receipt\/bazaar_/);
+    const paidBody = (await paidRes.json()) as any;
+    expect(paidBody.receiptUrl).toBe(receiptHdr);
+
+    const clearingId = receiptHdr!.split("/receipt/")[1];
+    const receiptJsonRes = await app.fetch(
+      new Request(`https://nullclear.dev/v1/receipt/${clearingId}`),
+      testEnv
+    );
+    expect(receiptJsonRes.status).toBe(200);
+    const receiptJson = (await receiptJsonRes.json()) as any;
+    expect(receiptJson.id).toBe(clearingId);
+    expect(receiptJson.status).toBe("PASSED");
+    expect(receiptJson.network).toBe("eip155:8453");
+    expect(receiptJson.sellerAgentId).toBe("124595");
+
+    const receiptHtmlRes = await app.fetch(
+      new Request(`https://nullclear.dev/receipt/${clearingId}`, {
+        headers: { Accept: "text/html" }
+      }),
+      testEnv
+    );
+    expect(receiptHtmlRes.status).toBe(200);
+    const receiptHtml = await receiptHtmlRes.text();
+    expect(receiptHtml).toContain(clearingId);
+    expect(receiptHtml).toContain("PASSED");
+    expect(receiptHtml).toContain("Base Mainnet eip155:8453");
+
+    const receiptAcceptJsonRes = await app.fetch(
+      new Request(`https://nullclear.dev/receipt/${clearingId}`, {
+        headers: { Accept: "application/json" }
+      }),
+      testEnv
+    );
+    expect(receiptAcceptJsonRes.status).toBe(200);
+    expect(((await receiptAcceptJsonRes.json()) as any).id).toBe(clearingId);
+
+    const missingReceiptRes = await app.fetch(
+      new Request("https://nullclear.dev/v1/receipt/nonexistent_id_123"),
+      testEnv
+    );
+    expect(missingReceiptRes.status).toBe(404);
+
+    // 4. Prepaid pass: X-Agent-Label sanitization, low-balance headers, and /v1/pass/export (CSV & JSON, 0 credits, excluded from paidSettled200)
+    const passSig = await createValidPaymentSignature(
+      "0xB586eFcCa41dF27ad3873BEcA54da0c30bf04d5c",
+      "1000000"
+    );
+    const mintRes = await app.fetch(
+      new Request("https://api.nullclear.dev/v1/pass/buy", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "PAYMENT-SIGNATURE": passSig },
+        body: JSON.stringify({ tier: "micro" })
+      }),
+      testEnv
+    );
+    expect(mintRes.status).toBe(200);
+    const mintBody = (await mintRes.json()) as any;
+    expect(mintBody.receiptUrl).toMatch(/^https:\/\/nullclear\.dev\/receipt\/pass_/);
+
+    // Valid X-Agent-Label on credit-deducting call
+    const taggedCall = await app.fetch(
+      new Request("https://api.nullclear.dev/v1/bazaar/audit?agentId=124595", {
+        headers: {
+          Authorization: `Bearer ${mintBody.apiKey}`,
+          "X-Agent-Label": "treasury-bot:v2.1_prod"
+        }
+      }),
+      testEnv
+    );
+    expect(taggedCall.status).toBe(200);
+    expect(taggedCall.headers.get("X-NullClear-Credits-Remaining")).toBe("299");
+    expect(taggedCall.headers.get("X-NullClear-Low-Balance")).toBeNull();
+
+    // Invalid X-Agent-Label (contains space/semicolon) falls back to null
+    const badLabelCall = await app.fetch(
+      new Request("https://api.nullclear.dev/v1/bazaar/audit?agentId=124595", {
+        headers: {
+          Authorization: `Bearer ${mintBody.apiKey}`,
+          "X-Agent-Label": "bad label; DROP TABLE"
+        }
+      }),
+      testEnv
+    );
+    expect(badLabelCall.status).toBe(200);
+    expect(badLabelCall.headers.get("X-NullClear-Credits-Remaining")).toBe("298");
+
+    // Exhaust below 100 credits via store to test low-balance renewal headers
+    const store = getArbiterStore(testEnv);
+    const passRecord = await store.getApiPassByHash(
+      Array.from(
+        new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(mintBody.apiKey)))
+      )
+        .map((b) => b.toString(16).padStart(2, "0"))
+        .join("")
+    );
+    expect(passRecord).toBeTruthy();
+    await store.consumeApiPassCredit(passRecord!.keyHash, 200); // 298 -> 98 remaining (<= 100)
+
+    const lowBalCall = await app.fetch(
+      new Request("https://api.nullclear.dev/v1/bazaar/audit?agentId=124595", {
+        headers: {
+          Authorization: `Bearer ${mintBody.apiKey}`,
+          "X-Agent-Label": "treasury-bot:v2.1_prod"
+        }
+      }),
+      testEnv
+    );
+    expect(lowBalCall.status).toBe(200);
+    expect(lowBalCall.headers.get("X-NullClear-Credits-Remaining")).toBe("97");
+    expect(lowBalCall.headers.get("X-NullClear-Low-Balance")).toBe("true");
+    expect(lowBalCall.headers.get("X-NullClear-Renew-Url")).toBe("https://api.nullclear.dev/v1/pass/buy");
+
+    // Unauthorized export returns 401
+    const unauthExport = await app.fetch(new Request("https://api.nullclear.dev/v1/pass/export"), testEnv);
+    expect(unauthExport.status).toBe(401);
+
+    // CSV export (0 credits deducted)
+    const csvRes = await app.fetch(
+      new Request("https://api.nullclear.dev/v1/pass/export?format=csv&days=30", {
+        headers: { Authorization: `Bearer ${mintBody.apiKey}` }
+      }),
+      testEnv
+    );
+    expect(csvRes.status).toBe(200);
+    expect(csvRes.headers.get("Content-Type")).toContain("text/csv");
+    const csvText = await csvRes.text();
+    expect(csvText).toContain(
+      "timestamp_utc,request_id,agent_label,endpoint,product_name,status,credits_deducted,receipt_url"
+    );
+    expect(csvText).toContain("treasury-bot:v2.1_prod");
+    expect(csvText).not.toContain("DROP TABLE");
+
+    // JSON export with ?agent= filter
+    const jsonExportRes = await app.fetch(
+      new Request(
+        "https://api.nullclear.dev/v1/pass/export?format=json&days=30&agent=treasury-bot:v2.1_prod",
+        {
+          headers: { Authorization: `Bearer ${mintBody.apiKey}` }
+        }
+      ),
+      testEnv
+    );
+    expect(jsonExportRes.status).toBe(200);
+    const jsonExport = (await jsonExportRes.json()) as any;
+    expect(jsonExport.count).toBe(2);
+    expect(jsonExport.creditsRemaining).toBe(97); // 0 credits deducted by export
+    expect(jsonExport.records.every((r: any) => r.agent_label === "treasury-bot:v2.1_prod")).toBe(true);
+
+    // Verify /v1/pass/export and /receipt/:id are excluded from isPaid in telemetry
+    const histAllRes = await app.fetch(
+      new Request("https://nullclear.dev/v1/telemetry/history?filter=all&limit=200"),
+      testEnv
+    );
+    const histAll = (await histAllRes.json()) as any;
+    const exportEv = histAll.events.find((e: any) => e.path === "/v1/pass/export");
+    expect(exportEv).toBeDefined();
+    expect(exportEv.isPaid).toBe(false);
+    expect(exportEv.isRealProductUse).toBe(false);
+
+    const receiptEv = histAll.events.find((e: any) => e.path === `/v1/receipt/${clearingId}`);
+    expect(receiptEv).toBeDefined();
+    expect(receiptEv.isPaid).toBe(false);
   });
 });
 

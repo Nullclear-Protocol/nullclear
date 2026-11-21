@@ -29,6 +29,8 @@ export interface NormalizedPaymentAuthorization {
   protocolVersion: "v1" | "v2";
   accepted: X402PaymentOption;
   paymentSigPayload: X402PaymentSignaturePayload;
+  rawNetwork?: string;
+  rawDomain?: Record<string, unknown>;
 }
 
 export interface NormalizedUpstream402Challenge {
@@ -75,14 +77,56 @@ function parseJsonOrBase64(raw: string): unknown {
   if (trimmed.startsWith("{") || trimmed.startsWith("[")) {
     return JSON.parse(trimmed);
   }
+  const compact = trimmed.replace(/\s+/g, "");
   try {
-    return decodeBase64Json<unknown>(trimmed);
+    return decodeBase64Json<unknown>(compact);
   } catch {
     // Try base64url normalization
-    const base64Norm = trimmed.replace(/-/g, "+").replace(/_/g, "/");
+    const base64Norm = compact.replace(/-/g, "+").replace(/_/g, "/");
     const padded = base64Norm + "=".repeat((4 - (base64Norm.length % 4)) % 4);
     return decodeBase64Json<unknown>(padded);
   }
+}
+
+function decodeBase64ToBytes(raw: string): Uint8Array | null {
+  try {
+    const compact = raw.trim().replace(/\s+/g, "").replace(/-/g, "+").replace(/_/g, "/");
+    if (!compact || !/^[A-Za-z0-9+/=]+$/.test(compact)) return null;
+    const padded = compact + "=".repeat((4 - (compact.length % 4)) % 4);
+    const NodeBuffer = (globalThis as { Buffer?: { from: (s: string, enc: string) => Uint8Array } }).Buffer;
+    if (NodeBuffer) {
+      return new Uint8Array(NodeBuffer.from(padded, "base64"));
+    }
+    const bin = atob(padded);
+    const out = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) {
+      out[i] = bin.charCodeAt(i);
+    }
+    return out;
+  } catch {
+    return null;
+  }
+}
+
+function normalizeRecoveryV(rawV: number | bigint | undefined, yParity?: number): number {
+  if (rawV !== undefined && !Number.isNaN(Number(rawV))) {
+    const num = Number(rawV);
+    if (num === 0 || num === 1) return num + 27;
+    if (num === 27 || num === 28) return num;
+    return num;
+  }
+  if (yParity !== undefined) {
+    return yParity === 1 ? 28 : 27;
+  }
+  return 27;
+}
+
+function normalizeHexWord32(raw?: string): `0x${string}` {
+  const cleaned = (raw || "").trim().replace(/^0x/i, "").toLowerCase();
+  if (!cleaned || !/^[0-9a-f]+$/.test(cleaned)) {
+    return `0x${"0".repeat(64)}`;
+  }
+  return `0x${cleaned.slice(-64).padStart(64, "0")}` as `0x${string}`;
 }
 
 function extractVrsFromSignature(
@@ -91,34 +135,59 @@ function extractVrsFromSignature(
   rawR?: string,
   rawS?: string
 ): { v: number; r: `0x${string}`; s: `0x${string}`; signature: `0x${string}` } {
-  if (signature && typeof signature === "string" && signature.startsWith("0x")) {
+  let normalizedHexSig: `0x${string}` | undefined;
+  const trimmedSig = typeof signature === "string" ? signature.trim() : "";
+
+  if (trimmedSig) {
+    if (/^0x[0-9a-fA-F]{128,130}$/.test(trimmedSig)) {
+      normalizedHexSig = trimmedSig.toLowerCase() as `0x${string}`;
+    } else if (/^[0-9a-fA-F]{128,130}$/.test(trimmedSig)) {
+      normalizedHexSig = `0x${trimmedSig.toLowerCase()}` as `0x${string}`;
+    } else if (!trimmedSig.startsWith("0x")) {
+      const bytes = decodeBase64ToBytes(trimmedSig);
+      if (bytes && (bytes.length === 64 || bytes.length === 65)) {
+        const hex = Array.from(bytes)
+          .map((b) => b.toString(16).padStart(2, "0"))
+          .join("");
+        normalizedHexSig = `0x${hex}` as `0x${string}`;
+      }
+    } else {
+      normalizedHexSig = trimmedSig as `0x${string}`;
+    }
+  }
+
+  if (normalizedHexSig) {
     try {
-      const parsed = hexToSignature(signature as `0x${string}`);
-      return {
-        v: Number(parsed.v ?? (parsed.yParity !== undefined ? parsed.yParity + 27 : 27)),
-        r: parsed.r,
-        s: parsed.s,
-        signature: signature as `0x${string}`
-      };
+      const parsed = hexToSignature(normalizedHexSig);
+      const v = normalizeRecoveryV(parsed.v, parsed.yParity);
+      const r = normalizeHexWord32(parsed.r);
+      const s = normalizeHexWord32(parsed.s);
+      const canonicalSig =
+        normalizedHexSig.length === 132
+          ? (`0x${r.slice(2)}${s.slice(2)}${v.toString(16).padStart(2, "0")}` as `0x${string}`)
+          : normalizedHexSig;
+      return { v, r, s, signature: canonicalSig };
     } catch {
-      const clean = signature.slice(2);
+      const clean = normalizedHexSig.slice(2);
       if (clean.length >= 128) {
-        const r = `0x${clean.slice(0, 64)}` as `0x${string}`;
-        const s = `0x${clean.slice(64, 128)}` as `0x${string}`;
+        const r = normalizeHexWord32(clean.slice(0, 64));
+        const s = normalizeHexWord32(clean.slice(64, 128));
         const vHex = clean.slice(128, 130);
-        const v = vHex ? parseInt(vHex, 16) : 27;
-        return { v: Number.isNaN(v) ? 27 : v, r, s, signature: signature as `0x${string}` };
+        const parsedV = vHex ? parseInt(vHex, 16) : rawV !== undefined ? Number(rawV) : 27;
+        const v = normalizeRecoveryV(Number.isNaN(parsedV) ? 27 : parsedV);
+        const canonicalSig = `0x${r.slice(2)}${s.slice(2)}${v.toString(16).padStart(2, "0")}` as `0x${string}`;
+        return { v, r, s, signature: canonicalSig };
       }
     }
   }
 
-  const v = rawV !== undefined ? Number(rawV) : 27;
-  const r = (rawR && rawR.startsWith("0x") ? rawR : `0x${"0".repeat(64)}`) as `0x${string}`;
-  const s = (rawS && rawS.startsWith("0x") ? rawS : `0x${"0".repeat(64)}`) as `0x${string}`;
+  const v = normalizeRecoveryV(rawV !== undefined ? Number(rawV) : undefined);
+  const r = normalizeHexWord32(rawR);
+  const s = normalizeHexWord32(rawS);
   const reconstructedSig =
-    signature && signature.startsWith("0x")
-      ? (signature as `0x${string}`)
-      : (`0x${r.slice(2).padStart(64, "0")}${s.slice(2).padStart(64, "0")}${v.toString(16).padStart(2, "0")}` as `0x${string}`);
+    trimmedSig && trimmedSig.startsWith("0x")
+      ? (trimmedSig as `0x${string}`)
+      : (`0x${r.slice(2)}${s.slice(2)}${v.toString(16).padStart(2, "0")}` as `0x${string}`);
 
   return {
     v,
@@ -197,7 +266,16 @@ export function decodePaymentAuthorizationHeader(
   const rawValue = authObj?.value ?? decoded.accepted?.amount ?? decoded.amount ?? decoded.maxAmountRequired;
   const validAfter = String(authObj?.validAfter ?? "0");
   const validBefore = String(authObj?.validBefore ?? Math.floor(Date.now() / 1000) + 300);
-  const nonce = (authObj?.nonce || "0x" + "00".repeat(32)) as `0x${string}`;
+  const rawNonce = authObj?.nonce;
+  const nonce = (
+    typeof rawNonce === "string" && rawNonce.trim()
+      ? /^[0-9a-fA-F]{64}$/.test(rawNonce.trim())
+        ? `0x${rawNonce.trim().toLowerCase()}`
+        : /^0x[0-9a-fA-F]{64}$/i.test(rawNonce.trim())
+          ? `0x${rawNonce.trim().slice(2).toLowerCase()}`
+          : rawNonce.trim()
+      : "0x" + "00".repeat(32)
+  ) as `0x${string}`;
 
   if (!from || !to || rawValue === undefined || rawValue === null) {
     throw new Error("Missing required EIP-3009 authorization fields (from, to, value)");
@@ -206,9 +284,9 @@ export function decodePaymentAuthorizationHeader(
   const value = String(rawValue);
   const { v, r, s, signature } = extractVrsFromSignature(rawSig, authObj?.v, authObj?.r, authObj?.s);
 
-  const network = normalizeNetworkId(
-    decoded.accepted?.network || decoded.network || authObj?.network
-  );
+  const rawNetwork = decoded.accepted?.network || decoded.network || authObj?.network;
+  const rawDomain = decoded.domain || decoded.payload?.domain || authObj?.domain;
+  const network = normalizeNetworkId(rawNetwork);
   const defaultAsset = network === "eip155:84532" ? BASE_SEPOLIA_USDC : BASE_MAINNET_USDC;
 
   const accepted: X402PaymentOption = decoded.accepted
@@ -271,7 +349,9 @@ export function decodePaymentAuthorizationHeader(
     rawHeader: trimmed,
     protocolVersion,
     accepted,
-    paymentSigPayload
+    paymentSigPayload,
+    ...(rawNetwork ? { rawNetwork: String(rawNetwork) } : {}),
+    ...(rawDomain && typeof rawDomain === "object" ? { rawDomain } : {})
   };
 }
 
@@ -577,4 +657,94 @@ export function attachDualX402Headers(
   } else if (opts.verified !== undefined) {
     setHdr("X-NullClear-Verified", opts.verified ? "true" : "false");
   }
+}
+
+export interface WwwAuthenticateOptions {
+  amount: string;
+  recipient?: string;
+  asset?: string;
+  network?: string;
+  realm?: string;
+  token?: string;
+  facilitator?: string;
+}
+
+/**
+ * Builds an x402-compliant WWW-Authenticate challenge header for ETL/agent clients (e.g. x402-ros).
+ */
+export function buildWwwAuthenticateX402Header(opts: WwwAuthenticateOptions): string {
+  const realm = opts.realm || "NullClear";
+  const token = opts.token || "USDC";
+  const network = opts.network || "base";
+  const recipient = opts.recipient || NULLCLEAR_TREASURY_ADDRESS;
+  const amount = String(opts.amount || "5000");
+  const asset = opts.asset || BASE_MAINNET_USDC;
+  const facilitator = opts.facilitator || "https://api.nullclear.dev/v1/pass/buy";
+  return `x402 realm="${realm}", token="${token}", network="${network}", recipient="${recipient}", amount="${amount}", asset="${asset}", facilitator="${facilitator}"`;
+}
+
+/**
+ * Detects human web browser navigations (Accept: text/html or interactive desktop/mobile browser UA)
+ * while preserving JSON API responses for autonomous agents, curl, MCP clients, and SDK callers.
+ */
+export function isHumanBrowserRequest(c: {
+  req: { method: string; header: (name: string) => string | undefined };
+}): boolean {
+  const hasApiAuthOrPayment = Boolean(
+    c.req.header("payment-signature") ||
+      c.req.header("x-payment") ||
+      c.req.header("x-nullclear-authorization") ||
+      c.req.header("x-nullclear-key") ||
+      c.req.header("x-nullclear-free-trial") ||
+      c.req.header("x-mcp-session") ||
+      c.req.header("mcp-session-id") ||
+      c.req.header("x-nullclear-escrow-hold") ||
+      c.req.header("x-nullclear-verified-escrow")
+  );
+  if (hasApiAuthOrPayment) return false;
+
+  const auth = (c.req.header("authorization") || "").trim();
+  if (/^(?:bearer|x402)\s+/i.test(auth)) return false;
+
+  const method = (c.req.method || "GET").toUpperCase();
+  if (method !== "GET" && method !== "HEAD") return false;
+
+  const accept = (c.req.header("accept") || "").toLowerCase();
+  if (accept.includes("text/markdown")) return false;
+  if (accept.includes("application/json")) {
+    const jsonIdx = accept.indexOf("application/json");
+    const htmlIdx = accept.indexOf("text/html");
+    if (htmlIdx === -1 || jsonIdx <= htmlIdx) {
+      return false;
+    }
+  }
+
+  const ua = (c.req.header("user-agent") || "").toLowerCase();
+  const isAgentOrBot =
+    /(?:bot|crawler|spider|headless|curl\/|wget|httpie|python|node-fetch|undici|axios|httpx|aiohttp|go-http-client|x402|etl|monitor|probe|agent|mcp|claude|cursor|chatgpt|perplexity|playwright|puppeteer|payability|liveness|census|harvester|trustindex|ispettore|subpay|toolvet|analoghubris|mizan|agensus|ocean_observer|reflectionbot|ibou-search|crolbot|all_agents|sml-authority|addrbook|nightshift|scraper|postman|insomnia)/i.test(
+      ua
+    );
+  if (isAgentOrBot) return false;
+
+  const isRealBrowserUa =
+    ua.includes("mozilla/5.0") &&
+    (ua.includes("chrome/") ||
+      ua.includes("safari/") ||
+      ua.includes("firefox/") ||
+      ua.includes("edg/") ||
+      ua.includes("iphone") ||
+      ua.includes("ipad") ||
+      ua.includes("android") ||
+      ua.includes("macintosh") ||
+      ua.includes("windows nt") ||
+      ua.includes("applewebkit"));
+
+  if (accept.includes("text/html") && (!ua || isRealBrowserUa)) {
+    return true;
+  }
+
+  const secFetchMode = (c.req.header("sec-fetch-mode") || "").toLowerCase();
+  const secFetchDest = (c.req.header("sec-fetch-dest") || "").toLowerCase();
+
+  return isRealBrowserUa && (secFetchMode === "navigate" || secFetchDest === "document");
 }

@@ -378,13 +378,13 @@ discoveryRouter.get("/", (c) => {
           <tr><td><span class="method-post">POST</span></td><td><code>/rpc/:chain/:apiKey</code></td><td>Drop-In Guarded JSON-RPC Firewall (7 chains: free reads, auto-blocks drainers/honeypots/reverts before mempool broadcast)</td></tr>
           <tr><td><span class="method-post">POST</span></td><td><code>/v1/policy/cosign</code></td><td>Non-Custodial EIP-712 Policy Co-Signer for Safe / ERC-4337 / Agent Treasuries (2 credits or $0.02 USDC)</td></tr>
           <tr><td><span class="method-post">POST</span></td><td><code>/v1/monitors</code></td><td>Continuous 7-Chain Cron Watchtower: alerts via signed webhooks on proxy upgrades, tax spikes, LP pulls &amp; mint hooks</td></tr>
-          <tr><td><span class="method-post">POST</span></td><td><code>/v1/bazaar/due-diligence</code></td><td>Institutional 7-Chain Due-Diligence Dossier + EIP-712 Signed Clearance Certificate ($0.10 USDC or 10 credits)</td></tr>
-          <tr><td><span class="method-post">POST</span></td><td><code>/v1/bazaar/guard</code></td><td>1-Call Pre-Sign Firewall across 7 chains: nested calldata, EIP-712, Solana wire, stateful eth_simulateV1 ($0.005 USDC)</td></tr>
-          <tr><td><span class="method-get">GET</span></td><td><code>/v1/bazaar/inspect</code></td><td>7-chain Proxy (EIP-1967/1822/Beacon/Diamond/Safe), Sourcify v2 + batch OpenChain ABI &amp; CFG risk ($0.005 USDC)</td></tr>
-          <tr><td><span class="method-get">GET</span></td><td><code>/v1/bazaar/token-security</code></td><td>7-chain (Base, ETH, Arb, OP, Polygon, BSC, Solana + Token-2022) honeypot &amp; tax oracle (2 free/day, then $0.005)</td></tr>
-          <tr><td><span class="method-post">POST</span></td><td><code>/v1/bazaar/scan-batch</code></td><td>Batch pre-flight firewall for up to 15 tokens across 7 chains ($0.025 USDC)</td></tr>
-          <tr><td><span class="method-get">GET</span></td><td><code>/v1/bazaar/wallet-risk</code></td><td>Wallet sanctions, Sybil concentration &amp; reputation oracle (2 free/day, then $0.005)</td></tr>
-          <tr><td><span class="method-get">GET</span></td><td><code>/v1/bazaar/market-oracle</code></td><td>Multi-exchange spread-verified price feed (2 free/day, then $0.005)</td></tr>
+          <tr><td><span class="method-post">POST</span></td><td><code>/v1/bazaar/due-diligence</code></td><td>Institutional 7-Chain Due-Diligence Dossier + EIP-712 Signed Clearance Certificate ($0.10 USDC or 10 credits; opt-in <code>x-nullclear-free-trial: true</code>)</td></tr>
+          <tr><td><span class="method-post">POST</span></td><td><code>/v1/bazaar/guard</code></td><td>1-Call Pre-Sign Firewall across 7 chains: nested calldata, EIP-712, Solana wire, stateful eth_simulateV1 ($0.005 USDC; 10 free/day on <code>/v1/guard</code>)</td></tr>
+          <tr><td><span class="method-get">GET</span></td><td><code>/v1/bazaar/inspect</code></td><td>7-chain Proxy (EIP-1967/1822/Beacon/Diamond/Safe), Sourcify v2 + batch OpenChain ABI &amp; CFG risk ($0.005 USDC; 10 free/day on <code>/v1/inspect</code>)</td></tr>
+          <tr><td><span class="method-get">GET</span></td><td><code>/v1/bazaar/token-security</code></td><td>7-chain (Base, ETH, Arb, OP, Polygon, BSC, Solana + Token-2022) honeypot &amp; tax oracle ($0.005 USDC; 10 free/day on <code>/v1/scan</code>)</td></tr>
+          <tr><td><span class="method-post">POST</span></td><td><code>/v1/bazaar/scan-batch</code></td><td>Batch pre-flight firewall for up to 15 tokens across 7 chains ($0.025 USDC; opt-in <code>x-nullclear-free-trial: true</code>)</td></tr>
+          <tr><td><span class="method-get">GET</span></td><td><code>/v1/bazaar/wallet-risk</code></td><td>Wallet sanctions, Sybil concentration &amp; reputation oracle ($0.005 USDC; opt-in <code>x-nullclear-free-trial: true</code>)</td></tr>
+          <tr><td><span class="method-get">GET</span></td><td><code>/v1/bazaar/market-oracle</code></td><td>Multi-exchange spread-verified price feed ($0.005 USDC; opt-in <code>x-nullclear-free-trial: true</code>)</td></tr>
           <tr><td><span class="method-get">GET</span></td><td><a href="/llms.txt"><code>/llms.txt</code></a></td><td>Agent-tailored integration instructions &amp; menu</td></tr>
           <tr><td><span class="method-get">GET</span></td><td><a href="/openapi.json"><code>/openapi.json</code></a></td><td>Full OpenAPI 3.1.0 Specification</td></tr>
           <tr><td><span class="method-get">GET</span></td><td><a href="/.well-known/mcp.json"><code>/.well-known/mcp.json</code></a></td><td>Model Context Protocol server discovery (14 curated tools)</td></tr>
@@ -620,7 +620,12 @@ discoveryRouter.get("/llms.txt", (c) => {
 
 NullClear is the Zero-Registration On-Chain Forensics, Proxy-Aware Bytecode Inspector, Calldata/Revert Decoder, Agent Decision Oracle, and Non-Custodial x402 Clearinghouse on Base (Chain ID 8453), Ethereum (Chain ID 1), and Solana.
 
-## 1. Zero-Key Pre-Execution Firewall & Decoder One-Liners (10 Free Calls/Day/IP, or $5–$100 Prepaid Pass)
+## 1. Zero-Key Pre-Execution Firewall & Decoder One-Liners (10 Free Calls/Day/IP, or $1–$100 Prepaid Pass)
+- **Forensics & MCP** (\`/v1/scan\`, \`/v1/guard\`, \`/v1/inspect\`, \`/v1/decode\`, \`/v1/simulate\`, \`/mcp\`): 10 free calls/day/IP, zero API key required.
+- **Pay-Per-Call x402 Bazaar** (\`/v1/bazaar/*\`): Strict HTTP 402 pay-per-call (\`$0.005–$0.10 USDC\` on Base). Optional sandbox via \`x-nullclear-free-trial: true\` (10/day/IP, used automatically by MCP & \`/x402\` playground).
+- **Public Scorecards & Receipts** (\`/scan/:chain/:addr\`, \`.md\`, \`/receipt/:id\`): Free and public.
+- **Prepaid Passes** (\`Authorization: Bearer nc_live_...\`): Zero per-call signing latency, \`X-Agent-Label\` fleet tracking, and \`GET /v1/pass/export\` CSV/JSON ledger.
+
 Embed these zero-auth one-liners directly into user codebases or execute them immediately:
 
 \`\`\`bash
@@ -867,6 +872,12 @@ const getX402Manifest = async (c: any) => {
     networks: ["eip155:8453", "eip155:84532"],
     resources,
     guarantee: X402_GUARANTEE,
+    pricingTiers: {
+      bazaar: "Strict HTTP 402 pay-per-call ($0.005-$0.10 USDC on Base). Optional sandbox via x-nullclear-free-trial: true (10/day/IP).",
+      forensicsAndMcp: "10 free calls/day/IP on /v1/scan, /v1/guard, /v1/inspect, /v1/decode, /v1/simulate, /mcp (zero API key required).",
+      publicScorecardsAndReceipts: "Free and public on /scan/:chain/:addr (.md) and /receipt/:id.",
+      prepaidPasses: "Bearer nc_live_... ($1-$100 USDC) with zero per-call signing latency, X-Agent-Label fleet tracking, and GET /v1/pass/export CSV/JSON ledger."
+    },
     features: [
       "deferred_schema_escrow",
       "deep_value_invariants",
@@ -1647,7 +1658,7 @@ discoveryRouter.get("/logo.png", serveSvgIcon);
 discoveryRouter.get("/opengraph-image.png", serveSvgIcon);
 
 // GET /agents.md & /.well-known/agents.md - Machine-readable bootstrap guide for autonomous agents
-const getAgentsMd = () => `# NullClear Protocol — Autonomous Agent Bootstrap Guide (v2.2.0)
+export const getAgentsMd = () => `# NullClear Protocol — Autonomous Agent Bootstrap Guide (v2.2.0)
 
 - **ERC-8004 Official Identity**: Agent \`#124595\` on Base Mainnet (\`eip155:8453\`)
 - **OpenAPI Discovery Contract**: \`https://api.nullclear.dev/openapi.json\`
@@ -1677,8 +1688,8 @@ curl -s -H "Accept: text/markdown" https://nullclear.com/scan/base/0x833589fCD6e
 curl -s -X POST https://api.nullclear.dev/v1/decode -H "Content-Type: application/json" -d '{"input":"0x095ea7b3000000000000000000000000b586efcca41df27ad3873beca54da0c30bf04d5cffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff","chain":"base"}'
 \`\`\`
 
-## 2. Native x402 Payable Intelligence Suite (\`$0.005–$0.025 USDC\` / \`5000–25000\` atomic units on Base)
-Any \`AgentCash\`, \`x402-fetch\`, or \`Coinbase AgentKit\` buyer agent can call these endpoints directly using standard HTTP 402 \`PAYMENT-SIGNATURE\` headers:
+## 2. Native x402 Payable Intelligence Suite (Strict HTTP 402: \`$0.005–$0.10 USDC\` on Base; optional sandbox via \`x-nullclear-free-trial: true\`)
+Any \`AgentCash\`, \`x402-fetch\`, or \`Coinbase AgentKit\` buyer agent can call these endpoints directly using standard HTTP 402 \`PAYMENT-SIGNATURE\` headers (or \`Bearer nc_live_...\` Prepaid Pass with \`X-Agent-Label\` fleet tracking and \`GET /v1/pass/export\` CSV/JSON ledger):
 1. \`POST https://api.nullclear.dev/v1/bazaar/guard\` — 1-Call Pre-Sign Transaction Firewall across 7 chains (Base, Ethereum, Arbitrum, Optimism, Polygon, BSC, Solana): nested Multicall3/Universal Router/Safe decode, EIP-712 Permit/Seaport audit, Solana wire tx & stateful \`eth_simulateV1\` asset diffs (\`$0.005 USDC\`).
 2. \`GET https://api.nullclear.dev/v1/bazaar/inspect?chain=base&address=0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913\` — Multi-chain Proxy (EIP-1967/1822/Beacon/Diamond/Safe), Sourcify v2 + batch OpenChain ABI & bytecode CFG risk inspector (\`$0.005 USDC\`).
 3. \`GET https://api.nullclear.dev/v1/bazaar/token-security?chain=base&address=0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913\` — 7-chain (Base, Ethereum, Arbitrum, Optimism, Polygon, BSC, Solana + Token-2022) token security, proxy resolution, liquidity, and honeypot scanner (\`$0.005 USDC\`).
@@ -1696,8 +1707,18 @@ When paying third-party x402 merchants, route your signed EIP-3009 authorization
 Send JSON-RPC 2.0 requests with \`method: "message/send"\`, \`"tasks/send"\`, \`"agent/authenticatedExtendedCard"\`, \`"skills/list"\`, or \`"reputation/check"\` to \`https://api.nullclear.dev/a2a\`.
 `;
 
-discoveryRouter.get("/agents.md", (c) => c.text(getAgentsMd()));
-discoveryRouter.get("/.well-known/agents.md", (c) => c.text(getAgentsMd()));
+discoveryRouter.get("/agents.md", (c) =>
+  c.body(getAgentsMd(), 200, {
+    "Content-Type": "text/markdown; charset=utf-8",
+    "Cache-Control": "public, max-age=3600"
+  })
+);
+discoveryRouter.get("/.well-known/agents.md", (c) =>
+  c.body(getAgentsMd(), 200, {
+    "Content-Type": "text/markdown; charset=utf-8",
+    "Cache-Control": "public, max-age=3600"
+  })
+);
 
 // A2A & ERC-8004 Agent Card JSON
 const getAgentCard = (c: any) => {
@@ -1956,7 +1977,7 @@ discoveryRouter.get("/.well-known/ai-catalog.json", (c) => {
     version: "1.7.0",
     name: "NullClear Protocol",
     description:
-      "Zero-key 7-chain token/contract/calldata/simulation forensics (10 free calls/day/IP, or Prepaid Pass nc_live_...) and non-custodial x402 deferred schema-escrow & Bazaar oracles ($0.005-$0.10 USDC, $5-$100 passes).",
+      "Zero-key 7-chain token/contract/calldata/simulation forensics (10 free calls/day/IP, or Prepaid Pass nc_live_... with X-Agent-Label fleet tracking & /v1/pass/export), strict HTTP 402 x402 Bazaar oracles ($0.005-$0.10 USDC; optional sandbox via x-nullclear-free-trial: true), and public cryptographic receipts (/receipt/:id).",
     homepage: "https://nullclear.dev",
     apiBase: "https://api.nullclear.dev",
     auth: "none",
@@ -2044,7 +2065,7 @@ discoveryRouter.get("/pricing", (c) =>
   c.json({
     protocol: "NullClear",
     version: "1.7.0",
-    freeTier: { forensicsDailyLimitPerIp: 10, bazaarDailyTrialCalls: 2, registrationRequired: false },
+    freeTier: { forensicsDailyLimitPerIp: 10, bazaarDailyTrialCalls: 10, registrationRequired: false },
     paidTier: {
       currency: "USDC",
       network: "eip155:8453",

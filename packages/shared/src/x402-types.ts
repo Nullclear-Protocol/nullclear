@@ -1,7 +1,10 @@
 import { parseAbi } from "viem";
 
 export const EIP3009_ABI = parseAbi([
-  "function transferWithAuthorization(address from, address to, uint256 value, uint256 validAfter, uint256 validBefore, bytes32 nonce, uint8 v, bytes32 r, bytes32 s) external"
+  "function transferWithAuthorization(address from, address to, uint256 value, uint256 validAfter, uint256 validBefore, bytes32 nonce, uint8 v, bytes32 r, bytes32 s) external",
+  "function receiveWithAuthorization(address from, address to, uint256 value, uint256 validAfter, uint256 validBefore, bytes32 nonce, uint8 v, bytes32 r, bytes32 s) external",
+  "function authorizationState(address authorizer, bytes32 nonce) external view returns (bool)",
+  "function balanceOf(address account) external view returns (uint256)"
 ]);
 
 export interface X402PaymentOption {
@@ -94,12 +97,22 @@ export const EIP3009_TYPES = {
   ]
 } as const;
 
+export type SettlementErrorCode =
+  | "INVALID_SIGNATURE"
+  | "AUTHORIZATION_EXPIRED"
+  | "AUTHORIZATION_NOT_YET_ACTIVE"
+  | "NONCE_USED_OR_INSUFFICIENT_FUNDS"
+  | "RELAYER_ERROR"
+  | "INSUFFICIENT_VALUE"
+  | "INVALID_PAYLOAD";
+
 export interface X402PaymentResponse {
   success: boolean;
   transaction?: `0x${string}`;
   network: "eip155:8453" | "eip155:84532";
   payer: `0x${string}`;
   errorReason?: string;
+  errorCode?: SettlementErrorCode;
 }
 
 declare const Buffer: any;

@@ -936,7 +936,7 @@ carol.cto@base.org,Base Ecosystem,sk_live_555666777aaaa,890000</textarea>
           <div style="background:#06080D;border:1px solid var(--border);border-radius:10px;padding:16px;">
             <div class="mono" style="font-size:11px;color:#38BDF8;font-weight:700;">2. 7-CHAIN AGENT FIREWALL &amp; GUARDED RPC</div>
             <div style="font-weight:800;font-size:15px;margin:4px 0;"><a href="https://nullclear.dev/firewall" style="color:var(--text);text-decoration:none;">Pre-Sign Security Suite (nullclear.dev) ↗</a></div>
-            <p style="font-size:12.5px;color:var(--muted);">1-call pre-sign guard (<code class="mono">/v1/guard</code>), drop-in guarded JSON-RPC (<code class="mono">/rpc/:chain/:key</code>), $5–$100 Prepaid Passes, Policy Co-Signer &amp; Watchtower.</p>
+            <p style="font-size:12.5px;color:var(--muted);">1-call pre-sign guard (<code class="mono">/v1/guard</code>, 10 free/day/IP), drop-in guarded JSON-RPC (<code class="mono">/rpc/:chain/:key</code>), $1–$100 Prepaid Passes with <code class="mono">X-Agent-Label</code> &amp; <code class="mono">/v1/pass/export</code>, Policy Co-Signer &amp; Watchtower.</p>
           </div>
           <div style="background:#06080D;border:1px solid var(--border);border-radius:10px;padding:16px;">
             <div class="mono" style="font-size:11px;color:#F59E0B;font-weight:700;">3. PUBLIC TELEMETRY &amp; OPERATIONS</div>
