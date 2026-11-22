@@ -1,4 +1,4 @@
-import { Hono } from "hono";
+﻿import { Hono } from "hono";
 import { encodeBase64Json, type X402PaymentOption } from "@nullclear/shared";
 import { getArbiterStore, type Env } from "../env.js";
 import {
@@ -14,6 +14,8 @@ import {
 } from "../utils/x402-headers.js";
 import { keccak256, stringToHex } from "viem";
 import { attachReceiptHeader } from "./receipt.js";
+import { renderDevFirewallHtml } from "../ui/dev-firewall.js";
+import { renderDevX402Html } from "../ui/dev-x402.js";
 import {
   scanTokenForensics,
   inspectContractAbiAndProxy,
@@ -30,6 +32,11 @@ import {
   isSolanaAddress,
   type ForensicScanPayload
 } from "../services/forensics-engine.js";
+import {
+  buildTokenVerdictPayload,
+  renderTokenVerdictSvg,
+  renderTokenVerdictHtmlPage
+} from "../services/verdict-card.js";
 
 export const forensicsRouter = new Hono<Env>();
 
@@ -155,7 +162,6 @@ export function buildX402UpgradeBlock(c: any, resourcePath: string) {
 export function buildForensic402Response(c: any, resourcePath: string, errorMessage?: string): Response {
   const upgrade = buildX402UpgradeBlock(c, resourcePath);
   c.header("PAYMENT-REQUIRED", upgrade.encodedHeader);
-  c.header("X-Payment-Required", upgrade.encodedHeader);
   c.header("Pay-To", upgrade.treasuryAddress);
   c.header(
     "WWW-Authenticate",
@@ -206,7 +212,6 @@ export async function resolveForensicAccess(
     }
     const upgrade = buildX402UpgradeBlock(c, resourcePath);
     c.header("PAYMENT-REQUIRED", upgrade.encodedHeader);
-    c.header("X-Payment-Required", upgrade.encodedHeader);
     c.header("Pay-To", upgrade.treasuryAddress);
     return {
       allowed: false,
@@ -762,14 +767,14 @@ forensicsRouter.post("/v1/telegram/webhook", async (c) => {
     const scan = await scanTokenForensics(parsed.chain, parsed.address, c.env);
 
     const messageText =
-      `🛡️ *NullClear Forensic Audit: ${scan.name} ($${scan.symbol})*\n` +
-      `• *Verdict*: \`${scan.verdict}\` (${scan.score}/100)\n` +
-      `• *Agent Action*: \`${scan.recommendedAgentAction}\`\n` +
-      `• *Chain*: \`${scan.chain.toUpperCase()}\` (Block \`#${scan.provenance.blockNumber}\`)\n` +
-      `• *Taxes*: \`${scan.evidence.buyTaxPercent}% Buy\` / \`${scan.evidence.sellTaxPercent}% Sell\`\n` +
-      `• *Proxy*: \`${scan.evidence.isProxy ? `Yes (${scan.evidence.proxyType} -> ${scan.evidence.implementationAddress})` : "No (Direct)"}\`\n` +
-      `• *Liquidity*: \`$${scan.evidence.liquidityUsd.toLocaleString()}\`\n` +
-      `🔗 [Full Report & Provenance Receipt](${scan.links.webReportUrl})`;
+      `Ã°Å¸â€ºÂ¡Ã¯Â¸Â *NullClear Forensic Audit: ${scan.name} ($${scan.symbol})*\n` +
+      `Ã¢â‚¬Â¢ *Verdict*: \`${scan.verdict}\` (${scan.score}/100)\n` +
+      `Ã¢â‚¬Â¢ *Agent Action*: \`${scan.recommendedAgentAction}\`\n` +
+      `Ã¢â‚¬Â¢ *Chain*: \`${scan.chain.toUpperCase()}\` (Block \`#${scan.provenance.blockNumber}\`)\n` +
+      `Ã¢â‚¬Â¢ *Taxes*: \`${scan.evidence.buyTaxPercent}% Buy\` / \`${scan.evidence.sellTaxPercent}% Sell\`\n` +
+      `Ã¢â‚¬Â¢ *Proxy*: \`${scan.evidence.isProxy ? `Yes (${scan.evidence.proxyType} -> ${scan.evidence.implementationAddress})` : "No (Direct)"}\`\n` +
+      `Ã¢â‚¬Â¢ *Liquidity*: \`$${scan.evidence.liquidityUsd.toLocaleString()}\`\n` +
+      `Ã°Å¸â€â€” [Full Report & Provenance Receipt](${scan.links.webReportUrl})`;
 
     const inlineResponse = {
       method: "answerInlineQuery",
@@ -779,7 +784,7 @@ forensicsRouter.post("/v1/telegram/webhook", async (c) => {
         {
           type: "article",
           id: `${scan.chain}_${scan.address}`.slice(0, 60),
-          title: `${scan.verdict} (${scan.score}/100) — $${scan.symbol} on ${scan.chain.toUpperCase()}`,
+          title: `${scan.verdict} (${scan.score}/100) Ã¢â‚¬â€ $${scan.symbol} on ${scan.chain.toUpperCase()}`,
           description: `${scan.recommendedAgentAction} | Buy: ${scan.evidence.buyTaxPercent}% Sell: ${scan.evidence.sellTaxPercent}% | Liq: $${scan.evidence.liquidityUsd.toLocaleString()}`,
           input_message_content: {
             message_text: messageText,
@@ -788,8 +793,8 @@ forensicsRouter.post("/v1/telegram/webhook", async (c) => {
           reply_markup: {
             inline_keyboard: [
               [
-                { text: "🔍 Open Forensic Scorecard", url: scan.links.webReportUrl },
-                { text: "🐦 Share on X", url: scan.links.xShareIntentUrl }
+                { text: "Ã°Å¸â€Â Open Forensic Scorecard", url: scan.links.webReportUrl },
+                { text: "Ã°Å¸ÂÂ¦ Share on X", url: scan.links.xShareIntentUrl }
               ]
             ]
           }
@@ -812,13 +817,13 @@ forensicsRouter.post("/v1/telegram/webhook", async (c) => {
       chat_id: chatId,
       parse_mode: "Markdown",
       text:
-        "🛡️ *NullClear On-Chain Forensics Bot (Zero-Key V2.2)*\n\nSend any Base, Ethereum, or Solana contract address (e.g. `0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913`) or use `@NullClearBot <address>` inline for an instant proxy, bytecode & honeypot audit."
+        "Ã°Å¸â€ºÂ¡Ã¯Â¸Â *NullClear On-Chain Forensics Bot (Zero-Key V2.2)*\n\nSend any Base, Ethereum, or Solana contract address (e.g. `0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913`) or use `@NullClearBot <address>` inline for an instant proxy, bytecode & honeypot audit."
     });
   }
 
   const scan = await scanTokenForensics(parsed.chain, parsed.address, c.env);
   const replyText =
-    `🛡️ *NullClear Forensic Audit — $${scan.symbol} (${scan.chain.toUpperCase()})*\n\n` +
+    `Ã°Å¸â€ºÂ¡Ã¯Â¸Â *NullClear Forensic Audit Ã¢â‚¬â€ $${scan.symbol} (${scan.chain.toUpperCase()})*\n\n` +
     `*Verdict*: \`${scan.verdict}\` (*${scan.score}/100*)\n` +
     `*Recommended Action*: \`${scan.recommendedAgentAction}\`\n` +
     `*Contract*: \`${scan.address}\`\n` +
@@ -827,7 +832,7 @@ forensicsRouter.post("/v1/telegram/webhook", async (c) => {
     `*Liquidity*: \`$${scan.evidence.liquidityUsd.toLocaleString()}\` (\`${scan.evidence.lpLockedPercent}% Locked\`)\n` +
     `*Block Height*: \`#${scan.provenance.blockNumber}\`\n\n` +
     `${scan.llmDigest}\n\n` +
-    `🔗 [Full Report](${scan.links.webReportUrl}) • [Markdown Twin](${scan.links.markdownTwinUrl})`;
+    `Ã°Å¸â€â€” [Full Report](${scan.links.webReportUrl}) Ã¢â‚¬Â¢ [Markdown Twin](${scan.links.markdownTwinUrl})`;
 
   return c.json({
     method: "sendMessage",
@@ -837,8 +842,8 @@ forensicsRouter.post("/v1/telegram/webhook", async (c) => {
     reply_markup: {
       inline_keyboard: [
         [
-          { text: "🔍 View Full Forensic Report", url: scan.links.webReportUrl },
-          { text: "🐦 Share Scorecard on X", url: scan.links.xShareIntentUrl }
+          { text: "Ã°Å¸â€Â View Full Forensic Report", url: scan.links.webReportUrl },
+          { text: "Ã°Å¸ÂÂ¦ Share Scorecard on X", url: scan.links.xShareIntentUrl }
         ]
       ]
     },
@@ -878,7 +883,7 @@ export function renderForensicScanHtmlPage(scan: ForensicScanPayload): string {
   const jsonLd = JSON.stringify({
     "@context": "https://schema.org",
     "@type": "TechArticle",
-    headline: `${scan.name} ($${scan.symbol}) On-Chain Forensic Security Audit — ${scan.verdict} (${scan.score}/100)`,
+    headline: `${scan.name} ($${scan.symbol}) On-Chain Forensic Security Audit Ã¢â‚¬â€ ${scan.verdict} (${scan.score}/100)`,
     description: scan.llmDigest,
     url: scan.links.webReportUrl,
     image: ogImageUrl,
@@ -905,13 +910,13 @@ export function renderForensicScanHtmlPage(scan: ForensicScanPayload): string {
   <meta name="description" content="${escapeHtml(scan.llmDigest)}" />
   <link rel="canonical" href="${escapeHtml(scan.links.webReportUrl)}" />
   <link rel="alternate" type="text/markdown" href="${escapeHtml(scan.links.markdownTwinUrl)}" title="Agent Markdown Twin (<300 Tokens)" />
-  <meta property="og:title" content="${escapeHtml(scan.verdict)} (${scan.score}/100) — $${escapeHtml(scan.symbol)} on ${escapeHtml(scan.chain.toUpperCase())} | NullClear Forensics" />
+  <meta property="og:title" content="${escapeHtml(scan.verdict)} (${scan.score}/100) Ã¢â‚¬â€ $${escapeHtml(scan.symbol)} on ${escapeHtml(scan.chain.toUpperCase())} | NullClear Forensics" />
   <meta property="og:description" content="${escapeHtml(scan.llmDigest)}" />
   <meta property="og:type" content="article" />
   <meta property="og:url" content="${escapeHtml(scan.links.webReportUrl)}" />
   <meta property="og:image" content="${escapeHtml(ogImageUrl)}" />
   <meta name="twitter:card" content="summary_large_image" />
-  <meta name="twitter:title" content="${escapeHtml(scan.verdict)} (${scan.score}/100) — $${escapeHtml(scan.symbol)} Forensic Scorecard" />
+  <meta name="twitter:title" content="${escapeHtml(scan.verdict)} (${scan.score}/100) Ã¢â‚¬â€ $${escapeHtml(scan.symbol)} Forensic Scorecard" />
   <meta name="twitter:description" content="${escapeHtml(scan.llmDigest)}" />
   <meta name="twitter:image" content="${escapeHtml(ogImageUrl)}" />
   <script type="application/ld+json">${jsonLd}</script>
@@ -1071,10 +1076,10 @@ export function renderForensicScanHtmlPage(scan: ForensicScanPayload): string {
         <button type="submit" class="btn btn-emerald">Scan</button>
       </form>
       <div style="display:flex;gap:8px;flex-wrap:wrap;">
-        <a href="${escapeHtml(scan.links.markdownTwinUrl)}" class="btn mono" title="View <300-token Markdown Twin">📄 .MD Twin</a>
-        <a href="https://nullclear.dev/history" class="btn" style="color:var(--emerald);">📡 Live History</a>
-        <a href="/x402" class="btn">⚡ /x402 Gateway</a>
-        <a href="mailto:ops@nullclear.dev" class="btn mono">✉️ ops@nullclear.dev</a>
+        <a href="${escapeHtml(scan.links.markdownTwinUrl)}" class="btn mono" title="View <300-token Markdown Twin">Ã°Å¸â€œâ€ž .MD Twin</a>
+        <a href="https://nullclear.dev/history" class="btn" style="color:var(--emerald);">Ã°Å¸â€œÂ¡ Live History</a>
+        <a href="/x402" class="btn">Ã¢Å¡Â¡ /x402 Gateway</a>
+        <a href="mailto:ops@nullclear.dev" class="btn mono">Ã¢Å“â€°Ã¯Â¸Â ops@nullclear.dev</a>
       </div>
     </div>
   </header>
@@ -1083,14 +1088,14 @@ export function renderForensicScanHtmlPage(scan: ForensicScanPayload): string {
     <!-- 1-Click Agent Integration & Viral Share Bar -->
     <div class="agent-bar">
       <div style="font-size:13px;">
-        <strong style="color:var(--cyan);">🤖 Agent-Ready Forensic Oracle (Zero API Key):</strong>
+        <strong style="color:var(--cyan);">Ã°Å¸Â¤â€“ Agent-Ready Forensic Oracle (Zero API Key):</strong>
         <code class="mono" style="margin-left:6px;color:#E2E8F0;">claude mcp add --transport http nullclear https://api.nullclear.dev/mcp</code>
       </div>
       <div style="display:flex;flex-wrap:wrap;gap:8px;">
-        <button class="btn" onclick="copyText('claude mcp add --transport http nullclear https://api.nullclear.dev/mcp', this)">📋 Copy Claude MCP Command</button>
-        <button class="btn" onclick="copyRuleSnippet(this)">📘 Copy CLAUDE.md / AGENTS.md Rule</button>
-        <a class="btn" href="${escapeHtml(scan.links.xShareIntentUrl)}" target="_blank" rel="noopener">🐦 Share Scorecard on X</a>
-        <button class="btn" onclick="copyText(${JSON.stringify(badgeMarkdown)}, this)">🛡️ Copy Verified Badge</button>
+        <button class="btn" onclick="copyText('claude mcp add --transport http nullclear https://api.nullclear.dev/mcp', this)">Ã°Å¸â€œâ€¹ Copy Claude MCP Command</button>
+        <button class="btn" onclick="copyRuleSnippet(this)">Ã°Å¸â€œËœ Copy CLAUDE.md / AGENTS.md Rule</button>
+        <a class="btn" href="${escapeHtml(scan.links.xShareIntentUrl)}" target="_blank" rel="noopener">Ã°Å¸ÂÂ¦ Share Scorecard on X</a>
+        <button class="btn" onclick="copyText(${JSON.stringify(badgeMarkdown)}, this)">Ã°Å¸â€ºÂ¡Ã¯Â¸Â Copy Verified Badge</button>
       </div>
     </div>
 
@@ -1098,7 +1103,7 @@ export function renderForensicScanHtmlPage(scan: ForensicScanPayload): string {
     <div class="card verdict-banner">
       <div style="max-width:740px;">
         <div class="mono" style="font-size:12px;color:var(--cyan);font-weight:700;text-transform:uppercase;">
-          CHAIN: ${escapeHtml(scan.chain.toUpperCase())} (${escapeHtml(String(scan.provenance.chainId))}) • BLOCK #${scan.provenance.blockNumber} • ZERO-KEY ATTESTED
+          CHAIN: ${escapeHtml(scan.chain.toUpperCase())} (${escapeHtml(String(scan.provenance.chainId))}) Ã¢â‚¬Â¢ BLOCK #${scan.provenance.blockNumber} Ã¢â‚¬Â¢ ZERO-KEY ATTESTED
         </div>
         <h1 style="font-size:30px;font-weight:800;margin:6px 0;">
           ${escapeHtml(scan.name)} <span style="color:var(--muted)">($${escapeHtml(scan.symbol)})</span>
@@ -1138,14 +1143,14 @@ export function renderForensicScanHtmlPage(scan: ForensicScanPayload): string {
       <div class="metric-box">
         <div class="metric-label">PROXY / IMPLEMENTATION</div>
         <div class="metric-val mono" style="font-size:15px;color:var(--cyan);word-break:break-all;">
-          ${scan.evidence.isProxy ? `${escapeHtml(scan.evidence.proxyType || "EIP-1967")} → ${escapeHtml(scan.evidence.implementationAddress || "")}` : "Direct Contract (Non-Proxy)"}
+          ${scan.evidence.isProxy ? `${escapeHtml(scan.evidence.proxyType || "EIP-1967")} Ã¢â€ â€™ ${escapeHtml(scan.evidence.implementationAddress || "")}` : "Direct Contract (Non-Proxy)"}
         </div>
       </div>
     </div>
 
     <!-- Detailed Proxy, Bytecode Disassembly & Provenance Table -->
     <div class="card">
-      <h2 style="font-size:18px;font-weight:800;margin-bottom:8px;">🔬 Proxy Resolution &amp; Instruction-Boundary Opcode Evidence</h2>
+      <h2 style="font-size:18px;font-weight:800;margin-bottom:8px;">Ã°Å¸â€Â¬ Proxy Resolution &amp; Instruction-Boundary Opcode Evidence</h2>
       <table>
         <tbody>
           <tr>
@@ -1198,7 +1203,7 @@ export function renderForensicScanHtmlPage(scan: ForensicScanPayload): string {
     function copyText(txt, btn) {
       navigator.clipboard.writeText(txt).catch(() => {});
       const prev = btn.textContent;
-      btn.textContent = '✅ Copied!';
+      btn.textContent = 'Ã¢Å“â€¦ Copied!';
       setTimeout(() => { btn.textContent = prev; }, 1600);
     }
     function copyRuleSnippet(btn) {
@@ -1285,372 +1290,69 @@ forensicsRouter.get("/scan/:address", (c) => {
 });
 
 // ============================================================================
-// 9. GET /x402 — Dedicated x402 Clearinghouse, EIP-3009 & Seller Gateway Product Tab
+// 9. GET /x402 Ã¢â‚¬â€ Dedicated x402 Clearinghouse, EIP-3009 & Seller Gateway Product Tab
 // ============================================================================
 forensicsRouter.get("/x402", (c) => {
-  const html = `<!DOCTYPE html>
-<html lang="en" class="dark">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>NullClear /x402 — Non-Custodial EIP-3009 Schema Escrow &amp; 1-Click Seller Gateways</title>
-  <meta name="description" content="High-frequency x402 payment rail, EIP-3009 USDC settlement clearinghouse, and 1-Click Seller Gateways (/g/:slug) on Base Mainnet." />
-  <style>
-    :root {
-      --bg: #07090E;
-      --surface: #0C1018;
-      --border: rgba(255,255,255,0.1);
-      --emerald: #10B981;
-      --cyan: #38BDF8;
-      --text: #F8FAFC;
-      --muted: #94A3B8;
-    }
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, "Inter", sans-serif; padding: 24px 16px 64px; line-height: 1.55; }
-    .container { max-width: 1080px; margin: 0 auto; }
-    .mono { font-family: "JetBrains Mono", monospace; }
-    .card { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 24px; margin-bottom: 20px; }
-    .btn { cursor: pointer; padding: 10px 16px; border-radius: 8px; border: 1px solid var(--border); background: #161F30; color: var(--text); font-weight: 600; font-size: 13px; text-decoration: none; display: inline-flex; align-items: center; gap: 6px; }
-    .btn-primary { background: var(--emerald); color: #04130D; border-color: var(--emerald); font-weight: 700; }
-    input { width: 100%; background: #05070B; border: 1px solid var(--border); color: var(--text); padding: 10px 12px; border-radius: 8px; margin-top: 6px; font-family: monospace; }
-    pre { background: #05070B; border: 1px solid var(--border); border-radius: 8px; padding: 14px; color: #7DD3FC; overflow-x: auto; font-size: 12.5px; margin-top: 12px; }
-  </style>
-</head>
-<body>
-  <div class="container">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:24px;flex-wrap:wrap;gap:12px;">
-      <div>
-        <span class="mono" style="color:var(--emerald);font-size:12px;font-weight:700;">NULLCLEAR X402 CLEARINGHOUSE &bull; EIP-3009 RAIL</span>
-        <h1 style="font-size:32px;font-weight:800;">x402 Schema-Escrow &amp; 1-Click Seller Gateways</h1>
-      </div>
-      <div style="display:flex;gap:10px;flex-wrap:wrap;">
-        <a href="/firewall" class="btn btn-primary">🛡️ Pre-Swap Firewall SDK</a>
-        <a href="https://nullclear.dev/history" class="btn" style="color:var(--emerald);">📡 Live History &amp; Diagnostics</a>
-        <a href="/" class="btn">🔍 Forensics Omnibox</a>
-        <a href="/safepay" class="btn">📜 SafePay Deals</a>
-        <a href="https://nullclear.dev/leaderboard" class="btn">🏆 x402 Leaderboard</a>
-        <a href="mailto:ops@nullclear.dev" class="btn mono">✉️ ops@nullclear.dev</a>
-      </div>
-    </div>
-
-    <div class="card">
-      <h2 style="font-size:20px;margin-bottom:8px;color:var(--cyan);">🚀 Register a 1-Click x402 Seller Gateway (<code>/g/:slug</code>)</h2>
-      <p style="color:var(--muted);font-size:14px;margin-bottom:12px;">
-        Monetize any REST API or unlock unlimited rate limits (&gt;10 free calls/day) via Base Mainnet USDC EIP-3009 TransferWithAuthorization ($0.005 USDC/call) or a Prepaid Pass.
-      </p>
-      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px;">
-        <div>
-          <label style="font-size:12px;color:var(--muted);">Upstream REST Endpoint</label>
-          <input id="gwUrl" value="https://api.coinbase.com/v2/prices/ETH-USD/spot" />
-        </div>
-        <div>
-          <label style="font-size:12px;color:var(--muted);">Your Base USDC Wallet (0x...)</label>
-          <input id="gwWallet" value="0xB586eFcCa41dF27ad3873BEcA54da0c30bf04d5c" />
-        </div>
-        <div>
-          <label style="font-size:12px;color:var(--muted);">Gateway Slug</label>
-          <input id="gwSlug" placeholder="eth-spot-oracle" />
-        </div>
-      </div>
-      <button class="btn btn-primary" style="margin-top:14px;" onclick="createGw()">Create x402 Gateway</button>
-      <pre id="gwResult">// POST /v1/gateways -> https://api.nullclear.dev/g/:slug</pre>
-    </div>
-
-    <div class="card">
-      <h2 style="font-size:20px;margin-bottom:8px;color:var(--emerald);">⚡ Deferred Schema Escrow (<code>POST /v1/clear</code> &amp; <code>/v1/escrow</code>)</h2>
-      <p style="color:var(--muted);font-size:14px;">
-        Buyers attach an EIP-3009 signature in <code>X-Payment</code>. NullClear validates the upstream response against your Draft-07 JSON Schema, numeric invariants, and Canonical LLM Refusal Guard before settling on Base. Hallucinations or 5xx crashes shred the signature with $0.00 charged.
-      </p>
-      <pre>curl -X POST https://api.nullclear.dev/v1/clear \\
-  -H "Content-Type: application/json" \\
-  -H "x-nullclear-free-trial: true" \\
-  -d '{"targetUrl":"https://api.nullclear.dev/v1/sandbox/market-feed","paymentSignatureHeader":"free-trial","validation":{"expectedStatus":[200],"rejectRefusals":true}}'</pre>
-    </div>
-  </div>
-  <script>
-    async function createGw() {
-      const upstreamUrl = document.getElementById('gwUrl').value.trim();
-      const sellerAddress = document.getElementById('gwWallet').value.trim();
-      const slug = document.getElementById('gwSlug').value.trim() || ('gw-' + Math.random().toString(36).slice(2, 7));
-      const out = document.getElementById('gwResult');
-      out.textContent = 'Registering gateway...';
-      try {
-        const res = await fetch('/v1/gateways', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ upstreamUrl, sellerAddress, slug, priceUsdc: '0.005', validationPreset: 'STRICT_NO_REFUSAL' })
-        });
-        out.textContent = JSON.stringify(await res.json(), null, 2);
-      } catch (e) {
-        out.textContent = 'Error: ' + e.message;
-      }
-    }
-  </script>
-</body>
-</html>`;
-  return c.html(html);
+  return c.html(renderDevX402Html());
 });
 
 // ============================================================================
-// 10. GET /firewall — Trading Bot & DeFi Builder Pre-Swap Security Wedge
+// 10. GET /firewall Ã¢â‚¬â€ Trading Bot & DeFi Builder Pre-Swap Security Wedge
 // ============================================================================
 forensicsRouter.get("/firewall", (c) => {
-  const html = `<!DOCTYPE html>
-<html lang="en" class="dark">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>NullClear Pre-Swap Firewall — Rug, Honeypot &amp; Drainer Guard for Trading Bots</title>
-  <meta name="description" content="Stop AI trading bots and DeFi agents from buying honeypots or signing unlimited approval drainers. Drop-in pre-flight security for Coinbase AgentKit, ElizaOS, Base, Ethereum, and Solana in 3 lines." />
-  <style>
-    :root {
-      --bg: #07090E;
-      --surface: #0C1018;
-      --surface-2: #111827;
-      --border: rgba(255,255,255,0.1);
-      --emerald: #10B981;
-      --amber: #F59E0B;
-      --rose: #F43F5E;
-      --cyan: #38BDF8;
-      --text: #F8FAFC;
-      --muted: #94A3B8;
-    }
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, "Inter", sans-serif; padding: 24px 16px 72px; line-height: 1.55; }
-    .container { max-width: 1120px; margin: 0 auto; }
-    .mono { font-family: "JetBrains Mono", monospace; }
-    .card { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 22px; margin-bottom: 18px; }
-    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; margin-bottom: 18px; }
-    .btn { cursor: pointer; padding: 9px 14px; border-radius: 8px; border: 1px solid var(--border); background: #161F30; color: var(--text); font-weight: 600; font-size: 13px; text-decoration: none; display: inline-flex; align-items: center; gap: 6px; }
-    .btn-primary { background: var(--emerald); color: #04130D; border-color: var(--emerald); font-weight: 700; }
-    .pill { display: inline-block; padding: 3px 9px; border-radius: 999px; font-size: 11px; font-weight: 700; font-family: monospace; }
-    .pill-safe { background: rgba(16,185,129,0.15); color: var(--emerald); border: 1px solid rgba(16,185,129,0.35); }
-    .pill-trap { background: rgba(244,63,94,0.15); color: var(--rose); border: 1px solid rgba(244,63,94,0.35); }
-    input, select { background: #05070B; border: 1px solid var(--border); color: var(--text); padding: 10px 12px; border-radius: 8px; font-family: monospace; font-size: 13px; }
-    pre { background: #05070B; border: 1px solid var(--border); border-radius: 8px; padding: 14px; color: #7DD3FC; overflow-x: auto; font-size: 12.5px; margin-top: 10px; line-height: 1.5; }
-  </style>
-</head>
-<body>
-  <div class="container">
-    <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:14px;margin-bottom:24px;">
-      <div>
-        <span class="mono" style="color:var(--emerald);font-size:12px;font-weight:700;">NULLCLEAR PRE-FLIGHT SECURITY ORACLE &bull; 7 CHAINS (BASE, ETH, ARB, OP, POLY, BSC, SOLANA)</span>
-        <h1 style="font-size:34px;font-weight:800;margin-top:4px;">Stop AI Agents From Signing Drain &amp; Honeypot Txs in 1 Call</h1>
-        <p style="color:var(--muted);max-width:760px;margin-top:8px;font-size:15px;">
-          One zero-key call (<code>POST /v1/guard</code> or MCP <code>nullclear_preflight_guard</code>) unwraps nested Universal Router / Multicall3 / Safe calldata, audits EIP-712 Permits, simulates stateful asset diffs (<code>eth_simulateV1</code> &amp; Solana <code>simulateTransaction</code>), and screens every touched token across 7 chains. 10 free calls/day/IP, gasless x402 ($0.005 / $0.10 dossier), or instant <code>$5–$100</code> Prepaid Passes unlocking Drop-In Guarded JSON-RPC (<code>/rpc/:chain/:apiKey</code>).
-        </p>
-      </div>
-      <div style="display:flex;gap:8px;flex-wrap:wrap;">
-        <a href="/" class="btn">⚡ Developer Portal</a>
-        <a href="/history" class="btn" style="color:var(--emerald);border-color:rgba(16,185,129,0.4);">📡 Live History &amp; Diagnostics</a>
-        <a href="/x402" class="btn">🔐 x402 &amp; Gateways</a>
-        <a href="mailto:ops@nullclear.dev" class="btn mono">✉️ ops@nullclear.dev</a>
-        <a href="https://github.com/Nullclear-Protocol/nullclear" target="_blank" rel="noopener" class="btn btn-primary">GitHub &amp; Docs</a>
-      </div>
-    </div>
+  return c.html(renderDevFirewallHtml());
+});
 
-    <div class="grid">
-      <div class="card" style="margin-bottom:0;">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
-          <span class="mono" style="font-weight:700;">Base USDC Benchmark</span>
-          <span class="pill pill-safe">EXECUTE_SAFE (99/100)</span>
-        </div>
-        <p style="color:var(--muted);font-size:13px;">Resolves EIP-1967 proxy slot, verifies 0% buy/sell tax, confirms deep DEX liquidity, and returns SHA-256 provenance.</p>
-      </div>
-      <div class="card" style="margin-bottom:0;">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
-          <span class="mono" style="font-weight:700;">Wrapped PROS Honeypot Catch</span>
-          <span class="pill pill-trap">ABORT_CRITICAL_TRAP</span>
-        </div>
-        <p style="color:var(--muted);font-size:13px;">Instruction-boundary bytecode disassembly + multi-oracle consensus flags sell-block &amp; hidden tax traps before wallet signature.</p>
-      </div>
-      <div class="card" style="margin-bottom:0;">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
-          <span class="mono" style="font-weight:700;">Infinite Approval Drainer Guard</span>
-          <span class="pill pill-trap">ABORT_DRAINER_APPROVAL</span>
-        </div>
-        <p style="color:var(--muted);font-size:13px;">Decodes raw calldata (<code>approve</code>, <code>setApprovalForAll</code>) via <code>POST /v1/decode</code> before signing malicious spender approvals.</p>
-      </div>
-    </div>
+// 11. GET /v1/verdict-card/:chain/:address(.svg) Ã¢â‚¬â€ Zero-dependency Edge-cached SVG share card
+forensicsRouter.get("/v1/verdict-card/:chain/:address", async (c) => {
+  const rawChain = c.req.param("chain") || "base";
+  const rawAddrParam = c.req.param("address") || "";
+  const address = rawAddrParam.replace(/\.svg$/i, "").trim();
+  if (!isEvmAddress(address) && !isSolanaAddress(address)) {
+    return c.json(
+      {
+        error: "Invalid token address",
+        message: "Provide a valid EVM (0x...) or Solana base58 mint address."
+      },
+      400
+    );
+  }
+  const scan = await scanTokenForensics(rawChain, address, c.env);
+  const verdict = buildTokenVerdictPayload(scan);
+  const svg = renderTokenVerdictSvg(verdict);
+  return c.body(svg, 200, {
+    "Content-Type": "image/svg+xml; charset=utf-8",
+    "Cache-Control": "public, max-age=300, s-maxage=300",
+    "X-NullClear-Attestation": verdict.attestation
+  });
+});
 
-    <div class="grid">
-      <div class="card" style="margin-bottom:0;">
-        <h2 style="font-size:18px;color:var(--cyan);">1. Coinbase AgentKit (Base &amp; Solana)</h2>
-        <p style="color:var(--muted);font-size:13px;margin-top:4px;">Drop-in <code>ActionProvider</code> + wallet transaction guard on npm: <code>npm i @nullclear/agentkit</code></p>
-        <pre>import { AgentKit } from "@coinbase/agentkit";
-import { nullclearActionProvider, createNullClearWalletGuard } from "@nullclear/agentkit";
-
-const wallet = createNullClearWalletGuard(walletProvider);
-const agentKit = await AgentKit.from({
-  walletProvider: wallet,
-  actionProviders: [nullclearActionProvider()]
-});</pre>
-      </div>
-      <div class="card" style="margin-bottom:0;">
-        <h2 style="font-size:18px;color:var(--emerald);">2. ElizaOS Trading Plugin (Solana &amp; EVM)</h2>
-        <p style="color:var(--muted);font-size:13px;margin-top:4px;">Screens tokens mentioned in chat &amp; guards custom swaps on npm: <code>npm i @nullclear/plugin-eliza</code></p>
-        <pre>import { nullclearPlugin, assertSafeElizaSwap } from "@nullclear/plugin-eliza";
-
-const character = { name: "SafeTrader", plugins: [nullclearPlugin] };
-// Or hard-block rugs inside swap code:
-await assertSafeElizaSwap(mintAddress, { chain: "solana", strict: true });</pre>
-      </div>
-    </div>
-
-    <div class="card">
-      <h2 style="font-size:18px;color:var(--amber);">3. Drop-In Guarded JSON-RPC Safety Rail &amp; Prepaid Passes (<code>$5 / $25 / $100 USDC</code>)</h2>
-      <p style="color:var(--muted);font-size:13px;margin-top:4px;">
-        Built for autonomous AI agents (Coinbase AgentKit, ElizaOS, Virtuals, Rig, MCP wallets) &amp; Safe / DAO treasuries. Swap one <code>RPC_URL</code> env var to block malicious broadcasts before they hit the mempool at <code>&lt;5ms</code> edge KV auth:
-      </p>
-      <pre># 1. Self-serve Prepaid Pass ($5 Starter = 2,000 credits, $25 Pro = 15,000 credits, $100 Scale = 100,000 credits)
-POST https://api.nullclear.dev/v1/pass/buy   # x402 EIP-3009 USDC -&gt; returns Bearer nc_live_... + RPC URLs
-
-# 2. Drop-in Guarded RPC Safety Rail (0-credit reads, auto-blocks drainers/honeypots/reverts on broadcast)
-BASE_RPC_URL="https://api.nullclear.dev/rpc/base/nc_live_..."</pre>
-    </div>
-
-    <div class="card">
-      <h2 style="font-size:18px;color:var(--emerald);margin-bottom:8px;">⚡ 1-Call Pre-Sign Guard vs. Multi-Tool Stacks</h2>
-      <p style="color:var(--muted);font-size:13px;margin-bottom:10px;">
-        <code>POST /v1/guard</code> combines recursive calldata unwrapping, stateful <code>eth_simulateV1</code> / Solana simulation, asset balance diffs, and automatic touched-token honeypot scanning in one zero-key edge call.
-      </p>
-      <div style="overflow-x:auto;">
-        <table style="width:100%;border-collapse:collapse;font-size:12.5px;">
-          <thead>
-            <tr style="border-bottom:1px solid var(--border);color:var(--muted);text-align:left;">
-              <th style="padding:8px;">Capability</th>
-              <th style="padding:8px;color:var(--emerald);">NullClear (/v1/guard)</th>
-              <th style="padding:8px;">txlens / Foundry</th>
-              <th style="padding:8px;">GoPlus MCP</th>
-              <th style="padding:8px;">Tenderly MCP</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr style="border-bottom:1px solid var(--border);">
-              <td style="padding:8px;">Zero Setup / Zero API Key</td>
-              <td style="padding:8px;color:var(--emerald);font-weight:700;">Yes (1 URL / MCP)</td>
-              <td style="padding:8px;">Local CLI / RPC</td>
-              <td style="padding:8px;">API Key + Secret</td>
-              <td style="padding:8px;">OAuth / Paid Tier</td>
-            </tr>
-            <tr style="border-bottom:1px solid var(--border);">
-              <td style="padding:8px;">Chains (EVM + Solana)</td>
-              <td style="padding:8px;color:var(--emerald);font-weight:700;">Base, ETH, Arb, OP, Poly, BSC + Solana</td>
-              <td style="padding:8px;">EVM only</td>
-              <td style="padding:8px;">EVM + Solana + Sui</td>
-              <td style="padding:8px;">EVM only</td>
-            </tr>
-            <tr style="border-bottom:1px solid var(--border);">
-              <td style="padding:8px;">Nested Universal Router / Multicall + EIP-712</td>
-              <td style="padding:8px;color:var(--emerald);font-weight:700;">Yes (Recursive + Permit2/Seaport)</td>
-              <td style="padding:8px;">Partial (no EIP-712)</td>
-              <td style="padding:8px;">No</td>
-              <td style="padding:8px;">Raw Trace</td>
-            </tr>
-            <tr style="border-bottom:1px solid var(--border);">
-              <td style="padding:8px;">Token-2022 + Solana Simulate + Token Tax Audit</td>
-              <td style="padding:8px;color:var(--emerald);font-weight:700;">Yes (1 Call)</td>
-              <td style="padding:8px;">No</td>
-              <td style="padding:8px;">Token Audit Only</td>
-              <td style="padding:8px;">Sim Only</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-    </div>
-
-    <div class="card">
-      <h2 style="font-size:18px;margin-bottom:8px;">🔍 Live Interactive Pre-Swap Sandbox (Zero API Key — 10 Free/Day)</h2>
-      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;">
-        <button class="btn" onclick="runPreset('base','0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913')">Base USDC</button>
-        <button class="btn" onclick="runPreset('arbitrum','0xaf88d065e77c8cc2239327c5edb3a432268e5831')">Arbitrum USDC</button>
-        <button class="btn" onclick="runPreset('solana','EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v')">Solana USDC</button>
-        <button class="btn" onclick="runCalldataTest()">Test Infinite Approve Drainer</button>
-        <button class="btn" onclick="runGuardEip712Test()">Test EIP-712 Permit Phishing (/v1/guard)</button>
-      </div>
-      <div style="display:flex;gap:8px;flex-wrap:wrap;">
-        <select id="fwChain">
-          <option value="base">base</option>
-          <option value="eth">eth</option>
-          <option value="arbitrum">arbitrum</option>
-          <option value="optimism">optimism</option>
-          <option value="polygon">polygon</option>
-          <option value="bsc">bsc</option>
-          <option value="solana">solana</option>
-        </select>
-        <input id="fwAddr" style="flex:1;min-width:260px;" value="0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913" placeholder="0x... or Solana mint address" />
-        <button class="btn btn-primary" onclick="runCustomScan()">Scan Token</button>
-      </div>
-      <pre id="fwOut">// Click a preset or enter any 7-chain token mint above</pre>
-    </div>
-  </div>
-  <script>
-    async function runPreset(chain, addr) {
-      document.getElementById('fwChain').value = chain;
-      document.getElementById('fwAddr').value = addr;
-      return runCustomScan();
-    }
-    async function runCustomScan() {
-      const chain = document.getElementById('fwChain').value;
-      const addr = document.getElementById('fwAddr').value.trim();
-      const out = document.getElementById('fwOut');
-      out.textContent = 'Scanning ' + chain + ':' + addr + '...';
-      try {
-        const res = await fetch('/v1/scan/' + encodeURIComponent(chain) + '/' + encodeURIComponent(addr));
-        out.textContent = JSON.stringify(await res.json(), null, 2);
-      } catch (e) {
-        out.textContent = 'Error: ' + e.message;
-      }
-    }
-    async function runCalldataTest() {
-      const out = document.getElementById('fwOut');
-      out.textContent = 'Running 1-call /v1/guard on infinite approve() drainer...';
-      try {
-        const calldata = '0x095ea7b3000000000000000000000000b586efcca41df27ad3873beca54da0c30bf04d5cffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff';
-        const res = await fetch('/v1/guard', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            chain: 'base',
-            from: '0xfd74fF802EA0E735514C070AF04E0D6528deD145',
-            to: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913',
-            data: calldata
-          })
-        });
-        out.textContent = JSON.stringify(await res.json(), null, 2);
-      } catch (e) {
-        out.textContent = 'Error: ' + e.message;
-      }
-    }
-    async function runGuardEip712Test() {
-      const out = document.getElementById('fwOut');
-      out.textContent = 'Auditing EIP-712 gasless Permit phishing signature via /v1/guard...';
-      try {
-        const res = await fetch('/v1/guard', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            chain: 'base',
-            typedData: {
-              primaryType: 'Permit',
-              domain: { name: 'USD Coin', chainId: 8453, verifyingContract: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913' },
-              message: {
-                owner: '0xfd74fF802EA0E735514C070AF04E0D6528deD145',
-                spender: '0xdead00000000000000000000000000000000beef',
-                value: '115792089237316195423570985008687907853269984665640564039457584007913129639935',
-                nonce: 0,
-                deadline: 1893456000
-              }
-            }
-          })
-        });
-        out.textContent = JSON.stringify(await res.json(), null, 2);
-      } catch (e) {
-        out.textContent = 'Error: ' + e.message;
-      }
-    }
-  </script>
-</body>
-</html>`;
-  return c.html(html);
+// 12. GET /verdict/:chain/:address Ã¢â‚¬â€ Public Token Verdict Scorecard & Share Page
+forensicsRouter.get("/verdict/:chain/:address", async (c) => {
+  const rawChain = c.req.param("chain") || "base";
+  const rawAddrParam = c.req.param("address") || "";
+  const address = rawAddrParam.replace(/\.(json|md|svg)$/i, "").trim();
+  if (!isEvmAddress(address) && !isSolanaAddress(address)) {
+    return c.json(
+      {
+        error: "Invalid token address",
+        message: "Provide a valid EVM (0x...) or Solana base58 mint address."
+      },
+      400
+    );
+  }
+  const scan = await scanTokenForensics(rawChain, address, c.env);
+  const verdict = buildTokenVerdictPayload(scan);
+  if (rawAddrParam.endsWith(".svg")) {
+    return c.body(renderTokenVerdictSvg(verdict), 200, {
+      "Content-Type": "image/svg+xml; charset=utf-8",
+      "Cache-Control": "public, max-age=300, s-maxage=300"
+    });
+  }
+  if (rawAddrParam.endsWith(".json") || (c.req.header("accept") || "").includes("application/json")) {
+    return c.json(verdict);
+  }
+  return c.html(renderTokenVerdictHtmlPage(verdict), 200, {
+    "Cache-Control": "public, max-age=120, s-maxage=120"
+  });
 });

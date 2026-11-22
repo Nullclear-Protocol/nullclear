@@ -4,6 +4,8 @@ import { getTrendingScans } from "../services/forensics-engine.js";
 import { CLAUDE_AGENTS_MD_RULE_SNIPPET } from "./forensics.js";
 import { MCP_TOOLS } from "./mcp-http.js";
 import { getBazaarResourceMetadata } from "./bazaar-metadata.js";
+import { renderDevHomeHtml } from "../ui/dev-home.js";
+import { renderDevLeaderboardHtml } from "../ui/dev-leaderboard.js";
 
 export const discoveryRouter = new Hono<Env>();
 
@@ -19,500 +21,7 @@ discoveryRouter.get("/health", (c) => {
 
 // GET / - Interactive Zero-Wallet Developer Portal & Technical Documentation
 discoveryRouter.get("/", (c) => {
-  const html = `<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>NullClear — x402 Schema-Escrow Clearinghouse & ERC-8004 Reputation Oracle</title>
-  <meta name="description" content="Non-custodial x402 payment clearinghouse, deep invariant & LLM-refusal firewall, and ERC-8004 Sybil reputation oracle on Base Mainnet (Agent #124595).">
-  <meta property="og:title" content="NullClear — x402 Schema-Escrow Clearinghouse & ERC-8004 Reputation Oracle">
-  <meta property="og:description" content="Non-custodial x402 payment clearinghouse, deep invariant & LLM-refusal firewall, and ERC-8004 Sybil reputation oracle on Base Mainnet (Agent #124595).">
-  <meta property="og:type" content="website">
-  <meta property="og:url" content="https://nullclear.dev">
-  <link rel="icon" href="https://nullclear.dev/favicon.ico">
-  <style>
-    :root {
-      --bg: #090a0f;
-      --card-bg: rgba(22, 27, 34, 0.78);
-      --border: rgba(255, 255, 255, 0.12);
-      --accent: #38bdf8;
-      --accent-glow: rgba(56, 189, 248, 0.25);
-      --success: #34d399;
-      --warning: #fbbf24;
-      --danger: #f87171;
-      --text: #f1f5f9;
-      --muted: #94a3b8;
-    }
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
-      background-color: var(--bg);
-      color: var(--text);
-      line-height: 1.6;
-      padding: 0 1rem 2.5rem;
-    }
-    .container { max-width: 1140px; margin: 0 auto; }
-    .top-nav {
-      border-bottom: 1px solid var(--border);
-      background: rgba(9, 10, 15, 0.92);
-      backdrop-filter: blur(12px);
-      position: sticky;
-      top: 0;
-      z-index: 50;
-      margin: 0 -1rem 1.75rem;
-      padding: 0 1rem;
-    }
-    .top-nav-inner {
-      max-width: 1140px;
-      margin: 0 auto;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      min-height: 64px;
-      gap: 12px;
-      flex-wrap: wrap;
-      padding: 10px 0;
-    }
-    .brand {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      color: var(--text);
-      text-decoration: none;
-      font-weight: 800;
-      font-size: 18px;
-    }
-    .brand:hover { text-decoration: none; }
-    .brand-mark {
-      width: 32px;
-      height: 32px;
-      border-radius: 8px;
-      background: linear-gradient(135deg, #34d399, #38bdf8);
-      color: #04130d;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      font-weight: 900;
-    }
-    .nav-tabs {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      flex-wrap: wrap;
-    }
-    .nav-tab {
-      color: var(--muted);
-      text-decoration: none;
-      font-size: 0.82rem;
-      font-weight: 600;
-      padding: 6px 12px;
-      border-radius: 8px;
-      border: 1px solid transparent;
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      transition: all 0.15s ease;
-    }
-    .nav-tab:hover {
-      color: var(--text);
-      border-color: var(--border);
-      background: rgba(255, 255, 255, 0.04);
-      text-decoration: none;
-    }
-    .nav-tab.active {
-      color: var(--accent);
-      background: rgba(56, 189, 248, 0.14);
-      border-color: rgba(56, 189, 248, 0.4);
-    }
-    .nav-tab-history {
-      color: var(--success);
-      background: rgba(52, 211, 153, 0.12);
-      border-color: rgba(52, 211, 153, 0.4);
-    }
-    .live-dot {
-      width: 8px;
-      height: 8px;
-      border-radius: 50%;
-      background: var(--success);
-      display: inline-block;
-      box-shadow: 0 0 8px var(--success);
-    }
-    header {
-      text-align: center;
-      margin-bottom: 1.75rem;
-      padding: 2.5rem 1.25rem;
-      background: radial-gradient(circle at 50% 30%, var(--accent-glow), transparent 70%);
-      border-radius: 16px;
-      border: 1px solid var(--border);
-    }
-    .badge {
-      display: inline-block;
-      padding: 0.25rem 0.75rem;
-      background: rgba(56, 189, 248, 0.15);
-      border: 1px solid var(--accent);
-      color: var(--accent);
-      border-radius: 9999px;
-      font-size: 0.85rem;
-      font-weight: 600;
-      margin-bottom: 1rem;
-      letter-spacing: 0.05em;
-    }
-    h1 { font-size: 2.75rem; font-weight: 800; letter-spacing: -0.03em; margin-bottom: 0.75rem; }
-    .subtitle { color: var(--muted); font-size: 1.15rem; max-width: 720px; margin: 0 auto 1.25rem; }
-    .quick-copy {
-      display: inline-flex;
-      align-items: center;
-      gap: 0.6rem;
-      background: #0d1117;
-      border: 1px solid var(--border);
-      padding: 0.5rem 1rem;
-      border-radius: 8px;
-      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-      font-size: 0.85rem;
-      color: var(--accent);
-    }
-    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1.5rem; margin-bottom: 2.5rem; }
-    .card {
-      background: var(--card-bg);
-      border: 1px solid var(--border);
-      border-radius: 12px;
-      padding: 1.5rem;
-      backdrop-filter: blur(12px);
-    }
-    .card h3 { color: var(--accent); margin-bottom: 0.5rem; font-size: 1.25rem; }
-    .card p { color: var(--muted); font-size: 0.95rem; }
-    .sim-buttons { display: flex; flex-wrap: wrap; gap: 0.75rem; margin: 1rem 0; }
-    .btn {
-      cursor: pointer;
-      padding: 0.65rem 1rem;
-      border-radius: 8px;
-      border: 1px solid var(--border);
-      background: #161b22;
-      color: var(--text);
-      font-weight: 600;
-      font-size: 0.88rem;
-      transition: all 0.15s ease;
-    }
-    .btn:hover { border-color: var(--accent); transform: translateY(-1px); }
-    .btn-success { border-color: rgba(52, 211, 153, 0.5); color: var(--success); }
-    .btn-danger { border-color: rgba(248, 113, 113, 0.5); color: var(--danger); }
-    .btn-primary { background: var(--accent); color: #090a0f; border-color: var(--accent); }
-    .input-row { display: flex; flex-wrap: wrap; gap: 0.75rem; margin-top: 0.75rem; }
-    .input {
-      flex: 1;
-      min-width: 220px;
-      background: #0d1117;
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      padding: 0.65rem 0.9rem;
-      color: var(--text);
-      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-      font-size: 0.86rem;
-    }
-    .code-block {
-      background: #0d1117;
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      padding: 1rem;
-      font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
-      font-size: 0.83rem;
-      color: #7dd3fc;
-      overflow-x: auto;
-      margin-top: 1rem;
-      white-space: pre-wrap;
-      max-height: 340px;
-      overflow-y: auto;
-    }
-    .endpoints-table {
-      width: 100%;
-      border-collapse: collapse;
-      margin-top: 1rem;
-      font-size: 0.9rem;
-    }
-    .endpoints-table th, .endpoints-table td {
-      text-align: left;
-      padding: 0.75rem;
-      border-bottom: 1px solid var(--border);
-    }
-    .endpoints-table th { color: var(--muted); font-weight: 600; }
-    .method-get { color: var(--success); font-weight: bold; }
-    .method-post { color: var(--accent); font-weight: bold; }
-    footer { text-align: center; color: var(--muted); font-size: 0.85rem; margin-top: 3rem; }
-    a { color: var(--accent); text-decoration: none; }
-    a:hover { text-decoration: underline; }
-  </style>
-</head>
-<body>
-  <nav class="top-nav">
-    <div class="top-nav-inner">
-      <a href="/" class="brand">
-        <span class="brand-mark">N</span>
-        <span>NullClear <span style="color:var(--accent)">Arbiter</span></span>
-        <span style="font-family:monospace;font-size:0.72rem;color:var(--muted);padding:2px 8px;border:1px solid var(--border);border-radius:6px;">ERC-8004 #124595</span>
-      </a>
-      <div class="nav-tabs">
-        <a href="/" class="nav-tab active">⚡ Developer Portal</a>
-        <a href="/history" class="nav-tab nav-tab-history"><span class="live-dot"></span> Live History &amp; Diagnostics</a>
-        <a href="/firewall" class="nav-tab">🛡️ Pre-Sign Firewall &amp; RPC</a>
-        <a href="/x402" class="nav-tab">🔐 x402 Clearinghouse</a>
-        <a href="/leaderboard" class="nav-tab">🏆 Leaderboard &amp; Radar</a>
-        <a href="https://nullclear.com" class="nav-tab">💼 SafePay (nullclear.com) ↗</a>
-        <a href="mailto:ops@nullclear.dev" class="nav-tab" style="font-family:monospace;color:var(--accent);">✉️ ops@nullclear.dev</a>
-      </div>
-    </div>
-  </nav>
-
-  <div class="container">
-    <header>
-      <div class="badge">NULLCLEAR ORGANIZATION &bull; PROTOCOL v1.7.0 &bull; 7-CHAIN FIREWALL, GUARDED RPC &amp; X402 ESCROW</div>
-      <h1>NullClear Arbiter</h1>
-      <p class="subtitle">Institutional Pre-Execution Security &amp; Non-Custodial Clearinghouse for Autonomous AI Agents: 1-Call Guard, Drop-In Guarded JSON-RPC, $5–$100 Prepaid Passes, Policy Co-Signer &amp; x402 Schema Escrow</p>
-      <div class="quick-copy" style="flex-wrap:wrap;justify-content:center;">
-        <span>npx -y @nullclear/mcp</span>
-        <span style="color:var(--muted)">|</span>
-        <span>https://api.nullclear.dev/mcp</span>
-        <span style="color:var(--muted)">|</span>
-        <a href="mailto:ops@nullclear.dev" style="color:var(--success);">ops@nullclear.dev</a>
-      </div>
-    </header>
-
-    <!-- Live Agent History & Payment Diagnostics Callout Bar -->
-    <div class="card" style="margin-bottom: 1.75rem; border-color: rgba(52, 211, 153, 0.45); background: linear-gradient(90deg, rgba(16, 185, 129, 0.1) 0%, rgba(22, 27, 34, 0.85) 100%); display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:1rem;">
-      <div>
-        <div style="display:flex;align-items:center;gap:8px;font-family:monospace;font-size:0.78rem;color:var(--success);font-weight:700;">
-          <span class="live-dot"></span>
-          <span>REAL-TIME TRANSPARENCY &amp; CONVERSION DIAGNOSTICS</span>
-        </div>
-        <h3 style="margin-top:4px;margin-bottom:2px;color:var(--text);">Live Agent Product History &amp; &ldquo;Why Callers Aren&rsquo;t Paying&rdquo; Diagnostics</h3>
-        <p style="font-size:0.9rem;">Inspect every real-time MCP tool invocation, 7-chain forensic scan, 1-call firewall check, per-agent 10/day free-tier quota meter, and HTTP 402 conversion diagnostic directly at the edge.</p>
-      </div>
-      <div style="display:flex;gap:0.65rem;flex-wrap:wrap;">
-        <a href="/history" class="btn btn-primary" style="background:var(--success);border-color:var(--success);color:#04130d;text-decoration:none;">📡 Open Live History &amp; Diagnostics →</a>
-        <a href="/v1/telemetry/history" class="btn" style="text-decoration:none;font-family:monospace;">JSON Feed</a>
-      </div>
-    </div>
-
-    <!-- Interactive Zero-Wallet x402 Chaos Simulator -->
-    <div class="card" style="margin-bottom: 2rem; border-color: rgba(56, 189, 248, 0.4);">
-      <h3>⚡ Live Zero-Wallet x402 Chaos Simulator (No Private Key Needed)</h3>
-      <p>Experience NullClear's non-custodial schema &amp; refusal verification pipeline right now using your 10 daily free trial credits:</p>
-      <div class="sim-buttons">
-        <button class="btn btn-success" onclick="runChaosSim('honest')">✅ Honest Market Oracle ($0.01 Free Trial)</button>
-        <button class="btn btn-danger" onclick="runChaosSim('hallucinate')">🛑 Hallucinating AI Seller (Refusal Shredded -> $0 Charged)</button>
-        <button class="btn btn-danger" onclick="runChaosSim('crash')">💥 Crashing 500 Upstream (Escrow Shredded -> $0 Charged)</button>
-        <button class="btn" onclick="runChaosSim('token')">🛡️ Base USDC Token Security Audit</button>
-      </div>
-      <pre id="chaos-output" class="code-block">// Click any scenario above to run a live edge verification call against NullClear Arbiter...</pre>
-    </div>
-
-    <!-- Jina-Reader Style URL-Prefix Auto-Guard Proxy & 1-Click Seller Gateway -->
-    <div class="grid">
-      <div class="card">
-        <h3>🔗 1-Line URL-Prefix Auto-Guard Proxy</h3>
-        <p>Prepend <code>https://api.nullclear.dev/</code> to any URL. Zero JSON Schema required—automatically blocks LLM refusals, HTTP 5xx crashes, and empty payloads.</p>
-        <div class="input-row">
-          <input id="proxy-url-input" class="input" value="https://api.nullclear.dev/v1/sandbox/market-feed" placeholder="https://api.example.com/v1/data" />
-          <button class="btn btn-primary" onclick="runPrefixProxy()">Verify URL</button>
-        </div>
-        <pre id="proxy-output" class="code-block">GET https://api.nullclear.dev/https://api.coinbase.com/v2/prices/ETH-USD/spot</pre>
-      </div>
-
-      <div class="card">
-        <h3>🚀 1-Click Seller Gateway Builder (<code>/g/:slug</code>)</h3>
-        <p>Turn any REST API into a NullClear-protected x402 endpoint in 10 seconds. Buyers pay your Base wallet only when your API returns valid data.</p>
-        <div class="input-row">
-          <input id="gw-upstream" class="input" placeholder="Upstream REST URL (https://...)" value="https://api.coinbase.com/v2/prices/ETH-USD/spot" />
-        </div>
-        <div class="input-row">
-          <input id="gw-wallet" class="input" placeholder="Your Base 0x Wallet" value="0xB586eFcCa41dF27ad3873BEcA54da0c30bf04d5c" />
-          <input id="gw-slug" class="input" style="max-width:160px" placeholder="Slug (e.g. my-api)" value="" />
-          <button class="btn btn-primary" onclick="createSellerGateway()">Create Gateway</button>
-        </div>
-        <pre id="gw-output" class="code-block">// Creates https://api.nullclear.dev/g/&lt;slug&gt; with automatic 402 challenge &amp; STRICT_NO_REFUSAL guard</pre>
-      </div>
-    </div>
-
-    <div class="grid">
-      <div class="card">
-        <h3>🛡️ Deferred Non-Custodial Escrow</h3>
-        <p>Buyer signs an EIP-3009 authorization. The arbiter executes upstream calls and only settles if output adheres 100% to the schema contract. Hallucinations void payment immediately with $0 charged.</p>
-      </div>
-      <div class="card">
-        <h3>🔍 Deep Deterministic Invariants</h3>
-        <p>Enforce numeric bounds (<code>gt</code>, <code>lt</code>), regex patterns, array lengths, timestamp freshness (<code>maxStalenessSeconds</code>), and canonical LLM-refusal traps (<code>rejectRefusals</code>).</p>
-      </div>
-      <div class="card">
-        <h3>🔀 Autonomous Multi-Seller Failover</h3>
-        <p>Provide ordered backup sellers. If Seller A crashes or fails validation, NullClear voids Seller A's signature ($0 spent) and autonomously routes to Seller B in the exact same call.</p>
-      </div>
-      <div class="card">
-        <h3>🔒 Outbound Spend Firewall</h3>
-        <p>Set per-call spend caps (<code>maxPerCallAtomic</code>) and daily rolling wallet ceilings to protect agent hot wallets from prompt-injection runaway loops.</p>
-      </div>
-      <div class="card">
-        <h3>📊 Sybil-Resistant Scoring</h3>
-        <p>Reads on-chain ERC-8004 Identity & Reputation registries, tracks clearing reliability, and applies wash-trading penalties if counterparty concentration exceeds 60%.</p>
-      </div>
-      <div class="card">
-        <h3>🏢 Corporate KYA Mandates</h3>
-        <p>Know Your Agent (KYA) mandates cryptographically bind autonomous agents to verified corporate entities with explicit per-transaction limits and liability coverage.</p>
-      </div>
-    </div>
-
-    <div class="card" style="margin-bottom: 2rem;">
-      <h3>⚡ Protocol Endpoints</h3>
-      <table class="endpoints-table">
-        <thead>
-          <tr><th>Method</th><th>Endpoint</th><th>Description</th></tr>
-        </thead>
-        <tbody>
-          <tr><td><span class="method-get">GET/POST</span></td><td><code>/https://:target*</code></td><td>Jina-style URL-Prefix Proxy with zero-schema Auto-Guard &amp; x402 clearing</td></tr>
-          <tr><td><span class="method-post">POST</span></td><td><code>/v1/gateways</code> &amp; <code>/g/:slug</code></td><td>1-Click Seller Gateway registration &amp; x402 execution proxy</td></tr>
-          <tr><td><span class="method-post">POST</span></td><td><code>/v1/clear</code></td><td>Deferred schema escrow proxy, deep invariants &amp; failover routing (10 free/day)</td></tr>
-          <tr><td><span class="method-get">GET</span></td><td><code>/v1/score/:chainId/:agentId</code></td><td>Sybil-resistant trust score &amp; cryptographic attestation</td></tr>
-          <tr><td><span class="method-get">GET</span></td><td><a href="/history"><code>/history</code></a></td><td>Real-time agent product invocation history stream &amp; &ldquo;why callers aren&rsquo;t paying&rdquo; diagnostics</td></tr>
-          <tr><td><span class="method-get">GET</span></td><td><a href="/firewall"><code>/firewall</code></a></td><td>Interactive Pre-Swap Firewall Sandbox &amp; 3-line AgentKit / ElizaOS SDKs</td></tr>
-          <tr><td><span class="method-get">GET</span></td><td><a href="/v1/telemetry/history"><code>/v1/telemetry/history</code></a></td><td>Live D1 product usage &amp; payment conversion diagnostics JSON API</td></tr>
-          <tr><td><span class="method-post">POST</span></td><td><code>/v1/pass/buy</code></td><td>Self-Serve Prepaid Firewall Pass ($5 / $25 / $100 USDC &rarr; instant <code>nc_live_...</code> Bearer key, 2k&ndash;100k low-latency credits)</td></tr>
-          <tr><td><span class="method-post">POST</span></td><td><code>/rpc/:chain/:apiKey</code></td><td>Drop-In Guarded JSON-RPC Firewall (7 chains: free reads, auto-blocks drainers/honeypots/reverts before mempool broadcast)</td></tr>
-          <tr><td><span class="method-post">POST</span></td><td><code>/v1/policy/cosign</code></td><td>Non-Custodial EIP-712 Policy Co-Signer for Safe / ERC-4337 / Agent Treasuries (2 credits or $0.02 USDC)</td></tr>
-          <tr><td><span class="method-post">POST</span></td><td><code>/v1/monitors</code></td><td>Continuous 7-Chain Cron Watchtower: alerts via signed webhooks on proxy upgrades, tax spikes, LP pulls &amp; mint hooks</td></tr>
-          <tr><td><span class="method-post">POST</span></td><td><code>/v1/bazaar/due-diligence</code></td><td>Institutional 7-Chain Due-Diligence Dossier + EIP-712 Signed Clearance Certificate ($0.10 USDC or 10 credits; opt-in <code>x-nullclear-free-trial: true</code>)</td></tr>
-          <tr><td><span class="method-post">POST</span></td><td><code>/v1/bazaar/guard</code></td><td>1-Call Pre-Sign Firewall across 7 chains: nested calldata, EIP-712, Solana wire, stateful eth_simulateV1 ($0.005 USDC; 10 free/day on <code>/v1/guard</code>)</td></tr>
-          <tr><td><span class="method-get">GET</span></td><td><code>/v1/bazaar/inspect</code></td><td>7-chain Proxy (EIP-1967/1822/Beacon/Diamond/Safe), Sourcify v2 + batch OpenChain ABI &amp; CFG risk ($0.005 USDC; 10 free/day on <code>/v1/inspect</code>)</td></tr>
-          <tr><td><span class="method-get">GET</span></td><td><code>/v1/bazaar/token-security</code></td><td>7-chain (Base, ETH, Arb, OP, Polygon, BSC, Solana + Token-2022) honeypot &amp; tax oracle ($0.005 USDC; 10 free/day on <code>/v1/scan</code>)</td></tr>
-          <tr><td><span class="method-post">POST</span></td><td><code>/v1/bazaar/scan-batch</code></td><td>Batch pre-flight firewall for up to 15 tokens across 7 chains ($0.025 USDC; opt-in <code>x-nullclear-free-trial: true</code>)</td></tr>
-          <tr><td><span class="method-get">GET</span></td><td><code>/v1/bazaar/wallet-risk</code></td><td>Wallet sanctions, Sybil concentration &amp; reputation oracle ($0.005 USDC; opt-in <code>x-nullclear-free-trial: true</code>)</td></tr>
-          <tr><td><span class="method-get">GET</span></td><td><code>/v1/bazaar/market-oracle</code></td><td>Multi-exchange spread-verified price feed ($0.005 USDC; opt-in <code>x-nullclear-free-trial: true</code>)</td></tr>
-          <tr><td><span class="method-get">GET</span></td><td><a href="/llms.txt"><code>/llms.txt</code></a></td><td>Agent-tailored integration instructions &amp; menu</td></tr>
-          <tr><td><span class="method-get">GET</span></td><td><a href="/openapi.json"><code>/openapi.json</code></a></td><td>Full OpenAPI 3.1.0 Specification</td></tr>
-          <tr><td><span class="method-get">GET</span></td><td><a href="/.well-known/mcp.json"><code>/.well-known/mcp.json</code></a></td><td>Model Context Protocol server discovery (14 curated tools)</td></tr>
-          <tr><td><span class="method-get">GET</span></td><td><a href="/.well-known/x402.json"><code>/.well-known/x402.json</code></a></td><td>x402 Service Manifest with Bazaar extensions</td></tr>
-        </tbody>
-      </table>
-    </div>
-
-    <!-- NullClear Organization & Enterprise Operations Section -->
-    <div class="card" style="margin-bottom: 2rem; border-color: rgba(56, 189, 248, 0.35);">
-      <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:1rem;margin-bottom:1rem;">
-        <div>
-          <div style="font-family:monospace;font-size:0.75rem;color:var(--accent);font-weight:700;letter-spacing:0.06em;">NULLCLEAR ORGANIZATION &bull; INSTITUTIONAL INFRASTRUCTURE</div>
-          <h3 style="margin-top:4px;margin-bottom:4px;color:var(--text);">Enterprise Operations, Security Desk &amp; Commercial Divisions</h3>
-          <p style="font-size:0.9rem;">NullClear operates unified agent security, non-custodial x402 payment clearing, and cryptographic deliverable escrow across 7 blockchains.</p>
-        </div>
-        <a href="mailto:ops@nullclear.dev" class="btn btn-primary" style="text-decoration:none;font-family:monospace;">✉️ Contact Operations: ops@nullclear.dev</a>
-      </div>
-      <div class="grid" style="margin-bottom:0;gap:1rem;">
-        <div style="background:#0d1117;border:1px solid var(--border);border-radius:10px;padding:1rem;">
-          <div style="font-weight:700;color:var(--accent);font-size:0.92rem;margin-bottom:4px;">1. Pre-Execution Firewall &amp; Guarded RPC</div>
-          <p style="font-size:0.84rem;">7-chain 1-call pre-sign guard (<code>/v1/guard</code>), drop-in guarded JSON-RPC (<code>/rpc/:chain/:key</code>), EIP-712 policy co-signer, and 30-day cron watchtower.</p>
-        </div>
-        <div style="background:#0d1117;border:1px solid var(--border);border-radius:10px;padding:1rem;">
-          <div style="font-weight:700;color:var(--success);font-size:0.92rem;margin-bottom:4px;">2. x402 Clearinghouse &amp; SafePay (<a href="https://nullclear.com">nullclear.com</a>)</div>
-          <p style="font-size:0.84rem;">Non-custodial EIP-3009 USDC schema-escrow proxy (<code>/v1/clear</code>), 1-click seller gateways (<code>/g/:slug</code>), and commercial deliverable escrow rooms.</p>
-        </div>
-        <div style="background:#0d1117;border:1px solid var(--border);border-radius:10px;padding:1rem;">
-          <div style="font-weight:700;color:var(--warning);font-size:0.92rem;margin-bottom:4px;">3. Live Transparency &amp; Operations Desk</div>
-          <p style="font-size:0.84rem;">Real-time public product telemetry at <a href="/history"><code>nullclear.dev/history</code></a>. Institutional SLA, custom RPC quotas &amp; KYA onboarding: <a href="mailto:ops@nullclear.dev"><code>ops@nullclear.dev</code></a>.</p>
-        </div>
-      </div>
-    </div>
-
-    <footer>
-      <p><strong>NullClear Organization</strong> &bull; Operations &amp; Enterprise Desk: <a href="mailto:ops@nullclear.dev">ops@nullclear.dev</a> &bull; Base Mainnet (8453) &bull; ERC-8004 Agent #124595</p>
-      <p style="margin-top:6px;"><a href="/history">Live Agent History &amp; Diagnostics</a> &bull; <a href="/firewall">Pre-Sign Firewall</a> &bull; <a href="/x402">x402 Clearinghouse</a> &bull; <a href="/leaderboard">Leaderboard</a> &bull; <a href="https://nullclear.com">SafePay (nullclear.com)</a> &bull; <a href="/openapi.json">OpenAPI Spec</a> &bull; <a href="/llms.txt">llms.txt</a></p>
-    </footer>
-  </div>
-
-  <script>
-    async function runChaosSim(mode) {
-      const out = document.getElementById('chaos-output');
-      out.textContent = '⏳ Running live verification through NullClear Arbiter...';
-      try {
-        if (mode === 'token') {
-          const res = await fetch('/v1/bazaar/token-security?tokenAddress=0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913&trial=true', {
-            headers: { 'x-nullclear-free-trial': 'true' }
-          });
-          const data = await res.json();
-          out.textContent = 'HTTP ' + res.status + ' | x-nullclear-tier: ' + (res.headers.get('x-nullclear-tier') || 'free-trial') +
-            ' | remaining: ' + (res.headers.get('x-nullclear-remaining-free-calls') || '9') + '\\n\\n' + JSON.stringify(data, null, 2);
-          return;
-        }
-        const targetMap = {
-          honest: 'https://api.nullclear.dev/v1/sandbox/market-feed',
-          hallucinate: 'https://api.nullclear.dev/v1/sandbox/hallucinating-seller',
-          crash: 'https://api.nullclear.dev/v1/sandbox/crashing-seller'
-        };
-        const res = await fetch('/v1/clear', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'x-nullclear-free-trial': 'true' },
-          body: JSON.stringify({
-            targetUrl: targetMap[mode],
-            paymentSignatureHeader: 'free-trial',
-            validation: {
-              expectedStatus: [200],
-              rejectRefusals: true,
-              invariants: [{ path: 'price', gt: 0 }]
-            }
-          })
-        });
-        const data = await res.json();
-        out.textContent = 'HTTP ' + res.status + (res.status === 200 ? ' (CLEARED & VERIFIED)' : ' (PAYMENT SHREDDED — $0.00 CHARGED)') +
-          '\\n\\n' + JSON.stringify(data, null, 2);
-      } catch (e) {
-        out.textContent = 'Error: ' + e.message;
-      }
-    }
-
-    async function runPrefixProxy() {
-      const url = document.getElementById('proxy-url-input').value.trim();
-      const out = document.getElementById('proxy-output');
-      out.textContent = '⏳ Fetching via Auto-Guard URL-Prefix Proxy...';
-      try {
-        const res = await fetch('/v1/proxy?url=' + encodeURIComponent(url), {
-          headers: { 'x-nullclear-free-trial': 'true' }
-        });
-        const text = await res.text();
-        let formatted = text;
-        try { formatted = JSON.stringify(JSON.parse(text), null, 2); } catch {}
-        out.textContent = 'HTTP ' + res.status +
-          ' | X-NullClear-Verified: ' + res.headers.get('X-NullClear-Verified') +
-          ' | Receipt: ' + (res.headers.get('X-NullClear-Receipt-Id') || 'none') +
-          '\\n\\n' + formatted;
-      } catch (e) {
-        out.textContent = 'Error: ' + e.message;
-      }
-    }
-
-    async function createSellerGateway() {
-      const upstreamUrl = document.getElementById('gw-upstream').value.trim();
-      const sellerAddress = document.getElementById('gw-wallet').value.trim();
-      const slug = document.getElementById('gw-slug').value.trim() || ('api-' + Math.random().toString(36).slice(2, 7));
-      const out = document.getElementById('gw-output');
-      out.textContent = '⏳ Registering 1-Click Seller Gateway...';
-      try {
-        const res = await fetch('/v1/gateways', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            upstreamUrl,
-            sellerAddress,
-            priceUsdc: '0.01',
-            slug,
-            validationPreset: 'STRICT_NO_REFUSAL'
-          })
-        });
-        const data = await res.json();
-        out.textContent = 'HTTP ' + res.status + '\\n\\n' + JSON.stringify(data, null, 2);
-      } catch (e) {
-        out.textContent = 'Error: ' + e.message;
-      }
-    }
-  </script>
-</body>
-</html>`;
-  return c.html(html);
+  return c.html(renderDevHomeHtml());
 });
 
 // GET /robots.txt
@@ -620,9 +129,9 @@ discoveryRouter.get("/llms.txt", (c) => {
 
 NullClear is the Zero-Registration On-Chain Forensics, Proxy-Aware Bytecode Inspector, Calldata/Revert Decoder, Agent Decision Oracle, and Non-Custodial x402 Clearinghouse on Base (Chain ID 8453), Ethereum (Chain ID 1), and Solana.
 
-## 1. Zero-Key Pre-Execution Firewall & Decoder One-Liners (10 Free Calls/Day/IP, or $1–$100 Prepaid Pass)
+## 1. Zero-Key Pre-Execution Firewall & Decoder One-Liners (10 Free Calls/Day/IP, or $1â€“$100 Prepaid Pass)
 - **Forensics & MCP** (\`/v1/scan\`, \`/v1/guard\`, \`/v1/inspect\`, \`/v1/decode\`, \`/v1/simulate\`, \`/mcp\`): 10 free calls/day/IP, zero API key required.
-- **Pay-Per-Call x402 Bazaar** (\`/v1/bazaar/*\`): Strict HTTP 402 pay-per-call (\`$0.005–$0.10 USDC\` on Base). Optional sandbox via \`x-nullclear-free-trial: true\` (10/day/IP, used automatically by MCP & \`/x402\` playground).
+- **Pay-Per-Call x402 Bazaar** (\`/v1/bazaar/*\`): Strict HTTP 402 pay-per-call (\`$0.005â€“$0.10 USDC\` on Base). Optional sandbox via \`x-nullclear-free-trial: true\` (10/day/IP, used automatically by MCP & \`/x402\` playground).
 - **Public Scorecards & Receipts** (\`/scan/:chain/:addr\`, \`.md\`, \`/receipt/:id\`): Free and public.
 - **Prepaid Passes** (\`Authorization: Bearer nc_live_...\`): Zero per-call signing latency, \`X-Agent-Label\` fleet tracking, and \`GET /v1/pass/export\` CSV/JSON ledger.
 
@@ -734,11 +243,12 @@ Autonomous agents connect directly via MCP stdio or remote HTTP:
 - \`nullclear_verify_kya_mandate\`: Corporate legal entity & liability limit verification.
 
 ## Pre-Execution Firewall Pro Suite (Check -> Enforce -> Monitor)
-- **Prepaid Low-Latency Passes**: \`POST https://api.nullclear.dev/v1/pass/buy\` (\`starter\` \$5 / 2,000 credits, \`pro\` \$25 / 15,000 credits, \`scale\` \$100 / 100,000 credits) -> instant \`Authorization: Bearer nc_live_...\` key (zero facilitator latency).
-- **Drop-In Guarded JSON-RPC Firewall**: \`POST https://api.nullclear.dev/rpc/:chain/:apiKey\` (\`base\`, \`eth\`, \`arbitrum\`, \`optimism\`, \`polygon\`, \`bsc\`, \`solana\`) — 0-credit read passthrough, auto-blocks drainer/honeypot/reverting broadcasts before mempool.
+- **Prepaid Low-Latency Passes (USDC or Card)**: \`POST https://api.nullclear.dev/v1/pass/buy\` (Base USDC x402: \`micro\` \$1 / 300 credits, \`starter\` \$5 / 2,000 credits, \`pro\` \$25 / 15,000 credits, \`scale\` \$100 / 100,000 credits) OR **Hosted Card Checkout** \`POST https://api.nullclear.dev/v1/pass/checkout\` (\`starter\` \$5 / 2,000 credits, \`builder\` \$20 / 10,000 credits, \`pro\` \$100 / 60,000 credits; UI at \`https://nullclear.dev/buy-pass\`) -> instant \`Authorization: Bearer nc_live_...\` key (zero facilitator latency).
+- **7-Chain Token Verdict & Shareable SVG Card**: \`GET https://api.nullclear.dev/v1/bazaar/token-verdict?chain=base&address=0x...\` (\$0.005 USDC) â€” A-F grade, concrete one-line bytecode/tax/proxy verdict, \`EXECUTE_SAFE\`/\`CAUTION_HIGH_TAX\`/\`BLOCK_HONEYPOT\`, plus Edge-cached SVG card at \`/v1/verdict-card/:chain/:address.svg\`.
+- **Drop-In Guarded JSON-RPC Firewall**: \`POST https://api.nullclear.dev/rpc/:chain/:apiKey\` (\`base\`, \`eth\`, \`arbitrum\`, \`optimism\`, \`polygon\`, \`bsc\`, \`solana\`) â€” 0-credit read passthrough, auto-blocks drainer/honeypot/reverting broadcasts before mempool.
 - **Cryptographic EIP-712 Policy Co-Signer**: \`POST https://api.nullclear.dev/v1/policy/register\` + \`POST https://api.nullclear.dev/v1/policy/cosign\` (emits on-chain-verifiable \`PolicyApproval\` EIP-712 signature ONLY if all spend/tax/drainer invariants pass).
-- **Continuous Cron Watchtower**: \`POST https://api.nullclear.dev/v1/monitors\` — 30-day continuous monitoring for proxy upgrades, sell-tax spikes, LP pulls & Solana mint/freeze hooks with signed webhooks.
-- **Institutional Due-Diligence Dossier**: \`POST https://api.nullclear.dev/v1/bazaar/due-diligence\` (\$0.10 USDC or 10 credits) — 7-chain forensic + ABI/CFG + signed clearance certificate.
+- **Continuous Cron Watchtower**: \`POST https://api.nullclear.dev/v1/monitors\` â€” 30-day continuous monitoring for proxy upgrades, sell-tax spikes, LP pulls & Solana mint/freeze hooks with signed webhooks.
+- **Institutional Due-Diligence Dossier**: \`POST https://api.nullclear.dev/v1/bazaar/due-diligence\` (\$0.10 USDC or 10 credits) â€” 7-chain forensic + ABI/CFG + signed clearance certificate.
 `;
   return c.text(text);
 });
@@ -846,6 +356,7 @@ const getX402Manifest = async (c: any) => {
     "https://api.nullclear.dev/v1/bazaar/guard",
     "https://api.nullclear.dev/v1/bazaar/inspect",
     "https://api.nullclear.dev/v1/bazaar/token-security",
+    "https://api.nullclear.dev/v1/bazaar/token-verdict",
     "https://api.nullclear.dev/v1/bazaar/wallet-risk",
     "https://api.nullclear.dev/v1/bazaar/verified-fetch",
     "https://api.nullclear.dev/v1/bazaar/market-oracle",
@@ -998,6 +509,46 @@ const getX402Manifest = async (c: any) => {
                     invariantCheck: { type: "string" },
                     timestamp: { type: "integer" }
                   }
+                }
+              }
+            }
+          }
+        }
+      },
+      bazaarTokenVerdict: {
+        path: "/v1/bazaar/token-verdict",
+        method: "GET",
+        payable: true,
+        amountAtomic: "5000",
+        ...getBazaarResourceMetadata("/v1/bazaar/token-verdict"),
+        extensions: {
+          bazaar: {
+            discoverable: true,
+            description:
+              "7-chain (Base, ETH, Arbitrum, Optimism, Polygon, BSC, Solana) Token Verdict: A-F grade, concrete one-line bytecode/tax/proxy verdict, honeypot simulation, and shareable SVG card URL ($0.005 USDC).",
+            info: {
+              input: {
+                type: "http",
+                method: "GET",
+                queryParams: {
+                  chain: "base",
+                  address: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
+                }
+              },
+              output: {
+                type: "json",
+                example: {
+                  tokenAddress: "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913",
+                  chain: "base",
+                  symbol: "USDC",
+                  grade: "A",
+                  securityScore: 99,
+                  oneLineVerdict:
+                    "SAFE (A Â· 99/100): USDC on BASE â€” 0%/0% buy/sell tax, no honeypot, non-proxy bytecode, $103.1K DEX liquidity.",
+                  recommendedAgentAction: "EXECUTE_SAFE",
+                  scorecardUrl: "https://nullclear.dev/verdict/base/0x833589fcd6edb6e08f4c7c32d4f71b54bda02913",
+                  shareCardImageUrl:
+                    "https://api.nullclear.dev/v1/verdict-card/base/0x833589fcd6edb6e08f4c7c32d4f71b54bda02913.svg"
                 }
               }
             }
@@ -1658,7 +1209,7 @@ discoveryRouter.get("/logo.png", serveSvgIcon);
 discoveryRouter.get("/opengraph-image.png", serveSvgIcon);
 
 // GET /agents.md & /.well-known/agents.md - Machine-readable bootstrap guide for autonomous agents
-export const getAgentsMd = () => `# NullClear Protocol — Autonomous Agent Bootstrap Guide (v2.2.0)
+export const getAgentsMd = () => `# NullClear Protocol â€” Autonomous Agent Bootstrap Guide (v2.2.0)
 
 - **ERC-8004 Official Identity**: Agent \`#124595\` on Base Mainnet (\`eip155:8453\`)
 - **OpenAPI Discovery Contract**: \`https://api.nullclear.dev/openapi.json\`
@@ -1676,7 +1227,7 @@ export const getAgentsMd = () => `# NullClear Protocol — Autonomous Agent Boot
 ${CLAUDE_AGENTS_MD_RULE_SNIPPET}
 \`\`\`
 
-## 1. Zero-Key On-Chain Forensics & Calldata Decoder (10 Free Calls/Day/IP — Zero Headers)
+## 1. Zero-Key On-Chain Forensics & Calldata Decoder (10 Free Calls/Day/IP â€” Zero Headers)
 \`\`\`bash
 # Proxy-aware token & bytecode audit (<400 tokens JSON)
 curl -s https://api.nullclear.dev/v1/scan/base/0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913
@@ -1688,17 +1239,18 @@ curl -s -H "Accept: text/markdown" https://nullclear.com/scan/base/0x833589fCD6e
 curl -s -X POST https://api.nullclear.dev/v1/decode -H "Content-Type: application/json" -d '{"input":"0x095ea7b3000000000000000000000000b586efcca41df27ad3873beca54da0c30bf04d5cffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff","chain":"base"}'
 \`\`\`
 
-## 2. Native x402 Payable Intelligence Suite (Strict HTTP 402: \`$0.005–$0.10 USDC\` on Base; optional sandbox via \`x-nullclear-free-trial: true\`)
+## 2. Native x402 Payable Intelligence Suite (Strict HTTP 402: \`$0.005â€“$0.10 USDC\` on Base; optional sandbox via \`x-nullclear-free-trial: true\`)
 Any \`AgentCash\`, \`x402-fetch\`, or \`Coinbase AgentKit\` buyer agent can call these endpoints directly using standard HTTP 402 \`PAYMENT-SIGNATURE\` headers (or \`Bearer nc_live_...\` Prepaid Pass with \`X-Agent-Label\` fleet tracking and \`GET /v1/pass/export\` CSV/JSON ledger):
-1. \`POST https://api.nullclear.dev/v1/bazaar/guard\` — 1-Call Pre-Sign Transaction Firewall across 7 chains (Base, Ethereum, Arbitrum, Optimism, Polygon, BSC, Solana): nested Multicall3/Universal Router/Safe decode, EIP-712 Permit/Seaport audit, Solana wire tx & stateful \`eth_simulateV1\` asset diffs (\`$0.005 USDC\`).
-2. \`GET https://api.nullclear.dev/v1/bazaar/inspect?chain=base&address=0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913\` — Multi-chain Proxy (EIP-1967/1822/Beacon/Diamond/Safe), Sourcify v2 + batch OpenChain ABI & bytecode CFG risk inspector (\`$0.005 USDC\`).
-3. \`GET https://api.nullclear.dev/v1/bazaar/token-security?chain=base&address=0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913\` — 7-chain (Base, Ethereum, Arbitrum, Optimism, Polygon, BSC, Solana + Token-2022) token security, proxy resolution, liquidity, and honeypot scanner (\`$0.005 USDC\`).
-4. \`POST https://api.nullclear.dev/v1/bazaar/scan-batch\` — 7-chain batch pre-flight security firewall scanning up to 15 unique tokens per \`$0.025 USDC\` call with D1 cache hits and aggregated \`EXECUTE_SAFE\` / \`ABORT_CRITICAL_TRAP\` verdicts.
-5. \`GET https://api.nullclear.dev/v1/bazaar/market-oracle?symbol=ETH\` — Live cross-verified crypto spot price (Coinbase + Binance) with deterministic spread invariant verification and cryptographic attestation.
-6. \`GET https://api.nullclear.dev/v1/bazaar/wallet-risk?address=0xfd74fF802EA0E735514C070AF04E0D6528deD145\` — Live Base Mainnet wallet counterparty & Sybil risk profiler (EOA vs contract, ETH/USDC balances, tx nonce count, ERC-8004 registration).
-7. \`GET / POST https://api.nullclear.dev/v1/bazaar/verified-fetch?url=https://api.coinbase.com/v2/prices/BTC-USD/spot\` — Anti-hallucination HTTP proxy that fetches any public HTTPS JSON endpoint, enforces LLM-refusal guards and numeric invariants, and returns signed attestations.
-8. \`GET / POST https://api.nullclear.dev/v1/bazaar/audit?agentId=124595\` — ERC-8004 agent Sybil reputation score, wash-trading cluster audit, and x402 escrow readiness check.
-9. \`POST https://api.nullclear.dev/v1/bazaar/verify\` — Verify an agent's JSON schema contract compatibility on Base Mainnet.
+1. \`POST https://api.nullclear.dev/v1/bazaar/guard\` â€” 1-Call Pre-Sign Transaction Firewall across 7 chains (Base, Ethereum, Arbitrum, Optimism, Polygon, BSC, Solana): nested Multicall3/Universal Router/Safe decode, EIP-712 Permit/Seaport audit, Solana wire tx & stateful \`eth_simulateV1\` asset diffs (\`$0.005 USDC\`).
+2. \`GET https://api.nullclear.dev/v1/bazaar/inspect?chain=base&address=0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913\` â€” Multi-chain Proxy (EIP-1967/1822/Beacon/Diamond/Safe), Sourcify v2 + batch OpenChain ABI & bytecode CFG risk inspector (\`$0.005 USDC\`).
+3. \`GET https://api.nullclear.dev/v1/bazaar/token-security?chain=base&address=0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913\` â€” 7-chain (Base, Ethereum, Arbitrum, Optimism, Polygon, BSC, Solana + Token-2022) token security, proxy resolution, liquidity, and honeypot scanner (\`$0.005 USDC\`).
+3b. \`GET https://api.nullclear.dev/v1/bazaar/token-verdict?chain=base&address=0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913\` â€” 7-chain A-F Token Verdict with concrete bytecode/tax/proxy one-liner and Edge-cached shareable SVG card URL (\`$0.005 USDC\`).
+4. \`POST https://api.nullclear.dev/v1/bazaar/scan-batch\` â€” 7-chain batch pre-flight security firewall scanning up to 15 unique tokens per \`$0.025 USDC\` call with D1 cache hits and aggregated \`EXECUTE_SAFE\` / \`ABORT_CRITICAL_TRAP\` verdicts.
+5. \`GET https://api.nullclear.dev/v1/bazaar/market-oracle?symbol=ETH\` â€” Live cross-verified crypto spot price (Coinbase + Binance) with deterministic spread invariant verification and cryptographic attestation.
+6. \`GET https://api.nullclear.dev/v1/bazaar/wallet-risk?address=0xfd74fF802EA0E735514C070AF04E0D6528deD145\` â€” Live Base Mainnet wallet counterparty & Sybil risk profiler (EOA vs contract, ETH/USDC balances, tx nonce count, ERC-8004 registration).
+7. \`GET / POST https://api.nullclear.dev/v1/bazaar/verified-fetch?url=https://api.coinbase.com/v2/prices/BTC-USD/spot\` â€” Anti-hallucination HTTP proxy that fetches any public HTTPS JSON endpoint, enforces LLM-refusal guards and numeric invariants, and returns signed attestations.
+8. \`GET / POST https://api.nullclear.dev/v1/bazaar/audit?agentId=124595\` â€” ERC-8004 agent Sybil reputation score, wash-trading cluster audit, and x402 escrow readiness check.
+9. \`POST https://api.nullclear.dev/v1/bazaar/verify\` â€” Verify an agent's JSON schema contract compatibility on Base Mainnet.
 
 ## 3. Mode 1: Non-Custodial Schema-Escrow Clearinghouse (\`POST /v1/clear\`)
 When paying third-party x402 merchants, route your signed EIP-3009 authorization through \`POST https://api.nullclear.dev/v1/clear\`. NullClear validates HTTP status, Draft-07 JSON Schema, deterministic invariants (\`gt\`, \`lt\`, \`maxStalenessSeconds\`), and LLM refusal traps (\`rejectRefusals: true\`) BEFORE settling on-chain. If upstream fails or hallucinates, the signature is shredded in memory (\`$0.00\` charged).
@@ -2150,7 +1702,7 @@ const getOpenApiSpec = () => ({
     description:
       "Non-custodial x402 payment clearinghouse, schema & LLM-refusal escrow firewall, and ERC-8004 Sybil reputation & DeFi intelligence oracle on Base Mainnet (Agent #124595).",
     "x-guidance":
-      "NullClear provides two modes for autonomous AI agents on Base Mainnet (eip155:8453): (1) Direct x402 Payable Intelligence Oracles ($0.005-$0.025 USDC / 5000-25000 atomic units per call via PayAI or Coinbase CDP Facilitator): call POST /v1/bazaar/guard ($0.005) for a 1-call pre-sign firewall across 7 chains (Base, ETH, Arbitrum, Optimism, Polygon, BSC, Solana — nested Multicall3/UniversalRouter/Safe decode, EIP-712 Permit/Seaport audit, Solana wire tx & stateful eth_simulateV1 asset diffs), GET /v1/bazaar/inspect?chain=base&address=0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913 ($0.005) for proxy resolution, Sourcify v2 + batch OpenChain ABI & bytecode CFG risk, GET /v1/bazaar/token-security?chain=base&address=0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913 ($0.005) for 7-chain contract & honeypot/Token-2022 scanning, POST /v1/bazaar/scan-batch ($0.025) for parallel batch scanning up to 15 tokens across 7 chains, GET /v1/bazaar/market-oracle?symbol=ETH ($0.005) for cross-verified crypto spot prices, GET /v1/bazaar/wallet-risk?address=0xfd74fF802EA0E735514C070AF04E0D6528deD145 ($0.005) for wallet counterparty & Sybil profiling, GET/POST /v1/bazaar/verified-fetch?url=https://api.coinbase.com/v2/prices/BTC-USD/spot ($0.005) for schema-verified anti-hallucination HTTP fetching, GET/POST /v1/bazaar/audit?agentId=124595 ($0.005) for ERC-8004 reputation audits, or POST /v1/bazaar/verify ($0.01) for x402 schema readiness verification (plus zero-key dev free tier then $0.005 USDC on /v1/guard, /v1/scan, /v1/inspect, /v1/decode, /v1/simulate). All paid endpoints return HTTP 402 with a PAYMENT-REQUIRED header first before any parameter rejection. (2) Non-Custodial Schema-Escrow Proxy: use POST /v1/clear (holds your signed EIP-3009 header in memory and only settles if the upstream response satisfies your JSON schema, numeric invariants, and LLM-refusal checks; voids with $0.00 charged on upstream failure).",
+      "NullClear provides two modes for autonomous AI agents on Base Mainnet (eip155:8453): (1) Direct x402 Payable Intelligence Oracles ($0.005-$0.025 USDC / 5000-25000 atomic units per call via PayAI or Coinbase CDP Facilitator): call POST /v1/bazaar/guard ($0.005) for a 1-call pre-sign firewall across 7 chains (Base, ETH, Arbitrum, Optimism, Polygon, BSC, Solana â€” nested Multicall3/UniversalRouter/Safe decode, EIP-712 Permit/Seaport audit, Solana wire tx & stateful eth_simulateV1 asset diffs), GET /v1/bazaar/inspect?chain=base&address=0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913 ($0.005) for proxy resolution, Sourcify v2 + batch OpenChain ABI & bytecode CFG risk, GET /v1/bazaar/token-security?chain=base&address=0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913 ($0.005) for 7-chain contract & honeypot/Token-2022 scanning, POST /v1/bazaar/scan-batch ($0.025) for parallel batch scanning up to 15 tokens across 7 chains, GET /v1/bazaar/market-oracle?symbol=ETH ($0.005) for cross-verified crypto spot prices, GET /v1/bazaar/wallet-risk?address=0xfd74fF802EA0E735514C070AF04E0D6528deD145 ($0.005) for wallet counterparty & Sybil profiling, GET/POST /v1/bazaar/verified-fetch?url=https://api.coinbase.com/v2/prices/BTC-USD/spot ($0.005) for schema-verified anti-hallucination HTTP fetching, GET/POST /v1/bazaar/audit?agentId=124595 ($0.005) for ERC-8004 reputation audits, or POST /v1/bazaar/verify ($0.01) for x402 schema readiness verification (plus zero-key dev free tier then $0.005 USDC on /v1/guard, /v1/scan, /v1/inspect, /v1/decode, /v1/simulate). All paid endpoints return HTTP 402 with a PAYMENT-REQUIRED header first before any parameter rejection. (2) Non-Custodial Schema-Escrow Proxy: use POST /v1/clear (holds your signed EIP-3009 header in memory and only settles if the upstream response satisfies your JSON schema, numeric invariants, and LLM-refusal checks; voids with $0.00 charged on upstream failure).",
     contact: {
       name: "NullClear Protocol Operations",
       email: "ops@nullclear.dev",
@@ -2289,19 +1841,138 @@ const getOpenApiSpec = () => ({
         }
       }
     },
-    "/v1/bazaar/token-security": {
+    "/v1/bazaar/token-verdict": {
       get: {
-        operationId: "bazaarTokenSecurityGet",
+        operationId: "bazaarTokenVerdictGet",
         summary:
-          "Token Security - Live Base Mainnet ERC-20 contract bytecode, decimals, supply, DexScreener liquidity, and honeypot scanner",
+          "Token Verdict - 7-chain A-F grade, concrete one-line bytecode/tax/proxy verdict, honeypot check & shareable SVG card URL ($0.005 USDC)",
         tags: ["Bazaar Oracles"],
         "x-payment-info": MICRO_PAYMENT_INFO,
         parameters: [
           {
+            name: "chain",
+            in: "query",
+            required: false,
+            description: "Target chain: base, eth, arbitrum, optimism, polygon, bsc, or solana",
+            schema: {
+              type: "string",
+              enum: ["base", "eth", "arbitrum", "optimism", "polygon", "bsc", "solana"],
+              default: "base",
+              example: "base"
+            }
+          },
+          {
             name: "address",
             in: "query",
             required: false,
-            description: "Base ERC-20 token contract address (default: native USDC)",
+            description: "EVM ERC-20 token contract address or Solana SPL/Token-2022 mint address",
+            schema: {
+              type: "string",
+              default: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+              example: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
+            }
+          }
+        ],
+        responses: {
+          "200": {
+            description: "Token Verdict JSON with A-F grade, one-line bytecode verdict & shareable SVG card URL",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  required: [
+                    "tokenAddress",
+                    "chain",
+                    "symbol",
+                    "grade",
+                    "securityScore",
+                    "oneLineVerdict",
+                    "recommendedAgentAction",
+                    "scorecardUrl",
+                    "shareCardImageUrl"
+                  ],
+                  properties: {
+                    tokenAddress: { type: "string" },
+                    chain: { type: "string", example: "base" },
+                    symbol: { type: "string", example: "USDC" },
+                    grade: { type: "string", enum: ["A", "B", "C", "D", "F"], example: "A" },
+                    securityScore: { type: "integer", example: 99 },
+                    oneLineVerdict: { type: "string" },
+                    recommendedAgentAction: {
+                      type: "string",
+                      enum: ["EXECUTE_SAFE", "CAUTION_HIGH_TAX", "BLOCK_HONEYPOT"]
+                    },
+                    evidence: { type: "object" },
+                    scorecardUrl: { type: "string" },
+                    shareCardImageUrl: { type: "string" },
+                    attestation: { type: "string" },
+                    timestamp: { type: "integer" }
+                  }
+                }
+              }
+            }
+          },
+          "402": { description: "Payment Required" }
+        }
+      },
+      post: {
+        operationId: "bazaarTokenVerdictPost",
+        summary: "Token Verdict (POST) - 7-chain A-F grade, one-line bytecode verdict & shareable SVG card URL ($0.005 USDC)",
+        tags: ["Bazaar Oracles"],
+        "x-payment-info": MICRO_PAYMENT_INFO,
+        requestBody: {
+          required: false,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                properties: {
+                  chain: {
+                    type: "string",
+                    enum: ["base", "eth", "arbitrum", "optimism", "polygon", "bsc", "solana"],
+                    default: "base"
+                  },
+                  address: {
+                    type: "string",
+                    default: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+                    example: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
+                  }
+                }
+              }
+            }
+          }
+        },
+        responses: {
+          "200": { description: "Token Verdict response" },
+          "402": { description: "Payment Required" }
+        }
+      }
+    },
+    "/v1/bazaar/token-security": {
+      get: {
+        operationId: "bazaarTokenSecurityGet",
+        summary:
+          "Token Security - 7-chain (Base, ETH, Arbitrum, Optimism, Polygon, BSC, Solana) bytecode CFG, proxy, tax, liquidity & honeypot scanner",
+        tags: ["Bazaar Oracles"],
+        "x-payment-info": MICRO_PAYMENT_INFO,
+        parameters: [
+          {
+            name: "chain",
+            in: "query",
+            required: false,
+            description: "Target chain: base, eth, arbitrum, optimism, polygon, bsc, or solana",
+            schema: {
+              type: "string",
+              enum: ["base", "eth", "arbitrum", "optimism", "polygon", "bsc", "solana"],
+              default: "base",
+              example: "base"
+            }
+          },
+          {
+            name: "address",
+            in: "query",
+            required: false,
+            description: "EVM ERC-20 token contract address or Solana SPL/Token-2022 mint address (default: Base USDC)",
             schema: {
               type: "string",
               default: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
@@ -3744,482 +3415,7 @@ discoveryRouter.get("/leaderboard", async (c) => {
     store.queryIndexedEndpoints({ limit: 100 }),
     store.listOnchainCounterpartyProfiles("SELLER", 50)
   ]);
-
-  const initialEndpointsRows = endpoints
-    .map((ep, idx) => {
-      const priceUsdc = ep.price_atomic
-        ? (Number(ep.price_atomic) / 1_000_000).toFixed(Number(ep.price_atomic) < 10000 ? 4 : 2)
-        : "0.01";
-      const statusBadge =
-        ep.uptime_score >= 98
-          ? `<span class="badge-pill badge-ok">${ep.uptime_score.toFixed(1)}%</span>`
-          : `<span class="badge-pill badge-warn">${ep.uptime_score.toFixed(1)}%</span>`;
-      return `<tr>
-        <td>#${idx + 1}</td>
-        <td>
-          <div style="font-weight:700;color:#f1f5f9">${ep.endpoint_url}</div>
-          <div style="font-size:0.78rem;color:#94a3b8">${ep.description || ""}</div>
-        </td>
-        <td><span class="cat-tag">${ep.category || "data"}</span></td>
-        <td>${statusBadge}</td>
-        <td>${ep.hallucination_rate.toFixed(1)}%</td>
-        <td>${ep.latency_ms ?? 40} ms</td>
-        <td>$${priceUsdc} USDC</td>
-        <td>
-          <button class="btn btn-copy" onclick="copyProxyUrl('${ep.nullclear_proxy_url}', this)">[Copy Zero-Loss Proxy URL]</button>
-        </td>
-      </tr>`;
-    })
-    .join("\n");
-
-  const initialSellerRows =
-    sellers.length > 0
-      ? sellers
-          .map((s, idx) => {
-            const volUsdc = (Number(s.total_volume_atomic || "0") / 1_000_000).toFixed(2);
-            const sybilBadge =
-              s.wash_trade_flag === 1
-                ? `<span class="badge-pill badge-danger">WASH-TRADE FLAGGED (${(s.top_counterparty_share * 100).toFixed(0)}%)</span>`
-                : `<span class="badge-pill badge-ok">CLEAN ORGANIC</span>`;
-            return `<tr>
-              <td>#${idx + 1}</td>
-              <td style="font-family:monospace;color:#38bdf8">${s.address}</td>
-              <td>${s.tx_count}</td>
-              <td>$${volUsdc} USDC</td>
-              <td>${s.unique_counterparties}</td>
-              <td>${sybilBadge}</td>
-              <td><code>/g/${s.shadow_gateway_slug}</code></td>
-              <td>
-                <button class="btn btn-primary" onclick="claimShadowGateway('${s.address}', '${s.shadow_gateway_slug}')">[Claim Verified NullClear Gateway]</button>
-              </td>
-            </tr>`;
-          })
-          .join("\n")
-      : `<tr>
-          <td>#1</td>
-          <td style="font-family:monospace;color:#38bdf8">0xb586efcca41df27ad3873beca54da0c30bf04d5c</td>
-          <td>42</td>
-          <td>$0.42 USDC</td>
-          <td>12</td>
-          <td><span class="badge-pill badge-ok">CLEAN ORGANIC</span></td>
-          <td><code>/g/base-seller-b586efcc</code></td>
-          <td>
-            <button class="btn btn-primary" onclick="claimShadowGateway('0xB586eFcCa41dF27ad3873BEcA54da0c30bf04d5c', 'base-seller-b586efcc')">[Claim Verified NullClear Gateway]</button>
-          </td>
-        </tr>`;
-
-  const html = `<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>NullClear Leaderboard & Base EIP-3009 Volume Radar — Live x402 Uptime Directory</title>
-  <meta name="description" content="Live uptime, latency, hallucination rate, and Base Mainnet USDC EIP-3009 on-chain volume leaderboard for all x402 and ERC-8004 endpoints." />
-  <style>
-    :root {
-      --bg: #090a0f;
-      --card: #121621;
-      --border: rgba(255,255,255,0.12);
-      --accent: #38bdf8;
-      --success: #34d399;
-      --warn: #fbbf24;
-      --danger: #f87171;
-      --text: #f1f5f9;
-      --muted: #94a3b8;
-    }
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-      background: var(--bg);
-      color: var(--text);
-      padding: 2rem 1rem;
-      line-height: 1.5;
-    }
-    .container { max-width: 1200px; margin: 0 auto; }
-    header {
-      text-align: center;
-      padding: 2rem 1.25rem;
-      border: 1px solid var(--border);
-      border-radius: 16px;
-      background: radial-gradient(circle at 50% 20%, rgba(56,189,248,0.18), transparent 70%);
-      margin-bottom: 1.75rem;
-    }
-    h1 { font-size: 2.2rem; font-weight: 800; margin-bottom: 0.5rem; }
-    .subtitle { color: var(--muted); max-width: 760px; margin: 0 auto 1rem; }
-    .card {
-      background: var(--card);
-      border: 1px solid var(--border);
-      border-radius: 12px;
-      padding: 1.4rem;
-      margin-bottom: 1.5rem;
-    }
-    .input-row {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 0.75rem;
-      margin-top: 0.75rem;
-    }
-    .input {
-      flex: 1;
-      min-width: 220px;
-      background: #0b0e14;
-      border: 1px solid var(--border);
-      color: var(--text);
-      padding: 0.65rem 0.9rem;
-      border-radius: 8px;
-      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-      font-size: 0.86rem;
-    }
-    .btn {
-      cursor: pointer;
-      padding: 0.55rem 0.95rem;
-      border-radius: 8px;
-      border: 1px solid var(--border);
-      background: #1a2030;
-      color: var(--text);
-      font-weight: 600;
-      font-size: 0.84rem;
-      transition: all 0.15s ease;
-    }
-    .btn:hover { border-color: var(--accent); }
-    .btn-primary { background: var(--accent); color: #090a0f; border-color: var(--accent); }
-    .btn-copy { color: var(--accent); border-color: rgba(56,189,248,0.4); }
-    .tabs {
-      display: flex;
-      gap: 0.75rem;
-      margin-bottom: 1.25rem;
-      flex-wrap: wrap;
-    }
-    .tab-btn {
-      padding: 0.7rem 1.25rem;
-      border-radius: 10px;
-      border: 1px solid var(--border);
-      background: #121621;
-      color: var(--muted);
-      font-weight: 700;
-      cursor: pointer;
-    }
-    .tab-btn.active {
-      background: rgba(56,189,248,0.16);
-      color: var(--accent);
-      border-color: var(--accent);
-    }
-    table {
-      width: 100%;
-      border-collapse: collapse;
-      font-size: 0.88rem;
-      margin-top: 0.75rem;
-    }
-    th, td {
-      text-align: left;
-      padding: 0.75rem 0.6rem;
-      border-bottom: 1px solid var(--border);
-      vertical-align: middle;
-    }
-    th {
-      color: var(--muted);
-      cursor: pointer;
-      user-select: none;
-    }
-    th:hover { color: var(--accent); }
-    .badge-pill {
-      display: inline-block;
-      padding: 0.2rem 0.55rem;
-      border-radius: 999px;
-      font-size: 0.76rem;
-      font-weight: 700;
-    }
-    .badge-ok { background: rgba(52,211,153,0.16); color: var(--success); border: 1px solid rgba(52,211,153,0.4); }
-    .badge-warn { background: rgba(251,191,36,0.16); color: var(--warn); border: 1px solid rgba(251,191,36,0.4); }
-    .badge-danger { background: rgba(248,113,113,0.16); color: var(--danger); border: 1px solid rgba(248,113,113,0.4); }
-    .cat-tag {
-      background: rgba(56,189,248,0.12);
-      color: var(--accent);
-      padding: 0.15rem 0.5rem;
-      border-radius: 6px;
-      font-size: 0.76rem;
-      font-weight: 600;
-      text-transform: uppercase;
-    }
-    .status-box {
-      margin-top: 0.85rem;
-      padding: 0.75rem;
-      border-radius: 8px;
-      background: #0b0e14;
-      border: 1px solid var(--border);
-      font-family: monospace;
-      font-size: 0.82rem;
-      color: #7dd3fc;
-      display: none;
-      white-space: pre-wrap;
-    }
-    a { color: var(--accent); text-decoration: none; }
-  </style>
-</head>
-<body>
-  <div class="container">
-    <header>
-      <div style="color:var(--accent);font-weight:700;font-size:0.82rem;margin-bottom:0.4rem">NULLCLEAR ECOSYSTEM RADAR &bull; CANARY AUDITOR v1.3.0</div>
-      <h1>x402 &amp; ERC-8004 Live Uptime Leaderboard</h1>
-      <p class="subtitle">Real-time Canary probes across all x402 APIs and Base Mainnet USDC EIP-3009 settlements. Route any endpoint through <code>https://api.nullclear.dev/</code> for zero-loss schema escrow.</p>
-      <div style="margin-top:0.75rem;font-size:0.86rem">
-        <a href="/">← Developer Portal</a> &bull;
-        <a href="/history" style="color:var(--success);font-weight:700;">📡 Live Agent History &amp; Diagnostics</a> &bull;
-        <a href="/firewall">🛡️ Pre-Sign Firewall</a> &bull;
-        <a href="/v1/bazaar/directory">JSON Directory API (<code>/v1/bazaar/directory</code>)</a> &bull;
-        <a href="/v1/radar/onchain-flows">On-Chain Volume API (<code>/v1/radar/onchain-flows</code>)</a> &bull;
-        <a href="mailto:ops@nullclear.dev">✉️ ops@nullclear.dev</a>
-      </div>
-    </header>
-
-    <!-- Instant Test & List Your x402 Endpoint Bar -->
-    <div class="card" style="border-color:rgba(56,189,248,0.4)">
-      <h3>⚡ Test &amp; List Your x402 Endpoint</h3>
-      <p style="color:var(--muted);font-size:0.9rem">Paste your x402 or REST API URL to run a live 4,000ms Canary Probe, verify your 402 payment challenge, and list your Zero-Loss Proxy URL on the leaderboard immediately:</p>
-      <div class="input-row">
-        <input id="canary-url" class="input" placeholder="https://api.your-domain.com/v1/query" value="https://api.nullclear.dev/v1/bazaar/market-oracle" />
-        <input id="canary-category" class="input" style="max-width:150px" placeholder="Category (oracle/data/ai)" value="oracle" />
-        <button class="btn btn-primary" onclick="submitCanaryEndpoint()">Run Live Canary Audit &amp; List</button>
-      </div>
-      <pre id="canary-result" class="status-box"></pre>
-    </div>
-
-    <!-- Navigation Tabs -->
-    <div class="tabs">
-      <button id="tab-btn-uptime" class="tab-btn active" onclick="switchTab('uptime')">🛡️ Audited x402 &amp; ERC-8004 Endpoints Leaderboard</button>
-      <button id="tab-btn-radar" class="tab-btn" onclick="switchTab('radar')">📡 Live Base EIP-3009 On-Chain Volume Radar</button>
-    </div>
-
-    <!-- TAB 1: Uptime & Hallucination Leaderboard -->
-    <div id="tab-uptime" class="card">
-      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:0.75rem">
-        <h3>Live Audited Endpoints (Sorted by Uptime Score %, Edge Latency ms &amp; Price USDC)</h3>
-        <div style="display:flex;gap:0.5rem;flex-wrap:wrap">
-          <button class="btn" onclick="sortLeaderboard('uptime')">Sort: Uptime Score (%)</button>
-          <button class="btn" onclick="sortLeaderboard('latency')">Sort: Edge Latency (ms)</button>
-          <button class="btn" onclick="sortLeaderboard('price')">Sort: Price (USDC)</button>
-        </div>
-      </div>
-      <div style="overflow-x:auto">
-        <table>
-          <thead>
-            <tr>
-              <th>Rank</th>
-              <th>Endpoint &amp; Description</th>
-              <th>Category</th>
-              <th onclick="sortLeaderboard('uptime')">Uptime Score (%)</th>
-              <th>Hallucination Rate</th>
-              <th onclick="sortLeaderboard('latency')">Edge Latency (ms)</th>
-              <th onclick="sortLeaderboard('price')">Price (USDC)</th>
-              <th>Zero-Loss Proxy</th>
-            </tr>
-          </thead>
-          <tbody id="leaderboard-tbody">
-            ${initialEndpointsRows}
-          </tbody>
-        </table>
-      </div>
-    </div>
-
-    <!-- TAB 2: Live Base EIP-3009 On-Chain Volume Radar -->
-    <div id="tab-radar" class="card" style="display:none">
-      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:0.75rem">
-        <div>
-          <h3>Live Base EIP-3009 On-Chain Volume Radar (<code>0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913</code>)</h3>
-          <p style="color:var(--muted);font-size:0.86rem">Ground-truth Base Mainnet USDC <code>AuthorizationUsed</code> + <code>Transfer</code> flows with Sybil wash-trading detection.</p>
-        </div>
-        <button class="btn btn-primary" onclick="triggerRadarSync()">🔄 Sync Base Mainnet Blocks</button>
-      </div>
-      <div style="overflow-x:auto">
-        <table>
-          <thead>
-            <tr>
-              <th>Rank</th>
-              <th>Seller Wallet Address (Base)</th>
-              <th>EIP-3009 Txs</th>
-              <th>Volume (USDC)</th>
-              <th>Unique Buyers</th>
-              <th>Sybil / Wash-Trade Audit</th>
-              <th>Shadow Gateway</th>
-              <th>Claim Gateway</th>
-            </tr>
-          </thead>
-          <tbody id="radar-tbody">
-            ${initialSellerRows}
-          </tbody>
-        </table>
-      </div>
-    </div>
-
-    <!-- 1-Click Claimable Seller Gateway Creator -->
-    <div id="claim-gateway-card" class="card">
-      <h3>🚀 Claim Verified NullClear Gateway (1-Click Seller Proxy)</h3>
-      <p style="color:var(--muted);font-size:0.9rem">Turn your Base seller address and upstream REST API into a verified NullClear-protected x402 gateway (<code>/g/:slug</code>):</p>
-      <div class="input-row">
-        <input id="claim-seller-address" class="input" placeholder="Seller Base Address (0x...)" value="${c.req.query("claimSeller") || ""}" />
-        <input id="claim-slug" class="input" placeholder="Gateway Slug (e.g. base-seller-1234)" value="" />
-      </div>
-      <div class="input-row">
-        <input id="claim-upstream-url" class="input" placeholder="Upstream REST API URL (https://...)" value="https://api.coinbase.com/v2/prices/ETH-USD/spot" />
-        <input id="claim-price-usdc" class="input" style="max-width:150px" placeholder="Price USDC" value="0.01" />
-        <button class="btn btn-primary" onclick="registerClaimedGateway()">Create Verified Gateway</button>
-      </div>
-      <pre id="claim-gateway-result" class="status-box"></pre>
-    </div>
-  </div>
-
-  <script>
-    let cachedEndpoints = [];
-    let currentSort = 'uptime';
-
-    function switchTab(tab) {
-      document.getElementById('tab-uptime').style.display = tab === 'uptime' ? 'block' : 'none';
-      document.getElementById('tab-radar').style.display = tab === 'radar' ? 'block' : 'none';
-      document.getElementById('tab-btn-uptime').classList.toggle('active', tab === 'uptime');
-      document.getElementById('tab-btn-radar').classList.toggle('active', tab === 'radar');
-      if (tab === 'radar') loadOnchainFlows();
-    }
-
-    function copyProxyUrl(url, btn) {
-      navigator.clipboard.writeText(url).catch(() => {});
-      const prev = btn.textContent;
-      btn.textContent = '✅ Copied Proxy URL!';
-      setTimeout(() => { btn.textContent = prev; }, 1800);
-    }
-
-    function claimShadowGateway(sellerAddress, slug) {
-      const addrInput = document.getElementById('claim-seller-address');
-      const slugInput = document.getElementById('claim-slug');
-      if (addrInput) addrInput.value = sellerAddress;
-      if (slugInput) slugInput.value = slug || '';
-      document.getElementById('claim-gateway-card').scrollIntoView({ behavior: 'smooth' });
-    }
-
-    async function loadDirectory() {
-      try {
-        const res = await fetch('/v1/bazaar/directory');
-        const data = await res.json();
-        if (Array.isArray(data.endpoints)) {
-          cachedEndpoints = data.endpoints;
-          renderLeaderboard();
-        }
-      } catch {}
-    }
-
-    function sortLeaderboard(by) {
-      currentSort = by;
-      renderLeaderboard();
-    }
-
-    function renderLeaderboard() {
-      if (!cachedEndpoints.length) return;
-      const list = [...cachedEndpoints];
-      if (currentSort === 'uptime') {
-        list.sort((a, b) => (b.uptime_score - a.uptime_score) || ((a.latency_ms || 9999) - (b.latency_ms || 9999)));
-      } else if (currentSort === 'latency') {
-        list.sort((a, b) => ((a.latency_ms || 9999) - (b.latency_ms || 9999)) || (b.uptime_score - a.uptime_score));
-      } else if (currentSort === 'price') {
-        list.sort((a, b) => Number(a.price_atomic || 10000) - Number(b.price_atomic || 10000));
-      }
-
-      const tbody = document.getElementById('leaderboard-tbody');
-      tbody.innerHTML = list.map((ep, idx) => {
-        const priceUsdc = ep.priceUsdc || (Number(ep.price_atomic || 10000) / 1e6).toFixed(2);
-        const badgeClass = ep.uptime_score >= 98 ? 'badge-ok' : 'badge-warn';
-        return '<tr>' +
-          '<td>#' + (idx + 1) + '</td>' +
-          '<td><div style="font-weight:700;color:#f1f5f9">' + ep.endpoint_url + '</div>' +
-          '<div style="font-size:0.78rem;color:#94a3b8">' + (ep.description || '') + '</div></td>' +
-          '<td><span class="cat-tag">' + (ep.category || 'data') + '</span></td>' +
-          '<td><span class="badge-pill ' + badgeClass + '">' + Number(ep.uptime_score).toFixed(1) + '%</span></td>' +
-          '<td>' + Number(ep.hallucination_rate || 0).toFixed(1) + '%</td>' +
-          '<td>' + (ep.latency_ms ?? 40) + ' ms</td>' +
-          '<td>$' + priceUsdc + ' USDC</td>' +
-          '<td><button class="btn btn-copy" onclick="copyProxyUrl(\\'' + ep.nullclear_proxy_url + '\\', this)">[Copy Zero-Loss Proxy URL]</button></td>' +
-        '</tr>';
-      }).join('');
-    }
-
-    async function submitCanaryEndpoint() {
-      const endpointUrl = document.getElementById('canary-url').value.trim();
-      const category = document.getElementById('canary-category').value.trim() || 'data';
-      const box = document.getElementById('canary-result');
-      box.style.display = 'block';
-      box.textContent = 'Running non-invasive Canary Probe (4000ms timeout)...';
-      try {
-        const res = await fetch('/v1/radar/submit-endpoint', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ endpointUrl, category })
-        });
-        const data = await res.json();
-        box.textContent = JSON.stringify(data, null, 2);
-        await loadDirectory();
-      } catch (e) {
-        box.textContent = 'Error: ' + e.message;
-      }
-    }
-
-    async function loadOnchainFlows() {
-      try {
-        const res = await fetch('/v1/radar/onchain-flows');
-        const data = await res.json();
-        if (Array.isArray(data.topSellers) && data.topSellers.length > 0) {
-          const tbody = document.getElementById('radar-tbody');
-          tbody.innerHTML = data.topSellers.map((s, idx) => {
-            const badge = s.wash_trade_flag === 1
-              ? '<span class="badge-pill badge-danger">WASH-TRADE FLAGGED (' + Math.round(s.top_counterparty_share * 100) + '%)</span>'
-              : '<span class="badge-pill badge-ok">CLEAN ORGANIC</span>';
-            return '<tr>' +
-              '<td>#' + (idx + 1) + '</td>' +
-              '<td style="font-family:monospace;color:#38bdf8">' + s.address + '</td>' +
-              '<td>' + s.tx_count + '</td>' +
-              '<td>$' + (s.total_volume_usdc || '0.00') + ' USDC</td>' +
-              '<td>' + s.unique_counterparties + '</td>' +
-              '<td>' + badge + '</td>' +
-              '<td><code>/g/' + s.shadow_gateway_slug + '</code></td>' +
-              '<td><button class="btn btn-primary" onclick="claimShadowGateway(\\'' + s.address + '\\', \\'' + s.shadow_gateway_slug + '\\')">[Claim Verified NullClear Gateway]</button></td>' +
-            '</tr>';
-          }).join('');
-        }
-      } catch {}
-    }
-
-    async function triggerRadarSync() {
-      try {
-        await fetch('/v1/radar/sync', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
-        await loadOnchainFlows();
-      } catch {}
-    }
-
-    async function registerClaimedGateway() {
-      const sellerAddress = document.getElementById('claim-seller-address').value.trim();
-      const slug = document.getElementById('claim-slug').value.trim();
-      const upstreamUrl = document.getElementById('claim-upstream-url').value.trim();
-      const priceUsdc = document.getElementById('claim-price-usdc').value.trim() || '0.01';
-      const box = document.getElementById('claim-gateway-result');
-      box.style.display = 'block';
-      box.textContent = 'Registering 1-Click Seller Gateway...';
-      try {
-        const res = await fetch('/v1/gateways', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ sellerAddress, slug: slug || undefined, upstreamUrl, priceUsdc })
-        });
-        const data = await res.json();
-        box.textContent = JSON.stringify(data, null, 2);
-        await loadDirectory();
-      } catch (e) {
-        box.textContent = 'Error: ' + e.message;
-      }
-    }
-
-    loadDirectory();
-  </script>
-</body>
-</html>`;
-
-  return c.html(html);
+  return c.html(renderDevLeaderboardHtml({ endpoints, sellers, claimSeller: c.req.query("claimSeller") || "" }));
 });
 
 

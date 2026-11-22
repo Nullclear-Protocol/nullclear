@@ -158,7 +158,6 @@ export async function handleBuyPassRequest(
     };
     const encoded = encodeBase64Json(payload);
     c.header("PAYMENT-REQUIRED", encoded);
-    c.header("X-Payment-Required", encoded);
     c.header("Pay-To", NULLCLEAR_TREASURY_ADDRESS);
     c.header(
       "WWW-Authenticate",
@@ -682,16 +681,359 @@ passesRouter.get("/export", async (c) => {
   });
 });
 
+// ============================================================================
+// Fiat / Card Checkout (Stripe Hosted Checkout + Web Crypto Webhook Minting)
+// Env-gated by STRIPE_SECRET_KEY + STRIPE_WEBHOOK_SECRET
+// ============================================================================
+
+export interface CardCheckoutTierSpec {
+  id: "starter" | "builder" | "pro";
+  label: string;
+  priceUsd: number;
+  priceCents: number;
+  credits: number;
+  priceAtomicEquivalent: string;
+  effectiveCostPerCreditUsd: string;
+}
+
+export const CARD_CHECKOUT_TIERS: Record<"starter" | "builder" | "pro", CardCheckoutTierSpec> = {
+  starter: {
+    id: "starter",
+    label: "NullClear Starter Pass (Card)",
+    priceUsd: 5,
+    priceCents: 500,
+    credits: 2000,
+    priceAtomicEquivalent: "5000000",
+    effectiveCostPerCreditUsd: "0.0025"
+  },
+  builder: {
+    id: "builder",
+    label: "NullClear Builder Pass (Card)",
+    priceUsd: 20,
+    priceCents: 2000,
+    credits: 10000,
+    priceAtomicEquivalent: "20000000",
+    effectiveCostPerCreditUsd: "0.0020"
+  },
+  pro: {
+    id: "pro",
+    label: "NullClear Pro Pass (Card)",
+    priceUsd: 100,
+    priceCents: 10000,
+    credits: 60000,
+    priceAtomicEquivalent: "100000000",
+    effectiveCostPerCreditUsd: "0.00167"
+  }
+};
+
+export function normalizeCardCheckoutTier(raw?: string | null): "starter" | "builder" | "pro" {
+  const s = (raw || "").trim().toLowerCase();
+  if (s === "builder" || s === "growth" || s === "20") return "builder";
+  if (s === "pro" || s === "scale" || s === "100") return "pro";
+  return "starter";
+}
+
+function timingSafeHexEqual(a: string, b: string): boolean {
+  if (a.length !== b.length) return false;
+  let diff = 0;
+  for (let i = 0; i < a.length; i++) {
+    diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  }
+  return diff === 0;
+}
+
+export async function verifyStripeWebhookSignature(
+  rawBody: string,
+  signatureHeader: string | undefined,
+  webhookSecret: string,
+  toleranceSeconds = 300
+): Promise<{ valid: boolean; reason?: string }> {
+  if (!signatureHeader) return { valid: false, reason: "Missing Stripe-Signature header" };
+  const parts = signatureHeader.split(",").map((p) => p.trim());
+  let timestampStr = "";
+  const v1Sigs: string[] = [];
+  for (const part of parts) {
+    const [k, v] = part.split("=", 2);
+    if (k === "t" && v) timestampStr = v;
+    if (k === "v1" && v) v1Sigs.push(v);
+  }
+  if (!timestampStr || v1Sigs.length === 0) {
+    return { valid: false, reason: "Malformed Stripe-Signature header" };
+  }
+  const ts = Number(timestampStr);
+  const nowSec = Math.floor(Date.now() / 1000);
+  if (!Number.isFinite(ts) || Math.abs(nowSec - ts) > toleranceSeconds) {
+    return { valid: false, reason: "Stripe webhook timestamp outside replay tolerance" };
+  }
+
+  const key = await crypto.subtle.importKey(
+    "raw",
+    new TextEncoder().encode(webhookSecret),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"]
+  );
+  const signedPayload = `${timestampStr}.${rawBody}`;
+  const macBuf = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(signedPayload));
+  const expectedHex = Array.from(new Uint8Array(macBuf))
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+
+  const matched = v1Sigs.some((sig) => timingSafeHexEqual(sig.toLowerCase(), expectedHex));
+  return matched ? { valid: true } : { valid: false, reason: "Stripe-Signature HMAC mismatch" };
+}
+
+passesRouter.get("/checkout", (c) => {
+  const configured = Boolean(c.env?.STRIPE_SECRET_KEY && c.env?.STRIPE_WEBHOOK_SECRET);
+  return c.json({
+    provider: "stripe",
+    enabled: configured,
+    endpoint: "POST https://api.nullclear.dev/v1/pass/checkout",
+    webhookEndpoint: "POST https://api.nullclear.dev/v1/pass/webhook/stripe",
+    tiers: Object.values(CARD_CHECKOUT_TIERS),
+    usdcAlternative: "POST https://api.nullclear.dev/v1/pass/buy",
+    interactivePage: "https://nullclear.dev/buy-pass"
+  });
+});
+
+passesRouter.post("/checkout", async (c) => {
+  let body: Record<string, any> = {};
+  try {
+    const parsed = await c.req.json();
+    if (parsed && typeof parsed === "object") body = parsed as Record<string, any>;
+  } catch {}
+
+  const tierId = normalizeCardCheckoutTier(c.req.query("tier") || body.tier);
+  const tier = CARD_CHECKOUT_TIERS[tierId];
+  const stripeKey = (c.env?.STRIPE_SECRET_KEY || "").trim();
+
+  if (!stripeKey) {
+    return c.json(
+      {
+        error: "Card checkout not yet enabled in this environment",
+        code: "CARD_CHECKOUT_NOT_CONFIGURED",
+        selectedTier: tier,
+        tiers: Object.values(CARD_CHECKOUT_TIERS),
+        requiredSecrets: ["STRIPE_SECRET_KEY", "STRIPE_WEBHOOK_SECRET"],
+        usdcCheckout: {
+          interactiveUrl: "https://nullclear.dev/buy-pass",
+          x402Endpoint: "POST https://api.nullclear.dev/v1/pass/buy"
+        },
+        contact: "ops@nullclear.dev"
+      },
+      503
+    );
+  }
+
+  const baseUrl = (c.env?.STRIPE_CHECKOUT_BASE_URL || "https://api.nullclear.dev").replace(/\/$/, "");
+  const successUrl =
+    typeof body.successUrl === "string" && /^https:\/\//i.test(body.successUrl)
+      ? body.successUrl
+      : `${baseUrl}/v1/pass/checkout/success?session_id={CHECKOUT_SESSION_ID}`;
+  const cancelUrl =
+    typeof body.cancelUrl === "string" && /^https:\/\//i.test(body.cancelUrl)
+      ? body.cancelUrl
+      : "https://nullclear.dev/buy-pass?cancelled=1";
+
+  const form = new URLSearchParams();
+  form.set("mode", "payment");
+  form.set("payment_method_types[0]", "card");
+  form.set("line_items[0][price_data][currency]", "usd");
+  form.set("line_items[0][price_data][unit_amount]", String(tier.priceCents));
+  form.set("line_items[0][price_data][product_data][name]", tier.label);
+  form.set(
+    "line_items[0][price_data][product_data][description]",
+    `${tier.credits.toLocaleString()} prepaid NullClear API credits + Guarded JSON-RPC (/rpc/:chain/:key) + Policy Co-Signer + Watchtower`
+  );
+  form.set("line_items[0][quantity]", "1");
+  form.set("success_url", successUrl);
+  form.set("cancel_url", cancelUrl);
+  form.set("metadata[tier]", tier.id);
+  form.set("metadata[credits]", String(tier.credits));
+  form.set("metadata[priceAtomicEquivalent]", tier.priceAtomicEquivalent);
+  if (typeof body.email === "string" && body.email.includes("@")) {
+    form.set("customer_email", body.email.trim());
+  }
+
+  const stripeRes = await fetch("https://api.stripe.com/v1/checkout/sessions", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${stripeKey}`,
+      "Content-Type": "application/x-www-form-urlencoded"
+    },
+    body: form.toString()
+  });
+
+  const stripeData: any = await stripeRes.json().catch(() => ({}));
+  if (!stripeRes.ok || !stripeData?.url) {
+    return c.json(
+      {
+        error: "Stripe Checkout Session creation failed",
+        code: "STRIPE_UPSTREAM_ERROR",
+        details: stripeData?.error?.message || `HTTP ${stripeRes.status}`
+      },
+      502
+    );
+  }
+
+  return c.json({
+    provider: "stripe",
+    sessionId: stripeData.id,
+    checkoutUrl: stripeData.url,
+    tier: tier.id,
+    label: tier.label,
+    priceUsd: tier.priceUsd,
+    credits: tier.credits,
+    expiresAt: stripeData.expires_at
+  });
+});
+
+passesRouter.post("/webhook/stripe", async (c) => {
+  const webhookSecret = (c.env?.STRIPE_WEBHOOK_SECRET || "").trim();
+  if (!webhookSecret) {
+    return c.json(
+      { error: "Stripe webhook secret not configured", code: "CARD_CHECKOUT_NOT_CONFIGURED" },
+      503
+    );
+  }
+
+  const rawBody = await c.req.text();
+  const sigHeader = c.req.header("stripe-signature");
+  const check = await verifyStripeWebhookSignature(rawBody, sigHeader, webhookSecret);
+  if (!check.valid) {
+    return c.json({ error: "Invalid Stripe webhook signature", reason: check.reason }, 400);
+  }
+
+  let event: any;
+  try {
+    event = JSON.parse(rawBody);
+  } catch {
+    return c.json({ error: "Malformed Stripe webhook JSON" }, 400);
+  }
+
+  if (event?.type !== "checkout.session.completed") {
+    return c.json({ received: true, ignored: event?.type || "unknown" });
+  }
+
+  const session = event.data?.object || {};
+  const sessionId = String(session.id || "").trim();
+  if (!sessionId || session.payment_status !== "paid") {
+    return c.json({ received: true, skipped: "unpaid_or_missing_session" });
+  }
+
+  const kv = c.env?.KV || c.env?.NULLCLEAR_CACHE;
+  const idempotencyKey = `stripe_minted:${sessionId}`;
+  if (kv) {
+    const existing = await kv.get(idempotencyKey);
+    if (existing) {
+      return c.json({ received: true, idempotent: true, passId: existing });
+    }
+  }
+
+  const tierId = normalizeCardCheckoutTier(session.metadata?.tier);
+  const tier = CARD_CHECKOUT_TIERS[tierId];
+  const now = Date.now();
+  const { rawKey, keyPrefix } = generateRawApiPassKey();
+  const keyHash = await sha256Hex(rawKey);
+  const passId = `pass_card_${now}_${sessionId.slice(-10).replace(/[^a-zA-Z0-9]/g, "")}`;
+  const ownerEmail = String(session.customer_details?.email || session.customer_email || "card:stripe").slice(0, 120);
+  const settlementRef = `stripe:${sessionId}`;
+
+  const store = getArbiterStore(c.env);
+  await store.createApiPass({
+    id: passId,
+    keyHash,
+    keyPrefix,
+    ownerAddress: ownerEmail,
+    tier: tier.id === "builder" ? "pro" : tier.id,
+    creditsTotal: tier.credits,
+    creditsRemaining: tier.credits,
+    priceAtomic: tier.priceAtomicEquivalent,
+    settlementTx: settlementRef,
+    createdAt: now,
+    updatedAt: now
+  });
+
+  if (kv) {
+    await kv.put(idempotencyKey, passId, { expirationTtl: 60 * 60 * 24 * 30 });
+    await kv.put(
+      `stripe_claim:${sessionId}`,
+      JSON.stringify({
+        passId,
+        apiKey: rawKey,
+        keyPrefix,
+        tier: tier.id,
+        label: tier.label,
+        credits: tier.credits,
+        createdAt: now
+      }),
+      { expirationTtl: 3600 }
+    );
+  }
+
+  return c.json({ received: true, passId, keyPrefix, tier: tier.id, credits: tier.credits });
+});
+
+passesRouter.get("/checkout/success", async (c) => {
+  const sessionId = (c.req.query("session_id") || "").trim();
+  if (!sessionId || !/^cs_[a-zA-Z0-9_]+$/.test(sessionId)) {
+    return c.html(
+      `<!DOCTYPE html><html><body style="background:#07090E;color:#F8FAFC;font-family:sans-serif;padding:40px;"><h2>Invalid checkout session</h2><p>Return to <a style="color:#10B981;" href="https://nullclear.dev/buy-pass">nullclear.dev/buy-pass</a>.</p></body></html>`,
+      400
+    );
+  }
+
+  const kv = c.env?.KV || c.env?.NULLCLEAR_CACHE;
+  const claimKey = `stripe_claim:${sessionId}`;
+  const rawClaim = kv ? await kv.get(claimKey) : null;
+
+  if (!rawClaim) {
+    return c.html(
+      `<!DOCTYPE html><html><body style="background:#07090E;color:#F8FAFC;font-family:sans-serif;padding:40px;max-width:720px;margin:0 auto;">
+        <h2 style="color:#38BDF8;">Pass Ready or Already Revealed</h2>
+        <p style="color:#94A3B8;margin-top:12px;">If payment just completed, refresh this page in 2 seconds while Stripe delivers the webhook. For security, each <code>nc_live_...</code> key is displayed only once — if you already copied it, it is active immediately. Need help? Contact <code>ops@nullclear.dev</code> with session <code>${sessionId}</code>.</p>
+      </body></html>`,
+      200
+    );
+  }
+
+  const claim = JSON.parse(rawClaim);
+  if (kv) {
+    await kv.delete(claimKey);
+  }
+
+  return c.html(
+    `<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"/><title>NullClear Prepaid Pass Issued</title>
+<style>body{background:#07090E;color:#F8FAFC;font-family:-apple-system,BlinkMacSystemFont,"Inter",sans-serif;padding:36px 16px;} .box{max-width:780px;margin:0 auto;background:#0C1018;border:1px solid rgba(16,185,129,0.35);border-radius:14px;padding:24px;} pre{background:#05070B;padding:14px;border-radius:8px;color:#7DD3FC;overflow-x:auto;font-family:ui-monospace,monospace;font-size:13px;}</style>
+</head><body><div class="box">
+  <div style="color:#10B981;font-weight:700;font-size:12px;">PAYMENT CONFIRMED &bull; ONE-TIME KEY REVEAL</div>
+  <h1 style="margin:8px 0 12px;">Your NullClear API Key Is Live</h1>
+  <p style="color:#94A3B8;margin-bottom:16px;">Save this key now — NullClear only retains its SHA-256 hash and this reveal link has been permanently burned.</p>
+  <pre>NULLCLEAR_API_KEY=${claim.apiKey}
+# Tier: ${claim.label} (${Number(claim.credits).toLocaleString()} credits)
+# Base Guarded JSON-RPC:
+https://api.nullclear.dev/rpc/base/${claim.apiKey}
+
+# Verify immediately:
+curl.exe -H "Authorization: Bearer ${claim.apiKey}" "https://api.nullclear.dev/v1/pass/status"</pre>
+</div></body></html>`,
+    200,
+    { "Cache-Control": "no-store" }
+  );
+});
+
 export function renderBuyPassHtmlPage(selectedTierParam?: string): string {
   const initialTier = normalizePassTier(selectedTierParam);
   const tiersJson = JSON.stringify(PASS_TIERS);
+  const cardTiersJson = JSON.stringify(CARD_CHECKOUT_TIERS);
   return `<!DOCTYPE html>
 <html lang="en" class="dark">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Buy NullClear Prepaid API Pass — Base USDC &amp; Instant nc_live_ Key</title>
-  <meta name="description" content="Mint an instant NullClear Prepaid API Pass (300 to 100,000 credits) via Base USDC EIP-3009 Wallet Connect or enterprise invoice." />
+  <title>Buy NullClear Prepaid API Pass — Base USDC &amp; Card Checkout</title>
+  <meta name="description" content="Mint an instant NullClear Prepaid API Pass (300 to 100,000 credits) via Base USDC EIP-3009 or Credit/Debit Card Checkout." />
   <style>
     :root { --bg: #07090E; --surface: #0C1018; --surface-2: #111827; --border: rgba(255,255,255,0.1); --emerald: #10B981; --cyan: #38BDF8; --text: #F8FAFC; --muted: #94A3B8; }
     * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -711,7 +1053,7 @@ export function renderBuyPassHtmlPage(selectedTierParam?: string): string {
   <div class="container">
     <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;margin-bottom:20px;">
       <div>
-        <span class="mono" style="color:var(--emerald);font-size:12px;font-weight:700;">NULLCLEAR FIREWALL PRO SUITE &bull; BASE USDC (CHAIN 8453)</span>
+        <span class="mono" style="color:var(--emerald);font-size:12px;font-weight:700;">NULLCLEAR FIREWALL PRO SUITE &bull; BASE USDC &amp; CARD CHECKOUT</span>
         <h1 style="font-size:30px;font-weight:800;margin-top:4px;">Mint an Instant Prepaid API Pass</h1>
       </div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;">
@@ -728,16 +1070,40 @@ export function renderBuyPassHtmlPage(selectedTierParam?: string): string {
       <div class="tiers" id="tierGrid"></div>
       <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:12px;">
         <button class="btn btn-primary" id="walletBtn" onclick="connectAndBuy()">🦊 Connect Web3 Wallet &amp; Sign Base USDC</button>
-        <a class="btn" href="mailto:ops@nullclear.dev?subject=NullClear%20Prepaid%20Pass%20Card%20/%20Invoice%20Request">💳 Card / Enterprise Invoice (ops@nullclear.dev)</a>
+        <button class="btn" id="cardBtn" onclick="startCardCheckout('starter')">💳 Card — $5 Starter (2k)</button>
+        <button class="btn" onclick="startCardCheckout('builder')">💳 $20 Builder (10k)</button>
+        <button class="btn" onclick="startCardCheckout('pro')">💳 $100 Pro (60k)</button>
+        <a class="btn" href="mailto:ops@nullclear.dev?subject=NullClear%20Prepaid%20Pass%20Enterprise%20Invoice">✉️ Enterprise Invoice (ops@nullclear.dev)</a>
       </div>
-      <pre id="out">// Select a tier and connect MetaMask / Coinbase Wallet on Base Mainnet (8453), or use x402 SDK via POST /v1/pass/buy</pre>
+      <pre id="out">// Select a tier for instant Base USDC EIP-3009 minting, or click Pay by Card ($5 Starter / $20 Builder / $100 Pro)</pre>
     </div>
   </div>
   <script>
     const TIERS = ${tiersJson};
+    const CARD_TIERS = ${cardTiersJson};
     let selected = ${JSON.stringify(initialTier)};
     const TREASURY = ${JSON.stringify(NULLCLEAR_TREASURY_ADDRESS)};
     const USDC = ${JSON.stringify(BASE_MAINNET.usdc)};
+
+    async function startCardCheckout(cardTier) {
+      const out = document.getElementById('out');
+      out.textContent = 'Creating hosted card checkout session for ' + cardTier + '...';
+      try {
+        const res = await fetch('/v1/pass/checkout', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ tier: cardTier })
+        });
+        const data = await res.json();
+        if (res.ok && data.checkoutUrl) {
+          window.location.href = data.checkoutUrl;
+          return;
+        }
+        out.textContent = JSON.stringify(data, null, 2);
+      } catch (err) {
+        out.textContent = 'Card checkout error: ' + (err && err.message ? err.message : String(err));
+      }
+    }
 
     function renderTiers() {
       const grid = document.getElementById('tierGrid');

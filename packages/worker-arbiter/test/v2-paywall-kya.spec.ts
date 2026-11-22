@@ -416,7 +416,7 @@ describe("Next-Gen Protocol Upgrades: x402 V1/V2 Headers, Soft-Paywall Guard & P
 
       expect(indexerRes.status).toBe(402);
       expect(indexerRes.headers.get("PAYMENT-REQUIRED")).toBeTruthy();
-      expect(indexerRes.headers.get("X-Payment-Required")).toBeTruthy();
+      expect(indexerRes.headers.get("X-Payment-Required")).toBeNull();
       expect(indexerRes.headers.get("WWW-Authenticate")).toContain("x402 realm=\"NullClear\"");
 
       const json = (await indexerRes.json()) as any;

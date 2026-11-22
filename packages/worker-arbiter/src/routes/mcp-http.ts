@@ -53,7 +53,6 @@ function buildMcp402JsonRpcResponse(
 ): Response {
   const upgrade = buildX402UpgradeBlock(c, resourcePath);
   c.header("PAYMENT-REQUIRED", upgrade.encodedHeader);
-  c.header("X-Payment-Required", upgrade.encodedHeader);
   c.header("Pay-To", upgrade.treasuryAddress);
 
   return c.json(

@@ -11,6 +11,8 @@ export interface NullClearMetadata {
   freeTrialRemaining: number;
   quickProxyPrefix: string;
   mcpEndpoint: string;
+  cardCheckoutUrl: string;
+  cardCheckoutEndpoint: string;
 }
 
 export function buildNullClearMetadata(
@@ -24,7 +26,9 @@ export function buildNullClearMetadata(
     freeTrialRemaining: opts.freeTrialRemaining ?? 9,
     quickProxyPrefix:
       opts.quickProxyPrefix ?? "https://api.nullclear.dev/https://...",
-    mcpEndpoint: opts.mcpEndpoint ?? "https://api.nullclear.dev/mcp"
+    mcpEndpoint: opts.mcpEndpoint ?? "https://api.nullclear.dev/mcp",
+    cardCheckoutUrl: opts.cardCheckoutUrl ?? "https://nullclear.dev/buy-pass",
+    cardCheckoutEndpoint: opts.cardCheckoutEndpoint ?? "POST https://api.nullclear.dev/v1/pass/checkout"
   };
 }
 

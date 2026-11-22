@@ -44,6 +44,7 @@ import {
 } from "../utils/x402-headers.js";
 import { getBazaarResourceMetadata } from "./bazaar-metadata.js";
 import { attachReceiptHeader } from "./receipt.js";
+import { buildTokenVerdictPayload } from "../services/verdict-card.js";
 
 export const bazaarRouter = new Hono<Env>();
 
@@ -59,6 +60,7 @@ bazaarRouter.use("*", async (c, next) => {
       path.endsWith("/guard") ||
       path.endsWith("/inspect") ||
       path.endsWith("/token-security") ||
+      path.endsWith("/token-verdict") ||
       path.endsWith("/due-diligence") ||
       path.endsWith("/scan-batch")
     ) {
@@ -92,6 +94,13 @@ const BAZAAR_RELATED_ENDPOINTS = {
     priceUsdc: "0.005",
     description:
       "1-call pre-sign firewall: nested Multicall3/Universal Router/Safe decode, EIP-712 Permit audit, Solana wire tx & stateful eth_simulateV1 asset diffs"
+  },
+  tokenVerdict: {
+    method: "GET",
+    url: "https://api.nullclear.dev/v1/bazaar/token-verdict",
+    priceUsdc: "0.005",
+    description:
+      "7-chain A-F token grade, concrete one-line bytecode/tax/proxy verdict, and shareable SVG card URL ($0.005 USDC)"
   },
   dueDiligence: {
     method: "POST",
@@ -259,7 +268,7 @@ async function extractBazaarClearingParams(
 ): Promise<{ targetAddress?: string; targetChain?: string; queryType: string }> {
   const body = await parseJsonBodySafe(c);
 
-  if (resourcePath === "/v1/bazaar/token-security") {
+  if (resourcePath === "/v1/bazaar/token-security" || resourcePath === "/v1/bazaar/token-verdict") {
     const rawAddr = sanitizeParamString(
       c.req.query("address") ||
         c.req.query("tokenAddress") ||
@@ -277,10 +286,11 @@ async function extractBazaarClearingParams(
     const normAddr = isEvmAddress(addr) ? addr.toLowerCase() : addr;
     const chain: SupportedForensicChain =
       isSolanaAddress(addr) && !isEvmAddress(addr) ? "solana" : normalizeChain(rawChain);
+    const label = resourcePath === "/v1/bazaar/token-verdict" ? "token-verdict" : "token-security";
     return {
       targetAddress: normAddr,
       targetChain: chain,
-      queryType: rawAddr ? "token-security:explicit" : "token-security:default"
+      queryType: rawAddr ? `${label}:explicit` : `${label}:default`
     };
   }
 
@@ -1357,7 +1367,6 @@ async function handleBazaarPayment(
       exactResourceUrl
     );
     c.header("PAYMENT-REQUIRED", paymentReqHeader);
-    c.header("X-Payment-Required", paymentReqHeader);
     c.header(
       "WWW-Authenticate",
       buildWwwAuthenticateX402Header({
@@ -1983,6 +1992,140 @@ bazaarRouter.all("/token-security", async (c) => {
     settlementTransaction: result.transaction,
     ...(result.receiptUrl ? { receiptUrl: result.receiptUrl } : {}),
     timestamp,
+    executionReceipt: result.executionReceipt,
+    relatedEndpoints: BAZAAR_RELATED_ENDPOINTS,
+    _nullclear: buildNullClearMetadata({
+      verified: true,
+      freeTrialRemaining: result.freeTrialRemaining ?? 0
+    })
+  });
+});
+
+const BAZAAR_TOKEN_VERDICT_EXTENSION = {
+  discoverable: true,
+  description:
+    "7-chain (Base, ETH, Arbitrum, Optimism, Polygon, BSC, Solana) Token Verdict: A-F grade, concrete one-line bytecode/tax/proxy verdict, honeypot simulation, and shareable SVG card URL ($0.005 USDC).",
+  info: {
+    input: {
+      type: "http",
+      method: "GET",
+      queryParams: {
+        chain: "base",
+        address: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
+      }
+    },
+    output: {
+      type: "json",
+      example: {
+        tokenAddress: "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913",
+        chain: "base",
+        symbol: "USDC",
+        grade: "A",
+        securityScore: 99,
+        oneLineVerdict:
+          "SAFE (A · 99/100): USDC on BASE — 0%/0% buy/sell tax, no honeypot, non-proxy bytecode, $103.1K DEX liquidity.",
+        recommendedAgentAction: "EXECUTE_SAFE",
+        evidence: {
+          isHoneypot: false,
+          buyTaxBps: 0,
+          sellTaxBps: 0,
+          isProxy: false,
+          liquidityUsd: 103137.73
+        },
+        scorecardUrl: "https://nullclear.dev/verdict/base/0x833589fcd6edb6e08f4c7c32d4f71b54bda02913",
+        shareCardImageUrl:
+          "https://api.nullclear.dev/v1/verdict-card/base/0x833589fcd6edb6e08f4c7c32d4f71b54bda02913.svg"
+      }
+    }
+  },
+  schema: {
+    $schema: "https://json-schema.org/draft/2020-12/schema",
+    type: "object",
+    required: ["input"],
+    properties: {
+      input: {
+        type: "object",
+        required: ["type", "method"],
+        additionalProperties: false,
+        properties: {
+          type: { type: "string", const: "http" },
+          method: { type: "string", enum: ["GET", "POST"] },
+          queryParams: {
+            type: "object",
+            properties: {
+              chain: {
+                type: "string",
+                description: "Target chain: base, eth, arbitrum, optimism, polygon, bsc, or solana"
+              },
+              address: {
+                type: "string",
+                description: "EVM ERC-20 contract address or Solana SPL/Token-2022 mint address"
+              }
+            }
+          }
+        }
+      },
+      output: {
+        type: "object",
+        required: ["type"],
+        properties: {
+          type: { type: "string", const: "json" },
+          example: { type: "object" }
+        }
+      }
+    }
+  }
+};
+
+// 2a. GET & POST /v1/bazaar/token-verdict ($0.005 USDC / 5000 atomic)
+bazaarRouter.all("/token-verdict", async (c) => {
+  const result = await handleBazaarPayment(
+    c,
+    "/v1/bazaar/token-verdict",
+    BAZAAR_TOKEN_VERDICT_EXTENSION.description,
+    BAZAAR_TOKEN_VERDICT_EXTENSION,
+    "5000"
+  );
+  if (!result.settled) {
+    return result.errorResponse!;
+  }
+
+  const body = await parseJsonBodySafe(c);
+  const rawAddr = sanitizeParamString(
+    c.req.query("address") ||
+      c.req.query("tokenAddress") ||
+      c.req.query("token") ||
+      body.address ||
+      body.tokenAddress ||
+      body.token,
+    128
+  );
+  const rawChain = sanitizeParamString(
+    c.req.query("chain") || c.req.query("network") || body.chain || body.network,
+    32
+  );
+
+  if (rawAddr && !isEvmAddress(rawAddr) && !isSolanaAddress(rawAddr)) {
+    return c.json(
+      {
+        error: "Invalid token address",
+        message: "Provide a valid EVM (0x...) or Solana base58 token mint address."
+      },
+      400
+    );
+  }
+
+  const targetAddress = rawAddr || "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913";
+  const scan = await scanTokenForensics(rawChain || "base", targetAddress, c.env);
+  const verdict = buildTokenVerdictPayload(scan);
+
+  c.header("X-NullClear-Attestation", verdict.attestation);
+
+  return c.json({
+    ...verdict,
+    settlementTransaction: result.transaction,
+    ...(result.receiptUrl ? { receiptUrl: result.receiptUrl } : {}),
+    timestamp: Date.now(),
     executionReceipt: result.executionReceipt,
     relatedEndpoints: BAZAAR_RELATED_ENDPOINTS,
     _nullclear: buildNullClearMetadata({
@@ -2996,6 +3139,20 @@ bazaarRouter.get("/", async (c) => {
       category: "security",
       ...getBazaarResourceMetadata("/v1/bazaar/token-security"),
       description: BAZAAR_TOKEN_SECURITY_EXTENSION.description
+    },
+    {
+      id: "bazaar-token-verdict",
+      slug: "token-verdict",
+      path: "/v1/bazaar/token-verdict",
+      url: "https://api.nullclear.dev/v1/bazaar/token-verdict",
+      method: "GET",
+      methods: ["GET", "POST"],
+      priceAtomic: "5000",
+      priceUsdc: "0.005",
+      sellerAddress: NULLCLEAR_TREASURY_ADDRESS,
+      category: "security",
+      ...getBazaarResourceMetadata("/v1/bazaar/token-verdict"),
+      description: BAZAAR_TOKEN_VERDICT_EXTENSION.description
     },
     {
       id: "bazaar-scan-batch",

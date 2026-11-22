@@ -20,6 +20,12 @@ export const BAZAAR_RESOURCE_METADATA: Record<string, BazaarResourceMeta> = {
     tags: ["security", "honeypot", "token", "defi", "tax", "solana", "base", "x402"],
     iconUrl: NULLCLEAR_ICON_URL
   },
+  "/v1/bazaar/token-verdict": {
+    serviceName: "NullClear Token Verdict",
+    toolName: "nullclear_token_verdict",
+    tags: ["verdict", "grade", "card", "security", "honeypot", "token", "solana", "base", "x402"],
+    iconUrl: NULLCLEAR_ICON_URL
+  },
   "/v1/bazaar/scan-batch": {
     serviceName: "NullClear Batch Token Scanner",
     toolName: "nullclear_scan_batch",

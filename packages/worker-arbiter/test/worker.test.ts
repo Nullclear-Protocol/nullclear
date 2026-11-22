@@ -2217,7 +2217,7 @@ describe("NullClear Worker Arbiter Test Suite", () => {
     expect(req11Scan.status).toBe(402);
     const payReqHeader = req11Scan.headers.get("PAYMENT-REQUIRED");
     expect(payReqHeader).toBeTruthy();
-    expect(req11Scan.headers.get("X-Payment-Required")).toBeTruthy();
+    expect(req11Scan.headers.get("X-Payment-Required")).toBeNull();
     const body11 = (await req11Scan.json()) as any;
     expect(body11.rateLimited).toBe(true);
     expect(body11.x402Upgrade).toBeDefined();

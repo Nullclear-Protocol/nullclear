@@ -343,7 +343,6 @@ function buildMonitor402Response(c: Context<Env>, msg?: string): Response {
   };
   const encoded = encodeBase64Json(payload);
   c.header("PAYMENT-REQUIRED", encoded);
-  c.header("X-Payment-Required", encoded);
   c.header("Pay-To", NULLCLEAR_TREASURY_ADDRESS);
   return c.json(
     {

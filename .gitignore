@@ -26,3 +26,6 @@ Thumbs.db
 .vscode
 .idea
 *.log
+
+# Private outreach & lead dossiers
+docs/outreach/

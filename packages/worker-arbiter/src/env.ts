@@ -35,6 +35,9 @@ export interface Env {
     INDEXNOW_KEY?: string;
     MIN_ONCHAIN_ATOMIC?: string;
     MAX_DAILY_ONCHAIN_PER_WALLET?: string;
+    STRIPE_SECRET_KEY?: string;
+    STRIPE_WEBHOOK_SECRET?: string;
+    STRIPE_CHECKOUT_BASE_URL?: string;
   };
   Variables: {
     passId?: string;

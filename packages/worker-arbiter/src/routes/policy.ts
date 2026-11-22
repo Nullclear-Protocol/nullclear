@@ -184,7 +184,6 @@ async function resolvePolicyAuth(
     };
     const encoded = encodeBase64Json(payload);
     c.header("PAYMENT-REQUIRED", encoded);
-    c.header("X-Payment-Required", encoded);
     c.header("Pay-To", NULLCLEAR_TREASURY_ADDRESS);
     return {
       authorized: false,
