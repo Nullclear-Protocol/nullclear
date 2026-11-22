@@ -66,7 +66,7 @@ describe("Option B wire cleanup, Token Verdict & Card Checkout", () => {
     expect(totalHeaderBytes).toBeLessThan(6000);
   });
 
-  it("returns strict HTTP 402 on /v1/bazaar/token-verdict by default with compact headers", async () => {
+  it("returns strict HTTP 402 on /v1/bazaar/token-verdict by default with compact headers and omits cardCheckoutUrl when Stripe is unset", async () => {
     const res = await app.request("/v1/bazaar/token-verdict", {
       headers: { Accept: "application/json" }
     });
@@ -75,7 +75,15 @@ describe("Option B wire cleanup, Token Verdict & Card Checkout", () => {
     expect(res.headers.get("x-payment-required")).toBeNull();
     const json: any = await res.json();
     expect(json.amount).toBe("5000");
-    expect(json._nullclear?.cardCheckoutUrl).toBe("https://nullclear.dev/buy-pass");
+    expect(json._nullclear?.cardCheckoutUrl).toBeUndefined();
+    expect(json._nullclear?.cardCheckoutEndpoint).toBeUndefined();
+
+    // /buy-pass hides card checkout buttons when STRIPE_SECRET_KEY is unset
+    const buyPassRes = await app.request("/buy-pass");
+    expect(buyPassRes.status).toBe(200);
+    const html = await buyPassRes.text();
+    expect(html).toContain("Connect Web3 Wallet");
+    expect(html).not.toContain('id="cardBtn"');
   });
 
   it("maps safe, high-tax, and honeypot scans into A/C/F verdicts and valid escaped SVGs", () => {

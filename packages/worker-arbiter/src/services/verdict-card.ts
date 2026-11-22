@@ -292,7 +292,7 @@ export function renderTokenVerdictHtmlPage(v: TokenVerdictPayload): string {
     <div class="bar">
       <a class="btn btn-primary" href="${escapeXml(v.shareCardImageUrl)}" target="_blank" rel="noopener">Download SVG Card</a>
       <a class="btn" href="${escapeXml(fullScanUrl)}">Full Forensic Report</a>
-      <a class="btn" href="https://nullclear.dev/buy-pass">Get Prepaid Pass (USDC or Card)</a>
+      <a class="btn" href="https://nullclear.dev/buy-pass">Get Prepaid Pass (USDC)</a>
       <a class="btn" href="https://nullclear.dev/x402">x402 API Docs</a>
     </div>
     <pre>${escapeXml(JSON.stringify(v, null, 2))}</pre>

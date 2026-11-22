@@ -1,8 +1,9 @@
-import { Hono } from "hono";
+﻿import { Hono } from "hono";
 import { SAFEPAY_TREASURY_ADDRESS } from "@nullclear/shared";
 import { getArbiterStore, type Env } from "../env.js";
 import { getTrendingScans } from "../services/forensics-engine.js";
 import { CLAUDE_AGENTS_MD_RULE_SNIPPET } from "./forensics.js";
+import { renderComLandingHtml } from "../ui/com-landing.js";
 
 export const safepayWebRouter = new Hono<Env>();
 
@@ -31,8 +32,8 @@ export const SAFEPAY_VERTICALS: Record<string, VerticalConfig> = {
     defaultPreset: "archive",
     bullets: [
       "Verify required repository files (package.json, src/, Dockerfile, README.md) at the edge",
-      "Client sees verified file tree + SHA-256 manifest before funds move—zero source code theft risk",
-      "1.0% flat fee vs Upwork's 10–20% commission"
+      "Client sees verified file tree + SHA-256 manifest before funds moveâ€”zero source code theft risk",
+      "1.0% flat fee vs Upwork's 10â€“20% commission"
     ]
   },
   "data-brokers": {
@@ -78,7 +79,7 @@ export const SAFEPAY_VERTICALS: Record<string, VerticalConfig> = {
     defaultMode: "FILE_ARCHIVE",
     defaultPreset: "sha256",
     bullets: [
-      "Zero smart contract custody risk—USDC stays in buyer's wallet until verified",
+      "Zero smart contract custody riskâ€”USDC stays in buyer's wallet until verified",
       "Dual EIP-3009 atomic settlement on Base Mainnet (8453)",
       "0.75% institutional whale rate on OTC deals over $10,000 USDC"
     ]
@@ -98,1121 +99,7 @@ export function renderSafePayLandingHtml(options: {
   vertical?: VerticalConfig;
   utmTerm?: string;
 }): string {
-  const v = options.vertical;
-  const utmHeadline = options.utmTerm
-    ? `Escrow That Never Holds Your Money — Built for ${escapeHtml(options.utmTerm)}.`
-    : v
-    ? v.headline
-    : "Escrow That Never Holds Your Money.";
-
-  const subheadline = v
-    ? v.subheadline
-    : "Create a cryptographic payment link in 30 seconds. USDC stays in your wallet on Base until the deliverable passes deterministic edge verification. 0% KYC. Instant settlement. 1% flat fee.";
-
-  const badgeText = v
-    ? v.badge
-    : "NULLCLEAR SAFEPAY · ZERO-CUSTODY CRYPTOGRAPHIC DELIVERABLE ESCROW";
-
-  const defaultTitle = v ? v.defaultTitle : "Verified B2B Lead Dataset (1,000+ Records)";
-  const defaultAmount = v ? v.defaultAmountUsd : "500";
-  const defaultPreset = v ? v.defaultPreset : "dataset";
-
-  const jsonLd = JSON.stringify({
-    "@context": "https://schema.org",
-    "@graph": [
-      {
-        "@type": "FinancialProduct",
-        name: "NullClear SafePay",
-        url: "https://nullclear.com",
-        description:
-          "Zero-Custody Cryptographic Deliverable Escrow on Base Mainnet. Funds remain in the buyer's wallet via EIP-3009 TransferWithAuthorization until deliverables pass deterministic edge verification.",
-        feesAndCommissionsSpecification:
-          "1.0% flat protocol fee ($0.50 USDC minimum, 0.75% for deals over $10,000 USDC)",
-        provider: {
-          "@type": "Organization",
-          name: "NullClear Organization",
-          url: "https://nullclear.com",
-          email: "ops@nullclear.dev",
-          sameAs: ["https://nullclear.dev", "https://github.com/Nullclear-Protocol/nullclear"],
-          contactPoint: {
-            "@type": "ContactPoint",
-            email: "ops@nullclear.dev",
-            contactType: "operations and enterprise support"
-          }
-        }
-      },
-      {
-        "@type": "SoftwareApplication",
-        name: "NullClear SafePay Escrow Engine",
-        applicationCategory: "FinanceApplication",
-        operatingSystem: "Web, Base Mainnet (EIP-155:8453)",
-        offers: {
-          "@type": "Offer",
-          price: "0.50",
-          priceCurrency: "USD"
-        }
-      }
-    ]
-  });
-
-  return `<!DOCTYPE html>
-<html lang="en" class="dark">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>${escapeHtml(utmHeadline)} | NullClear SafePay (nullclear.com)</title>
-  <meta name="description" content="${escapeHtml(subheadline)}" />
-  <meta property="og:title" content="${escapeHtml(utmHeadline)} | NullClear SafePay" />
-  <meta property="og:description" content="${escapeHtml(subheadline)}" />
-  <meta property="og:type" content="website" />
-  <meta property="og:url" content="https://nullclear.com${v ? `/for/${v.slug}` : ""}" />
-  <meta property="og:image" content="https://nullclear.com/opengraph-image.png" />
-  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
-  <script type="application/ld+json">${jsonLd}</script>
-  <style>
-    :root {
-      --bg: #07090E;
-      --surface: #0C1018;
-      --surface-2: #111724;
-      --border: rgba(255, 255, 255, 0.08);
-      --border-bright: rgba(16, 185, 129, 0.35);
-      --emerald: #10B981;
-      --emerald-dim: rgba(16, 185, 129, 0.12);
-      --base-blue: #0052FF;
-      --text: #F8FAFC;
-      --muted: #94A3B8;
-    }
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    body {
-      background-color: var(--bg);
-      color: var(--text);
-      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-      line-height: 1.5;
-      -webkit-font-smoothing: antialiased;
-    }
-    .mono { font-family: 'JetBrains Mono', monospace; }
-    .container { max-width: 1220px; margin: 0 auto; padding: 0 24px; }
-    header {
-      border-bottom: 1px solid var(--border);
-      background: rgba(7, 9, 14, 0.88);
-      backdrop-filter: blur(12px);
-      position: sticky;
-      top: 0;
-      z-index: 50;
-    }
-    .nav-row {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      height: 68px;
-      gap: 16px;
-    }
-    .brand {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      text-decoration: none;
-      color: var(--text);
-      font-weight: 800;
-      font-size: 18px;
-      letter-spacing: -0.02em;
-    }
-    .brand-mark {
-      width: 32px;
-      height: 32px;
-      border-radius: 8px;
-      background: linear-gradient(135deg, #10B981 0%, #059669 100%);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      color: #04130D;
-      font-weight: 900;
-      font-size: 16px;
-    }
-    .nav-links {
-      display: flex;
-      align-items: center;
-      gap: 20px;
-      flex-wrap: wrap;
-    }
-    .nav-links a {
-      color: var(--muted);
-      text-decoration: none;
-      font-size: 13px;
-      font-weight: 500;
-      transition: color 0.15s;
-    }
-    .nav-links a:hover { color: var(--text); }
-    .pill-badge {
-      display: inline-flex;
-      align-items: center;
-      gap: 8px;
-      padding: 6px 12px;
-      border-radius: 999px;
-      background: var(--emerald-dim);
-      border: 1px solid var(--border-bright);
-      color: var(--emerald);
-      font-size: 11px;
-      font-weight: 600;
-      letter-spacing: 0.06em;
-      text-transform: uppercase;
-    }
-    .base-badge {
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      padding: 4px 10px;
-      border-radius: 6px;
-      background: rgba(0, 82, 255, 0.14);
-      border: 1px solid rgba(0, 82, 255, 0.35);
-      color: #60A5FA;
-      font-size: 12px;
-      font-weight: 600;
-    }
-    .stats-bar {
-      border-bottom: 1px solid var(--border);
-      background: var(--surface);
-      padding: 12px 0;
-    }
-    .stats-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-      gap: 16px;
-    }
-    .stat-item {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      padding: 4px 12px;
-      border-right: 1px solid var(--border);
-    }
-    .stat-item:last-child { border-right: none; }
-    .hero-grid {
-      display: grid;
-      grid-template-columns: 1.05fr 1fr;
-      gap: 40px;
-      padding: 56px 0 64px;
-      align-items: start;
-    }
-    @media (max-width: 960px) {
-      .hero-grid { grid-template-columns: 1fr; }
-    }
-    h1 {
-      font-size: clamp(36px, 4.5vw, 54px);
-      font-weight: 800;
-      letter-spacing: -0.03em;
-      line-height: 1.08;
-      margin: 18px 0 18px;
-    }
-    .subheadline {
-      color: var(--muted);
-      font-size: 17px;
-      line-height: 1.65;
-      margin-bottom: 28px;
-    }
-    .card {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: 14px;
-      padding: 28px;
-    }
-    .card-emerald {
-      border-color: var(--border-bright);
-      box-shadow: 0 20px 50px rgba(0, 0, 0, 0.6), 0 0 40px rgba(16, 185, 129, 0.06);
-    }
-    .preset-tabs {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 8px;
-      margin-bottom: 18px;
-    }
-    .preset-btn {
-      background: var(--surface-2);
-      border: 1px solid var(--border);
-      color: var(--muted);
-      padding: 7px 12px;
-      border-radius: 8px;
-      font-size: 12px;
-      font-weight: 600;
-      cursor: pointer;
-      transition: all 0.15s;
-    }
-    .preset-btn.active, .preset-btn:hover {
-      background: var(--emerald-dim);
-      border-color: var(--emerald);
-      color: var(--emerald);
-    }
-    .field-group { margin-bottom: 14px; }
-    .field-label {
-      display: block;
-      font-size: 12px;
-      font-weight: 600;
-      color: #CBD5E1;
-      margin-bottom: 6px;
-    }
-    input, select, textarea {
-      width: 100%;
-      background: #06080D;
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      padding: 10px 12px;
-      color: var(--text);
-      font-size: 13px;
-      font-family: inherit;
-      outline: none;
-    }
-    input:focus, select:focus, textarea:focus {
-      border-color: var(--emerald);
-    }
-    .row-2 {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 12px;
-    }
-    .btn-primary {
-      width: 100%;
-      background: var(--emerald);
-      color: #04130D;
-      border: none;
-      border-radius: 10px;
-      padding: 14px 20px;
-      font-weight: 700;
-      font-size: 14px;
-      cursor: pointer;
-      transition: transform 0.1s, opacity 0.15s;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      gap: 8px;
-    }
-    .btn-primary:hover { opacity: 0.94; }
-    .btn-secondary {
-      background: var(--surface-2);
-      color: var(--text);
-      border: 1px solid var(--border);
-      border-radius: 10px;
-      padding: 11px 16px;
-      font-weight: 600;
-      font-size: 13px;
-      cursor: pointer;
-    }
-    .btn-secondary:hover { border-color: var(--emerald); }
-    .fee-box {
-      background: #06080D;
-      border: 1px solid var(--border);
-      border-radius: 10px;
-      padding: 12px 14px;
-      margin: 14px 0;
-      font-size: 12px;
-    }
-    .fee-row {
-      display: flex;
-      justify-content: space-between;
-      margin-bottom: 6px;
-      color: var(--muted);
-    }
-    .fee-row.total {
-      margin-top: 6px;
-      padding-top: 6px;
-      border-top: 1px solid var(--border);
-      color: var(--text);
-      font-weight: 700;
-      margin-bottom: 0;
-    }
-    .matrix-table {
-      width: 100%;
-      border-collapse: collapse;
-      margin-top: 20px;
-      font-size: 13px;
-    }
-    .matrix-table th, .matrix-table td {
-      padding: 14px 16px;
-      border-bottom: 1px solid var(--border);
-      text-align: left;
-    }
-    .matrix-table th { color: var(--muted); font-weight: 600; font-size: 12px; text-transform: uppercase; }
-    .highlight-col {
-      background: rgba(16, 185, 129, 0.06);
-      color: var(--emerald);
-      font-weight: 700;
-    }
-    .terminal {
-      background: #04060A;
-      border: 1px solid var(--border);
-      border-radius: 10px;
-      padding: 16px;
-      font-size: 12px;
-      color: #A7F3D0;
-      min-height: 150px;
-      margin-top: 14px;
-    }
-    .terminal-line { margin-bottom: 6px; }
-    footer {
-      border-top: 1px solid var(--border);
-      padding: 40px 0;
-      margin-top: 64px;
-      color: var(--muted);
-      font-size: 13px;
-    }
-  </style>
-</head>
-<body>
-  <header>
-    <div class="container nav-row">
-      <a href="/" class="brand">
-        <span class="brand-mark">N</span>
-        <span>NullClear <span style="color:var(--emerald)">SafePay</span></span>
-        <span class="base-badge mono">Base Mainnet · 8453</span>
-      </a>
-      <nav class="nav-links">
-        <a href="#forensics-omnibox" style="color:var(--emerald);font-weight:700;">🔍 7-Chain Forensics</a>
-        <a href="/firewall" style="color:#38BDF8;font-weight:700;">🛡️ Pre-Sign Firewall</a>
-        <a href="/x402" style="color:#38BDF8;font-weight:600;">⚡ /x402 Gateway</a>
-        <a href="https://nullclear.dev/history" style="color:var(--emerald);font-weight:700;">📡 Live Agent History</a>
-        <a href="/for/freelancers">Freelancers</a>
-        <a href="/for/data-brokers">Data Brokers</a>
-        <a href="/for/otc-digital">OTC Digital</a>
-        <a href="https://nullclear.dev">Developer Portal (nullclear.dev) ↗</a>
-        <a href="mailto:ops@nullclear.dev" class="mono" style="color:#60A5FA;">✉️ ops@nullclear.dev</a>
-      </nav>
-    </div>
-  </header>
-
-  <div class="stats-bar">
-    <div class="container stats-grid mono" style="font-size:12px;">
-      <div class="stat-item">
-        <span style="color:var(--muted)">CUSTODIAL SMART CONTRACT RISK</span>
-        <span style="color:var(--emerald);font-weight:700;">$0.00 (EIP-3009 Wallet Hold)</span>
-      </div>
-      <div class="stat-item">
-        <span style="color:var(--muted)">PRE-SIGN FIREWALL &amp; RPC</span>
-        <span style="color:var(--text);font-weight:700;">7 Chains (&lt; 5ms Edge KV)</span>
-      </div>
-      <div class="stat-item">
-        <span style="color:var(--muted)">PROTOCOL FEE</span>
-        <span style="color:var(--emerald);font-weight:700;">1.0% Flat (0.75% &gt;$10k)</span>
-      </div>
-      <div class="stat-item">
-        <span style="color:var(--muted)">OPERATIONS DESK</span>
-        <a href="mailto:ops@nullclear.dev" style="color:#60A5FA;text-decoration:none;font-weight:700;">ops@nullclear.dev</a>
-      </div>
-    </div>
-  </div>
-
-  <main class="container">
-    <!-- PHASE 5: UNIVERSAL ON-CHAIN FORENSICS & CALLDATA DECODER OMNIBOX + 1-CLICK AGENT INTEGRATION BAR -->
-    <section id="forensics-omnibox" class="card card-emerald" style="margin-top:28px;padding:24px 28px;background:linear-gradient(180deg, rgba(16,185,129,0.06) 0%, rgba(12,16,24,0.95) 100%);">
-      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:12px;">
-        <div>
-          <span class="pill-badge mono" style="margin-right:8px;">7 CHAINS · ZERO API KEY (10 FREE/DAY) · PREPAID PASSES</span>
-          <span style="font-weight:800;font-size:18px;">Universal On-Chain Forensics, Proxy-Aware Bytecode Inspector &amp; 1-Call Pre-Sign Firewall</span>
-        </div>
-        <div class="mono" style="font-size:12px;color:#38BDF8;">
-          Base · Ethereum · Arbitrum · Optimism · Polygon · BSC · Solana
-        </div>
-      </div>
-
-      <form id="universalOmniboxForm" onsubmit="event.preventDefault(); executeOmniboxInput();" style="display:flex;gap:10px;flex-wrap:wrap;">
-        <select id="omniboxChain" class="mono" style="width:155px;font-weight:700;">
-          <option value="base">Base (8453)</option>
-          <option value="eth">Ethereum (1)</option>
-          <option value="arbitrum">Arbitrum (42161)</option>
-          <option value="optimism">Optimism (10)</option>
-          <option value="polygon">Polygon (137)</option>
-          <option value="bsc">BNB Chain (56)</option>
-          <option value="solana">Solana</option>
-        </select>
-        <input
-          id="omniboxInput"
-          class="mono"
-          style="flex:1;min-width:260px;font-size:13.5px;"
-          placeholder="Paste Token/Contract (0x... or Solana base58), 66-char Tx Hash, Raw Calldata/Revert Hex, or BaseScan/DexScreener URL..."
-          value="0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
-        />
-        <button type="submit" class="btn-primary" style="width:auto;padding:10px 22px;">
-          🔍 Inspect &amp; Decode
-        </button>
-      </form>
-
-      <!-- 4 One-Click Live Demo Pills -->
-      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:12px;">
-        <span class="mono" style="font-size:11px;color:var(--muted);">LIVE DEMOS:</span>
-        <button type="button" class="preset-btn active" onclick="runOmniboxDemo('usdc')">🛡️ $USDC Proxy Audit</button>
-        <button type="button" class="preset-btn" onclick="runOmniboxDemo('trending')">🔥 Live Trending Base Token</button>
-        <button type="button" class="preset-btn" onclick="runOmniboxDemo('decode')">🧬 Decode Revert Hex</button>
-        <button type="button" class="preset-btn" onclick="runOmniboxDemo('feed')">📡 Live Feed</button>
-        <a href="/scan/base/0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913" class="preset-btn" style="text-decoration:none;">↗ Open Full $USDC Scorecard</a>
-      </div>
-
-      <!-- 1-Click Agent Integration Bar -->
-      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-top:14px;padding:12px 14px;background:#05070B;border:1px solid var(--border);border-radius:10px;">
-        <div class="mono" style="font-size:12px;color:#E2E8F0;">
-          <span style="color:var(--emerald);font-weight:700;">1-Click Agent Setup:</span>
-          <code style="margin-left:6px;color:#38BDF8;">claude mcp add --transport http nullclear https://api.nullclear.dev/mcp</code>
-        </div>
-        <div style="display:flex;gap:8px;flex-wrap:wrap;">
-          <button type="button" class="preset-btn" onclick="copyOmniboxText('claude mcp add --transport http nullclear https://api.nullclear.dev/mcp', this)">📋 Copy Claude MCP Command</button>
-          <button type="button" class="preset-btn" onclick="copyOmniboxRule(this)">📘 Copy CLAUDE.md / AGENTS.md Rule</button>
-          <a id="omniboxShareX" href="https://twitter.com/intent/tweet?text=Audited%20on%20NullClear%20On-Chain%20Forensics&url=https%3A%2F%2Fnullclear.com%2Fscan%2Fbase%2F0x833589fcd6edb6e08f4c7c32d4f71b54bda02913" target="_blank" rel="noopener" class="preset-btn" style="text-decoration:none;">🐦 Share Scorecard on X</a>
-          <button type="button" class="preset-btn" onclick="copyOmniboxText('[![NullClear Verified](https://nullclear.com/og/base/0x833589fcd6edb6e08f4c7c32d4f71b54bda02913.svg)](https://nullclear.com/scan/base/0x833589fcd6edb6e08f4c7c32d4f71b54bda02913)', this)">🛡️ Copy Verified Badge</button>
-        </div>
-      </div>
-
-      <pre id="omniboxOutput" class="terminal mono" style="display:none;white-space:pre-wrap;overflow-x:auto;max-height:320px;"></pre>
-    </section>
-
-    <script>
-      const NULLCLEAR_AGENT_RULE = ${JSON.stringify(CLAUDE_AGENTS_MD_RULE_SNIPPET)};
-      function copyOmniboxText(txt, btn) {
-        navigator.clipboard.writeText(txt).catch(() => {});
-        const prev = btn.textContent;
-        btn.textContent = '✅ Copied!';
-        setTimeout(() => { btn.textContent = prev; }, 1600);
-      }
-      function copyOmniboxRule(btn) {
-        copyOmniboxText(NULLCLEAR_AGENT_RULE, btn);
-      }
-      async function executeOmniboxInput() {
-        const raw = document.getElementById('omniboxInput').value.trim();
-        let chain = document.getElementById('omniboxChain').value;
-        const out = document.getElementById('omniboxOutput');
-        out.style.display = 'block';
-        out.textContent = '⏳ Running block-pinned forensic & bytecode analysis...';
-
-        // Auto-detect URL (BaseScan / Etherscan / DexScreener)
-        let cleaned = raw;
-        if (/^https?:\\/\\//i.test(raw)) {
-          if (/etherscan\\.io/i.test(raw)) chain = 'eth';
-          if (/solscan\\.io|dexscreener\\.com\\/solana/i.test(raw)) chain = 'solana';
-          const addrMatch = raw.match(/0x[a-fA-F0-9]{40,64}/);
-          if (addrMatch) cleaned = addrMatch[0];
-        }
-
-        // Detect 66-char tx hash or raw calldata/revert hex (>42 chars starting with 0x)
-        if (/^0x[a-fA-F0-9]+$/.test(cleaned) && cleaned.length !== 42) {
-          const res = await fetch('/v1/decode', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ input: cleaned, chain })
-          });
-          const data = await res.json();
-          out.textContent = JSON.stringify(data, null, 2);
-          return;
-        }
-
-        // Detect Solana base58 address
-        if (!cleaned.startsWith('0x') && cleaned.length >= 32 && cleaned.length <= 44) {
-          chain = 'solana';
-        }
-
-        const res = await fetch('/v1/scan/' + encodeURIComponent(chain) + '/' + encodeURIComponent(cleaned));
-        const data = await res.json();
-        out.textContent = JSON.stringify(data, null, 2);
-      }
-
-      async function runOmniboxDemo(type) {
-        const input = document.getElementById('omniboxInput');
-        const chainSel = document.getElementById('omniboxChain');
-        const out = document.getElementById('omniboxOutput');
-        out.style.display = 'block';
-        if (type === 'usdc') {
-          chainSel.value = 'base';
-          input.value = '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913';
-          await executeOmniboxInput();
-        } else if (type === 'trending') {
-          chainSel.value = 'base';
-          input.value = '0x940181a94a35a4569e4529a3cdfb74e38fd98631';
-          await executeOmniboxInput();
-        } else if (type === 'decode') {
-          chainSel.value = 'base';
-          input.value = '0x08c379a00000000000000000000000000000000000000000000000000000000000000020000000000000000000000000000000000000000000000000000000000000001d45524332303a20696e73756666696369656e7420616c6c6f77616e6365000000';
-          await executeOmniboxInput();
-        } else if (type === 'feed') {
-          out.textContent = '⏳ Loading Live Trending Forensic Feed (/v1/trending)...';
-          const res = await fetch('/v1/trending');
-          const data = await res.json();
-          out.textContent = JSON.stringify(data, null, 2);
-        }
-      }
-    </script>
-
-    <section class="hero-grid">
-      <div>
-        <div class="pill-badge mono">
-          <span>●</span>
-          <span>${escapeHtml(badgeText)}</span>
-        </div>
-        <h1>${escapeHtml(utmHeadline)}</h1>
-        <p class="subheadline">${escapeHtml(subheadline)}</p>
-
-        <div style="display:grid;gap:12px;margin-bottom:28px;">
-          ${(
-            v?.bullets || [
-              "Zero-Custody Deferred Hold: Buyer signs off-chain EIP-3009 USDC authorizations; $0 moves until verified.",
-              "Deterministic Redacted Preview: Proves CSV/JSON row counts, ZIP file trees, or Live API SLAs before payout.",
-              "Atomic Dual Settlement: Arbiter relays Seller Net Payout + 1.0% Protocol Fee in < 2 seconds on Base."
-            ]
-          )
-            .map(
-              (b) => `
-            <div style="display:flex;align-items:flex-start;gap:10px;font-size:14px;color:#E2E8F0;">
-              <span style="color:var(--emerald);font-weight:800;">✓</span>
-              <span>${escapeHtml(b)}</span>
-            </div>`
-            )
-            .join("")}
-        </div>
-
-        <!-- 10-Second Interactive Demo Simulator -->
-        <div class="card" style="background:var(--surface-2);">
-          <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;">
-            <div>
-              <div style="font-weight:700;font-size:15px;">⚡ Live 10-Second Escrow Sandbox</div>
-              <div style="color:var(--muted);font-size:12px;">Watch a real Dual EIP-3009 Lock + Edge Dataset Verification + Atomic Base Payout</div>
-            </div>
-            <button type="button" id="runDemoBtn" class="btn-secondary" style="border-color:var(--emerald);color:var(--emerald);">
-              ▶ Launch Instant Demo Deal (No Wallet Needed)
-            </button>
-          </div>
-          <div id="demoTerminal" class="terminal mono" style="display:none;"></div>
-        </div>
-      </div>
-
-      <!-- Instant Deal Link Builder with Visual No-Code Verification Rule Builder -->
-      <div class="card card-emerald">
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
-          <div>
-            <div style="font-size:17px;font-weight:800;">Create an Instant Escrow Link</div>
-            <div style="font-size:12px;color:var(--muted);">No account or KYC required · Shareable link generated in 1 click</div>
-          </div>
-          <span class="base-badge mono">USDC · Base</span>
-        </div>
-
-        <label class="field-label">1. Select No-Code Verification Preset</label>
-        <div class="preset-tabs" id="presetTabs">
-          <button type="button" class="preset-btn ${defaultPreset === "dataset" ? "active" : ""}" data-preset="dataset">📊 CSV / JSON Dataset</button>
-          <button type="button" class="preset-btn ${defaultPreset === "archive" ? "active" : ""}" data-preset="archive">📦 Code / ZIP Archive</button>
-          <button type="button" class="preset-btn ${defaultPreset === "sha256" ? "active" : ""}" data-preset="sha256">🔐 Exact SHA-256 Seal</button>
-          <button type="button" class="preset-btn ${defaultPreset === "live_api" ? "active" : ""}" data-preset="live_api">🌐 Live API / Webhook</button>
-          <button type="button" class="preset-btn ${defaultPreset === "infer" ? "active" : ""}" data-preset="infer">✨ Auto-Infer from Sample JSON</button>
-        </div>
-
-        <form id="createDealForm">
-          <div class="field-group">
-            <label class="field-label">Deal Title / Deliverable Name</label>
-            <input type="text" id="dealTitle" required value="${escapeHtml(defaultTitle)}" />
-          </div>
-
-          <div class="row-2">
-            <div class="field-group">
-              <label class="field-label">Deal Amount (USDC)</label>
-              <input type="number" id="dealAmountUsd" min="1" step="0.01" required value="${escapeHtml(defaultAmount)}" />
-            </div>
-            <div class="field-group">
-              <label class="field-label">Protocol Fee Mode (1.0%)</label>
-              <select id="feePayer">
-                <option value="seller">Seller absorbs 1% fee</option>
-                <option value="buyer">Buyer adds 1% fee</option>
-                <option value="split">50/50 Split fee</option>
-              </select>
-            </div>
-          </div>
-
-          <div class="row-2">
-            <div class="field-group">
-              <label class="field-label">Seller Base Wallet (0x...)</label>
-              <input type="text" id="sellerAddress" class="mono" placeholder="0x... (optional at draft)" value="0x70997970C51812dc3A010C7d01b50e0d17dc79C8" />
-            </div>
-            <div class="field-group">
-              <label class="field-label">Network</label>
-              <select id="chainId">
-                <option value="8453">Base Mainnet (eip155:8453)</option>
-                <option value="84532">Base Sepolia Testnet (84532)</option>
-              </select>
-            </div>
-          </div>
-
-          <!-- Dynamic Preset Rule Inputs -->
-          <div id="presetConfigBox" style="background:#06080D;border:1px solid var(--border);border-radius:10px;padding:14px;margin-bottom:14px;">
-            <div id="presetDatasetFields">
-              <div class="row-2">
-                <div class="field-group" style="margin-bottom:0;">
-                  <label class="field-label">Required Columns (comma-separated)</label>
-                  <input type="text" id="reqColumns" class="mono" value="email, company, domain, revenueUsd" />
-                </div>
-                <div class="field-group" style="margin-bottom:0;">
-                  <label class="field-label">Minimum Row Count</label>
-                  <input type="number" id="minRows" value="3" min="1" />
-                </div>
-              </div>
-            </div>
-
-            <div id="presetArchiveFields" style="display:none;">
-              <div class="row-2">
-                <div class="field-group" style="margin-bottom:0;">
-                  <label class="field-label">Required Archive Files / Paths</label>
-                  <input type="text" id="reqFiles" class="mono" value="README.md, package.json, src/index.ts" />
-                </div>
-                <div class="field-group" style="margin-bottom:0;">
-                  <label class="field-label">Minimum Size (Bytes)</label>
-                  <input type="number" id="minBytes" value="64" min="1" />
-                </div>
-              </div>
-            </div>
-
-            <div id="presetSha256Fields" style="display:none;">
-              <div class="field-group" style="margin-bottom:0;">
-                <label class="field-label">Expected Deliverable SHA-256 Hex Digest</label>
-                <input type="text" id="expectedSha256" class="mono" placeholder="e.g. a3f5c8... (64-char hex)" />
-              </div>
-            </div>
-
-            <div id="presetLiveApiFields" style="display:none;">
-              <div class="row-2">
-                <div class="field-group" style="margin-bottom:0;">
-                  <label class="field-label">Required Response JSON Keys</label>
-                  <input type="text" id="apiReqKeys" class="mono" value="status, data, timestamp" />
-                </div>
-                <div class="field-group" style="margin-bottom:0;">
-                  <label class="field-label">Max Latency SLA (ms)</label>
-                  <input type="number" id="maxLatencyMs" value="1000" min="50" />
-                </div>
-              </div>
-            </div>
-
-            <div id="presetInferFields" style="display:none;">
-              <label class="field-label">Paste Sample JSON Record to Auto-Infer Schema & Invariants</label>
-              <textarea id="sampleJsonInput" class="mono" rows="3">{"email":"cto@acme.io","company":"Acme Corp","employees":250,"verified":true}</textarea>
-              <button type="button" id="inferSchemaBtn" class="btn-secondary" style="margin-top:8px;width:100%;padding:7px;">
-                ✨ Auto-Infer Strict JSON Schema via Edge Arbiter
-              </button>
-              <pre id="inferredSchemaPreview" class="mono" style="font-size:11px;color:var(--emerald);margin-top:8px;display:none;white-space:pre-wrap;"></pre>
-            </div>
-          </div>
-
-          <div class="fee-box mono">
-            <div class="fee-row">
-              <span>Seller Net Payout</span>
-              <span id="calcSellerNet">$495.00 USDC</span>
-            </div>
-            <div class="fee-row">
-              <span>NullClear SafePay Fee (1.0% → 0xB586...d5c)</span>
-              <span id="calcProtocolFee" style="color:var(--emerald);">$5.00 USDC</span>
-            </div>
-            <div class="fee-row total">
-              <span>Total Buyer Wallet Authorization</span>
-              <span id="calcBuyerTotal">$500.00 USDC</span>
-            </div>
-          </div>
-
-          <button type="submit" class="btn-primary" id="submitDealBtn">
-            <span>🔐 Generate Shareable Zero-Custody Deal Link</span>
-          </button>
-        </form>
-      </div>
-    </section>
-
-    <!-- Instant Client-Side Data Redaction & SHA-256 Proof Commitment Tool -->
-    <section id="redaction-studio" style="padding:18px 0 24px;">
-      <div class="card" style="border-color:var(--border-bright);">
-        <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:14px;">
-          <div>
-            <div class="pill-badge mono" style="margin-bottom:6px;">100% CLIENT-SIDE ZERO-KNOWLEDGE PREVIEW STUDIO</div>
-            <h2 style="font-size:22px;font-weight:800;">Instant Dataset Redaction &amp; SHA-256 Proof Seal Generator</h2>
-            <p style="font-size:13px;color:var(--muted);">Prove dataset structure, row count, and SHA-256 integrity to your buyer without exposing raw emails, keys, or PII. Runs 100% in your browser via WebCrypto.</p>
-          </div>
-          <div style="display:flex;gap:10px;flex-wrap:wrap;">
-            <button type="button" id="redactRunBtn" class="btn-secondary" style="border-color:var(--emerald);color:var(--emerald);">
-              🛡️ Redact &amp; Compute SHA-256 Proof
-            </button>
-            <button type="button" id="useProofInDealBtn" class="btn-secondary">
-              ↗ Bind SHA-256 Seal to Deal Form
-            </button>
-          </div>
-        </div>
-        <div class="row-2">
-          <div>
-            <label class="field-label">Raw Dataset / JSON / CSV Input (Never leaves your browser)</label>
-            <textarea id="rawRedactInput" class="mono" rows="5">email,company,apiKey,revenueUsd
-alice.founder@stripe.com,Stripe Inc,sk_live_987654321abcdef,1450000
-bob.vp@coinbase.com,Coinbase Global,sk_live_123456789fedcba,3200000
-carol.cto@base.org,Base Ecosystem,sk_live_555666777aaaa,890000</textarea>
-          </div>
-          <div>
-            <label class="field-label">Buyer-Safe Redacted Preview + SHA-256 Commitment Seal</label>
-            <pre id="redactedOutputBox" class="terminal mono" style="margin-top:0;min-height:116px;">Click "Redact &amp; Compute SHA-256 Proof" to generate buyer-safe preview...</pre>
-          </div>
-        </div>
-      </div>
-    </section>
-
-    <!-- Interactive Fee & Speed Comparison Calculator -->
-    <section id="calculator" style="padding:36px 0;">
-      <div class="card">
-        <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:16px;">
-          <div>
-            <div class="pill-badge mono" style="margin-bottom:8px;">INSTITUTIONAL COST & CUSTODY COMPARISON</div>
-            <h2 style="font-size:26px;font-weight:800;">Why Counterparties Switch to NullClear SafePay</h2>
-          </div>
-          <div style="min-width:280px;">
-            <label class="field-label">Interactive Deal Value: <span id="sliderValLabel" class="mono" style="color:var(--emerald);font-size:15px;">$5,000 USDC</span></label>
-            <input type="range" id="calcSlider" min="100" max="50000" step="100" value="5000" />
-          </div>
-        </div>
-
-        <table class="matrix-table">
-          <thead>
-            <tr>
-              <th>Metric</th>
-              <th class="highlight-col">NullClear SafePay (nullclear.com)</th>
-              <th>Escrow.com</th>
-              <th>Upwork Escrow</th>
-              <th>Telegram OTC Middlemen</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td><strong>Fee on <span id="tableDealAmt" class="mono">$5,000</span> Deal</strong></td>
-              <td class="highlight-col mono" id="tableSafePayFee">$50.00 (1.0%)</td>
-              <td class="mono" id="tableEscrowComFee">$162.50 (3.25%+)</td>
-              <td class="mono" id="tableUpworkFee">$500.00 (10%–20%)</td>
-              <td class="mono" id="tableTgFee">$250.00 (5% + Scam Risk)</td>
-            </tr>
-            <tr>
-              <td><strong>Capital Lockup / Custody</strong></td>
-              <td class="highlight-col">0 Seconds (Stays in Buyer's Base Wallet)</td>
-              <td>5–10 Business Days Wire Hold</td>
-              <td>14-Day Clearing Hold</td>
-              <td>100% Custodial Middleman EOA</td>
-            </tr>
-            <tr>
-              <td><strong>Deliverable Verification</strong></td>
-              <td class="highlight-col">Deterministic Edge Schema / SHA-256 (&lt;140ms)</td>
-              <td>Manual Dispute Arbitration (Weeks)</td>
-              <td>Subjective Ticket Review</td>
-              <td>Manual Chat Screenshots</td>
-            </tr>
-            <tr>
-              <td><strong>KYC / Onboarding</strong></td>
-              <td class="highlight-col">0% KYC · Instant EIP-3009 Signature</td>
-              <td>Full Passport + Bank Statements</td>
-              <td>Tax ID + Account Freeze Risk</td>
-              <td>Anonymous / Zero Recourse</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-    </section>
-    <!-- NullClear Organization & Institutional Operations Desk -->
-    <section id="organization-desk" style="padding:12px 0 36px;">
-      <div class="card" style="border-color:rgba(56,189,248,0.35);background:linear-gradient(180deg, rgba(56,189,248,0.05) 0%, rgba(12,16,24,0.96) 100%);">
-        <div style="display:flex;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;gap:16px;margin-bottom:20px;">
-          <div>
-            <div class="pill-badge mono" style="margin-bottom:8px;">NULLCLEAR ORGANIZATION &bull; COMMERCIAL &amp; AGENT INFRASTRUCTURE</div>
-            <h2 style="font-size:24px;font-weight:800;">Unified Institutional Clearing, Pre-Execution Security &amp; Live Transparency</h2>
-            <p style="font-size:14px;color:var(--muted);max-width:780px;margin-top:4px;">
-              NullClear operates across both human commercial escrow (<code class="mono">nullclear.com</code>) and autonomous AI agent pre-execution security &amp; x402 clearing (<code class="mono">nullclear.dev</code>).
-            </p>
-          </div>
-          <div style="display:flex;gap:10px;flex-wrap:wrap;">
-            <a href="mailto:ops@nullclear.dev" class="btn-secondary mono" style="text-decoration:none;border-color:var(--emerald);color:var(--emerald);display:inline-flex;align-items:center;gap:6px;">
-              ✉️ Operations Desk: ops@nullclear.dev
-            </a>
-            <a href="https://nullclear.dev/history" class="btn-secondary" style="text-decoration:none;border-color:#38BDF8;color:#38BDF8;display:inline-flex;align-items:center;gap:6px;">
-              📡 Live Agent Usage History ↗
-            </a>
-          </div>
-        </div>
-
-        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px;">
-          <div style="background:#06080D;border:1px solid var(--border);border-radius:10px;padding:16px;">
-            <div class="mono" style="font-size:11px;color:var(--emerald);font-weight:700;">1. COMMERCIAL DELIVERABLE ESCROW</div>
-            <div style="font-weight:800;font-size:15px;margin:4px 0;">NullClear SafePay (nullclear.com)</div>
-            <p style="font-size:12.5px;color:var(--muted);">Zero-custody Base USDC deal rooms for datasets, code archives, AI bounties, and OTC digital transfers with 1.0% flat fee (0.75% &gt;$10k).</p>
-          </div>
-          <div style="background:#06080D;border:1px solid var(--border);border-radius:10px;padding:16px;">
-            <div class="mono" style="font-size:11px;color:#38BDF8;font-weight:700;">2. 7-CHAIN AGENT FIREWALL &amp; GUARDED RPC</div>
-            <div style="font-weight:800;font-size:15px;margin:4px 0;"><a href="https://nullclear.dev/firewall" style="color:var(--text);text-decoration:none;">Pre-Sign Security Suite (nullclear.dev) ↗</a></div>
-            <p style="font-size:12.5px;color:var(--muted);">1-call pre-sign guard (<code class="mono">/v1/guard</code>, 10 free/day/IP), drop-in guarded JSON-RPC (<code class="mono">/rpc/:chain/:key</code>), $1–$100 Prepaid Passes with <code class="mono">X-Agent-Label</code> &amp; <code class="mono">/v1/pass/export</code>, Policy Co-Signer &amp; Watchtower.</p>
-          </div>
-          <div style="background:#06080D;border:1px solid var(--border);border-radius:10px;padding:16px;">
-            <div class="mono" style="font-size:11px;color:#F59E0B;font-weight:700;">3. PUBLIC TELEMETRY &amp; OPERATIONS</div>
-            <div style="font-weight:800;font-size:15px;margin:4px 0;"><a href="https://nullclear.dev/history" style="color:var(--text);text-decoration:none;">Live Product History &amp; Diagnostics ↗</a></div>
-            <p style="font-size:12.5px;color:var(--muted);">Real-time stream of every agent tool invocation, quota meter, and x402 conversion diagnostic. Enterprise &amp; OTC inquiries: <a href="mailto:ops@nullclear.dev" class="mono" style="color:var(--emerald);">ops@nullclear.dev</a>.</p>
-          </div>
-        </div>
-      </div>
-    </section>
-  </main>
-
-  <footer>
-    <div class="container" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:16px;">
-      <div>
-        <strong>NullClear Organization &amp; SafePay</strong> · Zero-Custody Cryptographic Deliverable Escrow &amp; 7-Chain Pre-Execution Firewall on Base Mainnet (<code class="mono">eip155:8453</code>).<br/>
-        Operations &amp; Enterprise Desk: <a href="mailto:ops@nullclear.dev" class="mono" style="color:var(--emerald);text-decoration:none;">ops@nullclear.dev</a> · Protocol Fee Treasury: <span class="mono">${SAFEPAY_TREASURY_ADDRESS}</span> · ERC-8004 Agent #124595
-      </div>
-      <div style="display:flex;gap:16px;flex-wrap:wrap;">
-        <a href="https://nullclear.dev" style="color:var(--emerald);font-weight:700;">nullclear.dev Portal</a>
-        <a href="https://nullclear.dev/history" style="color:#38BDF8;font-weight:700;">Live Agent History</a>
-        <a href="/firewall" style="color:var(--muted);">Pre-Sign Firewall</a>
-        <a href="/for/freelancers" style="color:var(--muted);">Freelancers</a>
-        <a href="/for/data-brokers" style="color:var(--muted);">Data Brokers</a>
-        <a href="/for/ai-bounties" style="color:var(--muted);">AI Bounties</a>
-        <a href="/for/otc-digital" style="color:var(--muted);">OTC Digital</a>
-        <a href="mailto:ops@nullclear.dev" style="color:var(--muted);">ops@nullclear.dev</a>
-      </div>
-    </div>
-  </footer>
-
-  <script>
-    (function() {
-      let currentPreset = "${defaultPreset}";
-      let inferredSpec = null;
-
-      const presetBtns = document.querySelectorAll("#presetTabs .preset-btn");
-      const updatePresetUi = (preset) => {
-        currentPreset = preset;
-        presetBtns.forEach(b => b.classList.toggle("active", b.dataset.preset === preset));
-        document.getElementById("presetDatasetFields").style.display = preset === "dataset" ? "block" : "none";
-        document.getElementById("presetArchiveFields").style.display = preset === "archive" ? "block" : "none";
-        document.getElementById("presetSha256Fields").style.display = preset === "sha256" ? "block" : "none";
-        document.getElementById("presetLiveApiFields").style.display = preset === "live_api" ? "block" : "none";
-        document.getElementById("presetInferFields").style.display = preset === "infer" ? "block" : "none";
-      };
-      presetBtns.forEach(btn => btn.addEventListener("click", () => updatePresetUi(btn.dataset.preset)));
-      updatePresetUi(currentPreset);
-
-      const amountInput = document.getElementById("dealAmountUsd");
-      const feePayerSelect = document.getElementById("feePayer");
-      const recalcFee = () => {
-        const usd = Math.max(1, parseFloat(amountInput.value || "0"));
-        const payer = feePayerSelect.value;
-        const bps = usd > 10000 ? 0.0075 : 0.01;
-        const fee = Math.max(0.50, usd * bps);
-        let sellerNet = usd - fee;
-        let buyerTotal = usd;
-        if (payer === "buyer") {
-          sellerNet = usd;
-          buyerTotal = usd + fee;
-        } else if (payer === "split") {
-          sellerNet = usd - fee / 2;
-          buyerTotal = usd + fee / 2;
-        }
-        document.getElementById("calcSellerNet").textContent = "$" + sellerNet.toFixed(2) + " USDC";
-        document.getElementById("calcProtocolFee").textContent = "$" + fee.toFixed(2) + " USDC";
-        document.getElementById("calcBuyerTotal").textContent = "$" + buyerTotal.toFixed(2) + " USDC";
-      };
-      amountInput.addEventListener("input", recalcFee);
-      feePayerSelect.addEventListener("change", recalcFee);
-      recalcFee();
-
-      // Auto-infer schema button
-      document.getElementById("inferSchemaBtn").addEventListener("click", async () => {
-        const raw = document.getElementById("sampleJsonInput").value;
-        const pre = document.getElementById("inferredSchemaPreview");
-        pre.style.display = "block";
-        pre.textContent = "Inferring strict Draft-07 schema...";
-        try {
-          const res = await fetch("/api/safepay/infer-schema", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ sample: raw })
-          });
-          const data = await res.json();
-          if (data.success) {
-            inferredSpec = data;
-            pre.textContent = "✓ Inferred Required Keys: [" + data.requiredColumns.join(", ") + "] + " + data.invariants.length + " Invariants";
-          } else {
-            pre.textContent = "Error: " + data.error;
-          }
-        } catch (err) {
-          pre.textContent = "Error: " + err.message;
-        }
-      });
-
-      // Create Deal Form Submit
-      document.getElementById("createDealForm").addEventListener("submit", async (e) => {
-        e.preventDefault();
-        const btn = document.getElementById("submitDealBtn");
-        btn.disabled = true;
-        btn.textContent = "Creating Cryptographic Deal Room...";
-
-        const usd = Math.max(1, parseFloat(amountInput.value || "500"));
-        const amountAtomic = String(Math.round(usd * 1000000));
-        let verificationMode = "DATASET_SCHEMA";
-        let verificationSpec = { rejectRefusals: true };
-
-        if (currentPreset === "dataset") {
-          verificationMode = "DATASET_SCHEMA";
-          const cols = document.getElementById("reqColumns").value.split(",").map(s => s.trim()).filter(Boolean);
-          const minRows = parseInt(document.getElementById("minRows").value || "1", 10);
-          verificationSpec = { requiredColumns: cols, minRows, disallowNulls: true, rejectRefusals: true };
-        } else if (currentPreset === "archive") {
-          verificationMode = "FILE_ARCHIVE";
-          const files = document.getElementById("reqFiles").value.split(",").map(s => s.trim()).filter(Boolean);
-          const minBytes = parseInt(document.getElementById("minBytes").value || "64", 10);
-          verificationSpec = { requiredFiles: files, minBytes, rejectRefusals: true };
-        } else if (currentPreset === "sha256") {
-          verificationMode = "FILE_ARCHIVE";
-          const expectedSha256 = document.getElementById("expectedSha256").value.trim();
-          verificationSpec = { expectedSha256: expectedSha256 || undefined, minBytes: 1, rejectRefusals: true };
-        } else if (currentPreset === "live_api") {
-          verificationMode = "LIVE_API";
-          const cols = document.getElementById("apiReqKeys").value.split(",").map(s => s.trim()).filter(Boolean);
-          const maxLatencyMs = parseInt(document.getElementById("maxLatencyMs").value || "1000", 10);
-          verificationSpec = { requiredColumns: cols, maxLatencyMs, rejectRefusals: true };
-        } else if (currentPreset === "infer") {
-          verificationMode = "DATASET_SCHEMA";
-          if (inferredSpec) {
-            verificationSpec = {
-              jsonSchema: inferredSpec.jsonSchema,
-              requiredColumns: inferredSpec.requiredColumns,
-              invariants: inferredSpec.invariants,
-              rejectRefusals: true
-            };
-          }
-        }
-
-        try {
-          const sellerAddr = document.getElementById("sellerAddress").value.trim();
-          const res = await fetch("/api/safepay/deals", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              title: document.getElementById("dealTitle").value.trim(),
-              creatorRole: "seller",
-              sellerAddress: /^0x[a-fA-F0-9]{40}$/.test(sellerAddr) ? sellerAddr : undefined,
-              chainId: parseInt(document.getElementById("chainId").value, 10),
-              amountAtomic,
-              feePayer: feePayerSelect.value,
-              verificationMode,
-              verificationSpec
-            })
-          });
-          const data = await res.json();
-          if (data.success && data.dealId) {
-            window.location.href = "/deal/" + data.dealId;
-          } else {
-            alert("Failed to create deal: " + (data.message || data.error));
-            btn.disabled = false;
-            btn.textContent = "🔐 Generate Shareable Zero-Custody Deal Link";
-          }
-        } catch (err) {
-          alert("Request error: " + err.message);
-          btn.disabled = false;
-          btn.textContent = "🔐 Generate Shareable Zero-Custody Deal Link";
-        }
-      });
-
-      // Interactive Calculator Slider
-      const slider = document.getElementById("calcSlider");
-      const updateSlider = () => {
-        const val = parseFloat(slider.value);
-        const fmt = "$" + val.toLocaleString();
-        document.getElementById("sliderValLabel").textContent = fmt + " USDC";
-        document.getElementById("tableDealAmt").textContent = fmt;
-        const spRate = val > 10000 ? 0.0075 : 0.01;
-        const spFee = Math.max(0.5, val * spRate);
-        document.getElementById("tableSafePayFee").textContent = "$" + spFee.toFixed(2) + " (" + (spRate * 100).toFixed(2) + "%)";
-        document.getElementById("tableEscrowComFee").textContent = "$" + (val * 0.0325).toFixed(2) + " (3.25%+)";
-        document.getElementById("tableUpworkFee").textContent = "$" + (val * 0.10).toFixed(2) + " (10%–20%)";
-        document.getElementById("tableTgFee").textContent = "$" + (val * 0.05).toFixed(2) + " (5% + Scam Risk)";
-      };
-      slider.addEventListener("input", updateSlider);
-
-      // 10-Second Interactive Demo Simulator
-      document.getElementById("runDemoBtn").addEventListener("click", async () => {
-        const term = document.getElementById("demoTerminal");
-        term.style.display = "block";
-        term.innerHTML = "";
-        const append = (msg, color) => {
-          const div = document.createElement("div");
-          div.className = "terminal-line";
-          if (color) div.style.color = color;
-          div.textContent = msg;
-          term.appendChild(div);
-        };
-
-        append("[0.1s] Creating $500.00 USDC Zero-Custody Dataset Deal on Base Mainnet (8453)...");
-        const createRes = await fetch("/api/safepay/deals", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            title: "Demo: 3 Verified Enterprise AI Leads (CSV/JSON)",
-            creatorRole: "seller",
-            sellerAddress: "0x70997970C51812dc3A010C7d01b50e0d17dc79C8",
-            chainId: 8453,
-            amountAtomic: "500000000",
-            feePayer: "seller",
-            verificationMode: "DATASET_SCHEMA",
-            verificationSpec: {
-              requiredColumns: ["email", "company", "domain", "arrUsd"],
-              minRows: 3,
-              disallowNulls: true,
-              rejectRefusals: true
-            }
-          })
-        });
-        const created = await createRes.json();
-        const targetDealId = created.dealId || "demo-ai-audit-101";
-        append("[0.4s] ✓ Deal created: " + targetDealId + " (Seller Net: $495.00 USDC | Fee: $5.00 USDC -> 0xB586...d5c)");
-        append("[0.8s] ✓ Ready! Opening live interactive Deal Room for " + targetDealId + " (/deal/demo-ai-audit-101)...", "#10B981");
-        setTimeout(() => {
-          window.location.href = "/deal/" + targetDealId + "?demo=1";
-        }, 900);
-      });
-
-      // Client-Side Data Redaction & SHA-256 Proof Seal Studio
-      let lastComputedSha256 = "";
-      const redactToken = (val) => {
-        const s = String(val || "").trim();
-        if (s.includes("@")) {
-          const [u, d] = s.split("@");
-          return (u.slice(0, 2) || "x") + "***@" + d;
-        }
-        if (/^(sk_|pk_|0x)[a-zA-Z0-9_]{8,}$/.test(s)) {
-          return s.slice(0, 6) + "••••••••" + s.slice(-4);
-        }
-        return s;
-      };
-
-      const computeClientProof = async () => {
-        const raw = document.getElementById("rawRedactInput").value.trim();
-        const outBox = document.getElementById("redactedOutputBox");
-        if (!raw) return;
-        const enc = new TextEncoder().encode(raw);
-        const hashBuf = await crypto.subtle.digest("SHA-256", enc);
-        const hashHex = Array.from(new Uint8Array(hashBuf)).map(b => b.toString(16).padStart(2, "0")).join("");
-        lastComputedSha256 = hashHex;
-
-        const lines = raw.split(/\r?\n/).filter(Boolean);
-        const headers = (lines[0] || "").split(",").map(h => h.trim());
-        const previewRows = lines.slice(1, 6).map(line =>
-          line.split(",").map(cell => redactToken(cell)).join(", ")
-        );
-
-        outBox.textContent =
-          "SHA-256 Deliverable Seal: " + hashHex + "\n" +
-          "Verified Row Count: " + Math.max(0, lines.length - 1) + " rows | Columns: [" + headers.join(", ") + "]\n" +
-          "--- Redacted Buyer Preview ---\n" +
-          headers.join(", ") + "\n" +
-          previewRows.join("\n");
-      };
-
-      document.getElementById("redactRunBtn").addEventListener("click", computeClientProof);
-      document.getElementById("useProofInDealBtn").addEventListener("click", async () => {
-        if (!lastComputedSha256) await computeClientProof();
-        updatePresetUi("sha256");
-        document.getElementById("expectedSha256").value = lastComputedSha256;
-        document.getElementById("expectedSha256").focus();
-      });
-    })();
-  </script>
-</body>
-</html>`;
+  return renderComLandingHtml(options);
 }
 
 export function renderSafePayDealRoomHtml(dealId: string): string {
@@ -1316,9 +203,9 @@ export function renderSafePayDealRoomHtml(dealId: string): string {
         <span class="mono" style="font-size:12px;color:var(--muted);">/deal/${escapeHtml(dealId)}</span>
       </a>
       <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
-        <a href="mailto:ops@nullclear.dev" class="btn-secondary mono" style="text-decoration:none;color:var(--muted);">✉️ ops@nullclear.dev</a>
+        <a href="mailto:ops@nullclear.dev" class="btn-secondary mono" style="text-decoration:none;color:var(--muted);">âœ‰ï¸ ops@nullclear.dev</a>
         <button type="button" id="openCashierBtn" class="btn-secondary" style="border-color:#0052FF;color:#60A5FA;">
-          💳 Need Base USDC? Cross-Chain Cashier
+          ðŸ’³ Need Base USDC? Cross-Chain Cashier
         </button>
         <span id="dealStatusBadge" class="status-pill mono">LOADING...</span>
       </div>
@@ -1332,7 +219,7 @@ export function renderSafePayDealRoomHtml(dealId: string): string {
         <div class="card">
           <div class="step-header">
             <div class="step-title"><span class="step-num">1</span> Deal Contract & Cryptographic Terms</div>
-            <button type="button" id="copyLinkBtn" class="btn-secondary mono">📋 Copy Share Link</button>
+            <button type="button" id="copyLinkBtn" class="btn-secondary mono">ðŸ“‹ Copy Share Link</button>
           </div>
           <h2 id="titleText" style="font-size:20px;font-weight:800;margin-bottom:8px;">Loading Deal...</h2>
           <p id="descText" style="font-size:13px;color:var(--muted);margin-bottom:14px;"></p>
@@ -1346,7 +233,7 @@ export function renderSafePayDealRoomHtml(dealId: string): string {
             <span id="sellerNetText" class="mono" style="font-weight:700;">-</span>
           </div>
           <div class="kv-row">
-            <span style="color:var(--muted)">Protocol Fee (1.0% → Treasury)</span>
+            <span style="color:var(--muted)">Protocol Fee (1.0% â†’ Treasury)</span>
             <span id="protocolFeeText" class="mono" style="color:var(--emerald);">-</span>
           </div>
           <div class="kv-row">
@@ -1380,10 +267,10 @@ export function renderSafePayDealRoomHtml(dealId: string): string {
 
           <div style="display:flex;gap:10px;margin-bottom:10px;">
             <button type="button" id="connectWalletBtn" class="btn-secondary" style="flex:1;">
-              🦊 Connect Base Wallet (MetaMask / Coinbase)
+              ðŸ¦Š Connect Base Wallet (MetaMask / Coinbase)
             </button>
             <button type="button" id="instantSandboxLockBtn" class="btn-secondary" style="flex:1;border-color:var(--emerald);color:var(--emerald);">
-              ⚡ Instant Demo / Sandbox EIP-3009 Lock
+              âš¡ Instant Demo / Sandbox EIP-3009 Lock
             </button>
           </div>
 
@@ -1391,7 +278,7 @@ export function renderSafePayDealRoomHtml(dealId: string): string {
           <input type="text" id="lockSellerInput" class="mono" placeholder="Seller Wallet Address (0x...)" />
 
           <button type="button" id="signDualLockBtn" class="btn-primary">
-            🔐 Sign Dual EIP-3009 Authorizations & Lock Deal
+            ðŸ” Sign Dual EIP-3009 Authorizations & Lock Deal
           </button>
           <div id="lockStatusMsg" class="mono" style="font-size:12px;margin-top:10px;color:var(--emerald);"></div>
         </div>
@@ -1403,7 +290,7 @@ export function renderSafePayDealRoomHtml(dealId: string): string {
           <div class="step-header">
             <div class="step-title"><span class="step-num">3</span> Seller Deliverable Upload & Edge Arbiter Console</div>
             <button type="button" id="loadSampleDeliverableBtn" class="btn-secondary" style="color:var(--emerald);">
-              ✨ Load Matching Sample Deliverable
+              âœ¨ Load Matching Sample Deliverable
             </button>
           </div>
 
@@ -1411,7 +298,7 @@ export function renderSafePayDealRoomHtml(dealId: string): string {
 
           <div style="display:flex;gap:10px;">
             <button type="button" id="submitDeliverableBtn" class="btn-primary">
-              🚀 Run Edge Verification & Settle Atomic Payout
+              ðŸš€ Run Edge Verification & Settle Atomic Payout
             </button>
             <button type="button" id="voidDealBtn" class="btn-secondary" style="color:#F87171;">
               Void / Cancel
@@ -1433,23 +320,23 @@ export function renderSafePayDealRoomHtml(dealId: string): string {
           </div>
 
           <div id="settlementReceiptBox" style="display:none;background:#05070B;border:1px solid var(--border-bright);border-radius:10px;padding:14px;margin-bottom:14px;">
-            <div style="font-weight:700;color:var(--emerald);margin-bottom:8px;">🎉 Atomic Dual Settlement Confirmed on Base!</div>
+            <div style="font-weight:700;color:var(--emerald);margin-bottom:8px;">ðŸŽ‰ Atomic Dual Settlement Confirmed on Base!</div>
             <div class="kv-row"><span>Seller Payout Tx</span><a id="sellerTxLink" href="#" target="_blank" class="mono" style="color:#60A5FA;">-</a></div>
             <div class="kv-row"><span>Protocol Fee Tx (0xB586...d5c)</span><a id="feeTxLink" href="#" target="_blank" class="mono" style="color:#60A5FA;">-</a></div>
             <div class="kv-row"><span>Deliverable SHA-256</span><span id="receiptSha256" class="mono" style="font-size:11px;">-</span></div>
             <div style="display:flex;gap:10px;margin-top:12px;">
               <a id="downloadDeliverableBtn" href="#" class="btn-primary" style="text-decoration:none;text-align:center;">
-                ⬇ Download Unredacted Deliverable
+                â¬‡ Download Unredacted Deliverable
               </a>
               <button type="button" id="downloadReceiptBtn" class="btn-secondary mono">
-                📜 EIP-712 Receipt JSON
+                ðŸ“œ EIP-712 Receipt JSON
               </button>
             </div>
           </div>
 
           <div style="border-top:1px solid var(--border);padding-top:12px;display:flex;justify-content:space-between;align-items:center;font-size:12px;">
             <span style="color:var(--muted);">Protected by <strong>NullClear SafePay</strong></span>
-            <a href="/" style="color:var(--emerald);font-weight:700;text-decoration:none;">Create Your Own 0%-Custody Escrow Link →</a>
+            <a href="/" style="color:var(--emerald);font-weight:700;text-decoration:none;">Create Your Own 0%-Custody Escrow Link â†’</a>
           </div>
         </div>
       </div>
@@ -1460,21 +347,21 @@ export function renderSafePayDealRoomHtml(dealId: string): string {
   <div id="cashierModal" class="modal-backdrop">
     <div class="modal">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
-        <div style="font-size:17px;font-weight:800;">💳 Non-Custodial Base USDC Cashier</div>
-        <button type="button" id="closeCashierBtn" class="btn-secondary">✕</button>
+        <div style="font-size:17px;font-weight:800;">ðŸ’³ Non-Custodial Base USDC Cashier</div>
+        <button type="button" id="closeCashierBtn" class="btn-secondary">âœ•</button>
       </div>
       <p style="font-size:13px;color:var(--muted);margin-bottom:16px;">
         Top up Base Mainnet USDC (<span class="mono">0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913</span>) directly to your connected wallet from ETH, Arbitrum, Optimism, Solana, or Card with zero custody:
       </p>
       <div style="display:grid;gap:10px;">
         <a href="https://jumper.exchange/?toChain=8453&toToken=0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913" target="_blank" rel="noopener" class="btn-secondary" style="text-decoration:none;display:flex;justify-content:space-between;">
-          <span>⚡ Jumper / LI.FI Cross-Chain to Base USDC</span><span>Open ↗</span>
+          <span>âš¡ Jumper / LI.FI Cross-Chain to Base USDC</span><span>Open â†—</span>
         </a>
         <a href="https://relay.link/bridge/base?currency=usdc" target="_blank" rel="noopener" class="btn-secondary" style="text-decoration:none;display:flex;justify-content:space-between;">
-          <span>🌉 Relay.link Instant 2-Second Base USDC Bridge</span><span>Open ↗</span>
+          <span>ðŸŒ‰ Relay.link Instant 2-Second Base USDC Bridge</span><span>Open â†—</span>
         </a>
         <a href="https://app.uniswap.org/swap?chain=base&outputCurrency=0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913" target="_blank" rel="noopener" class="btn-secondary" style="text-decoration:none;display:flex;justify-content:space-between;">
-          <span>🦄 Uniswap Base ETH → Base USDC Swap</span><span>Open ↗</span>
+          <span>ðŸ¦„ Uniswap Base ETH â†’ Base USDC Swap</span><span>Open â†—</span>
         </a>
       </div>
     </div>
@@ -1493,7 +380,7 @@ export function renderSafePayDealRoomHtml(dealId: string): string {
       });
       document.getElementById("copyLinkBtn").addEventListener("click", () => {
         navigator.clipboard.writeText(window.location.origin + "/deal/" + dealId);
-        document.getElementById("copyLinkBtn").textContent = "✓ Copied!";
+        document.getElementById("copyLinkBtn").textContent = "âœ“ Copied!";
       });
 
       const formatUsdc = (atomicStr) => {
@@ -1504,13 +391,13 @@ export function renderSafePayDealRoomHtml(dealId: string): string {
       const renderPreview = (preview) => {
         const box = document.getElementById("redactedPreviewBox");
         if (!preview) return;
-        document.getElementById("verifyBadge").textContent = preview.verified ? "✓ VERIFIED AT EDGE" : "✕ FAILED CHECKS";
+        document.getElementById("verifyBadge").textContent = preview.verified ? "âœ“ VERIFIED AT EDGE" : "âœ• FAILED CHECKS";
         document.getElementById("verifyBadge").style.color = preview.verified ? "#10B981" : "#F87171";
 
         let html = '<div class="mono" style="margin-bottom:8px;color:#E2E8F0;">SHA-256: ' + preview.deliverableSha256.slice(0, 24) + '... (' + preview.byteSize + ' bytes)</div>';
         if (preview.checks) {
           preview.checks.forEach(c => {
-            html += '<div style="margin-bottom:4px;color:' + (c.passed ? '#10B981' : '#F87171') + ';">' + (c.passed ? '[✓] ' : '[✕] ') + c.label + ': <span style="color:#94A3B8">' + c.detail + '</span></div>';
+            html += '<div style="margin-bottom:4px;color:' + (c.passed ? '#10B981' : '#F87171') + ';">' + (c.passed ? '[âœ“] ' : '[âœ•] ') + c.label + ': <span style="color:#94A3B8">' + c.detail + '</span></div>';
           });
         }
         if (preview.datasetSummary) {
@@ -1553,10 +440,10 @@ export function renderSafePayDealRoomHtml(dealId: string): string {
           const explorer = data.network?.blockExplorer || "https://basescan.org";
           const sLink = document.getElementById("sellerTxLink");
           sLink.href = explorer + "/tx/" + d.sellerTxHash;
-          sLink.textContent = (d.sellerTxHash || "").slice(0, 18) + "... ↗";
+          sLink.textContent = (d.sellerTxHash || "").slice(0, 18) + "... â†—";
           const fLink = document.getElementById("feeTxLink");
           fLink.href = explorer + "/tx/" + d.feeTxHash;
-          fLink.textContent = (d.feeTxHash || "").slice(0, 18) + "... ↗";
+          fLink.textContent = (d.feeTxHash || "").slice(0, 18) + "... â†—";
           document.getElementById("receiptSha256").textContent = (d.deliverableSha256 || "").slice(0, 24) + "...";
           document.getElementById("downloadDeliverableBtn").href = "/api/safepay/deals/" + dealId + "/download?buyer=" + encodeURIComponent(d.buyerAddress || "");
         }
@@ -1572,7 +459,7 @@ export function renderSafePayDealRoomHtml(dealId: string): string {
           const accounts = await window.ethereum.request({ method: "eth_requestAccounts" });
           if (accounts && accounts[0]) {
             document.getElementById("lockBuyerInput").value = accounts[0];
-            document.getElementById("lockStatusMsg").textContent = "✓ Connected Base Wallet: " + accounts[0];
+            document.getElementById("lockStatusMsg").textContent = "âœ“ Connected Base Wallet: " + accounts[0];
           }
         } catch (err) {
           alert("Wallet connection error: " + err.message);
@@ -1586,7 +473,7 @@ export function renderSafePayDealRoomHtml(dealId: string): string {
         const res = await fetch("/api/safepay/deals/" + dealId + "/demo-lock", { method: "POST" });
         const data = await res.json();
         if (data.success) {
-          msgEl.textContent = "✓ Dual EIP-3009 Signatures Verified & Locked in Non-Custodial Edge Hold!";
+          msgEl.textContent = "âœ“ Dual EIP-3009 Signatures Verified & Locked in Non-Custodial Edge Hold!";
           await loadDeal();
         } else {
           msgEl.textContent = "Error: " + (data.message || data.error);
@@ -1597,7 +484,7 @@ export function renderSafePayDealRoomHtml(dealId: string): string {
       document.getElementById("signDualLockBtn").addEventListener("click", async () => {
         const msgEl = document.getElementById("lockStatusMsg");
         if (!window.ethereum) {
-          msgEl.textContent = "No injected wallet found — executing Sandbox EIP-3009 Dual Lock...";
+          msgEl.textContent = "No injected wallet found â€” executing Sandbox EIP-3009 Dual Lock...";
           document.getElementById("instantSandboxLockBtn").click();
           return;
         }
@@ -1696,7 +583,7 @@ export function renderSafePayDealRoomHtml(dealId: string): string {
           });
           const lockData = await lockRes.json();
           if (lockData.success) {
-            msgEl.textContent = "✓ Dual EIP-3009 Authorizations Verified & Locked!";
+            msgEl.textContent = "âœ“ Dual EIP-3009 Authorizations Verified & Locked!";
             await loadDeal();
           } else {
             msgEl.textContent = "Lock Error: " + (lockData.message || lockData.error);
@@ -1747,11 +634,11 @@ export function renderSafePayDealRoomHtml(dealId: string): string {
         if (data.redactedPreview) renderPreview(data.redactedPreview);
 
         if (data.settled) {
-          consoleEl.textContent += "\\n[3/4] ✓ 100% Verification Match! Generated Redacted Preview.\\n[4/4] ✓ Broadcasted Dual EIP-3009 Settlement (Seller Payout + 1.0% Fee to 0xB586...d5c)!";
+          consoleEl.textContent += "\\n[3/4] âœ“ 100% Verification Match! Generated Redacted Preview.\\n[4/4] âœ“ Broadcasted Dual EIP-3009 Settlement (Seller Payout + 1.0% Fee to 0xB586...d5c)!";
         } else if (!data.verified) {
-          consoleEl.textContent += "\\n[✕] Verification Failed ($0.00 charged to Buyer):\\n - " + (data.validationErrors || []).join("\\n - ");
+          consoleEl.textContent += "\\n[âœ•] Verification Failed ($0.00 charged to Buyer):\\n - " + (data.validationErrors || []).join("\\n - ");
         } else {
-          consoleEl.textContent += "\\n[✓] Verification Passed! Status: " + data.status;
+          consoleEl.textContent += "\\n[âœ“] Verification Passed! Status: " + data.status;
         }
         await loadDeal();
       });

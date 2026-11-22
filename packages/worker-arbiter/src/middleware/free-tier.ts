@@ -11,15 +11,17 @@ export interface NullClearMetadata {
   freeTrialRemaining: number;
   quickProxyPrefix: string;
   mcpEndpoint: string;
-  cardCheckoutUrl: string;
-  cardCheckoutEndpoint: string;
+  cardCheckoutUrl?: string;
+  cardCheckoutEndpoint?: string;
 }
 
 export function buildNullClearMetadata(
-  overrides?: Partial<NullClearMetadata> | number
+  overrides?: Partial<NullClearMetadata> | number,
+  env?: { STRIPE_SECRET_KEY?: string }
 ): NullClearMetadata {
   const opts: Partial<NullClearMetadata> =
     typeof overrides === "number" ? { freeTrialRemaining: overrides } : overrides || {};
+  const stripeEnabled = Boolean(env?.STRIPE_SECRET_KEY?.trim());
   return {
     verified: opts.verified ?? true,
     escrowProtection: opts.escrowProtection ?? "zero-loss-eip3009",
@@ -27,8 +29,12 @@ export function buildNullClearMetadata(
     quickProxyPrefix:
       opts.quickProxyPrefix ?? "https://api.nullclear.dev/https://...",
     mcpEndpoint: opts.mcpEndpoint ?? "https://api.nullclear.dev/mcp",
-    cardCheckoutUrl: opts.cardCheckoutUrl ?? "https://nullclear.dev/buy-pass",
-    cardCheckoutEndpoint: opts.cardCheckoutEndpoint ?? "POST https://api.nullclear.dev/v1/pass/checkout"
+    ...(stripeEnabled
+      ? {
+          cardCheckoutUrl: opts.cardCheckoutUrl ?? "https://nullclear.dev/buy-pass",
+          cardCheckoutEndpoint: opts.cardCheckoutEndpoint ?? "POST https://api.nullclear.dev/v1/pass/checkout"
+        }
+      : {})
   };
 }
 

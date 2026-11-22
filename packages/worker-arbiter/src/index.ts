@@ -106,7 +106,9 @@ app.get("/agents.md", serveAgentsMarkdown);
 app.get("/.well-known/agents.md", serveAgentsMarkdown);
 
 // Interactive Prepaid Pass Checkout UI (/buy-pass)
-app.get("/buy-pass", (c) => c.html(renderBuyPassHtmlPage(c.req.query("tier"))));
+app.get("/buy-pass", (c) =>
+  c.html(renderBuyPassHtmlPage(c.req.query("tier"), Boolean(c.env?.STRIPE_SECRET_KEY?.trim())))
+);
 
 // Jina-Reader style URL-Prefix Proxy (/https://... and /http://...)
 app.use("*", async (c, next) => {

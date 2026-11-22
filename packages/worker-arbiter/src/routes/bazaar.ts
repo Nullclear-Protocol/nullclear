@@ -1502,7 +1502,7 @@ async function handleBazaarPayment(
           extensions: {
             bazaar: bazaarExtension
           },
-          _nullclear: buildNullClearMetadata({ verified: false, freeTrialRemaining: 0 })
+          _nullclear: buildNullClearMetadata({ verified: false, freeTrialRemaining: 0 }, c.env)
         },
         402
       )
@@ -1545,7 +1545,7 @@ async function handleBazaarPayment(
           extensions: {
             bazaar: bazaarExtension
           },
-          _nullclear: buildNullClearMetadata({ verified: true })
+          _nullclear: buildNullClearMetadata({ verified: true }, c.env)
         },
         402
       )

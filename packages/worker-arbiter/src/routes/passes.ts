@@ -179,7 +179,7 @@ export async function handleBuyPassRequest(
         schema: extension.schema,
         example: extension.info.output.example,
         ...payload,
-        _nullclear: buildNullClearMetadata({ verified: true, freeTrialRemaining: 0 })
+        _nullclear: buildNullClearMetadata({ verified: true, freeTrialRemaining: 0 }, c.env)
       },
       402
     );
@@ -1023,17 +1023,23 @@ curl.exe -H "Authorization: Bearer ${claim.apiKey}" "https://api.nullclear.dev/v
   );
 });
 
-export function renderBuyPassHtmlPage(selectedTierParam?: string): string {
+export function renderBuyPassHtmlPage(selectedTierParam?: string, cardCheckoutEnabled = false): string {
   const initialTier = normalizePassTier(selectedTierParam);
   const tiersJson = JSON.stringify(PASS_TIERS);
   const cardTiersJson = JSON.stringify(CARD_CHECKOUT_TIERS);
+  const cardButtonsHtml = cardCheckoutEnabled
+    ? `
+        <button class="btn" id="cardBtn" onclick="startCardCheckout('starter')">💳 Card — $5 Starter (2k)</button>
+        <button class="btn" onclick="startCardCheckout('builder')">💳 $20 Builder (10k)</button>
+        <button class="btn" onclick="startCardCheckout('pro')">💳 $100 Pro (60k)</button>`
+    : "";
   return `<!DOCTYPE html>
 <html lang="en" class="dark">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Buy NullClear Prepaid API Pass — Base USDC &amp; Card Checkout</title>
-  <meta name="description" content="Mint an instant NullClear Prepaid API Pass (300 to 100,000 credits) via Base USDC EIP-3009 or Credit/Debit Card Checkout." />
+  <title>Buy NullClear Prepaid API Pass — Base USDC${cardCheckoutEnabled ? " &amp; Card Checkout" : ""}</title>
+  <meta name="description" content="Mint an instant NullClear Prepaid API Pass (300 to 100,000 credits) via Base USDC EIP-3009${cardCheckoutEnabled ? " or Card Checkout" : " Wallet Connect or enterprise invoice"}." />
   <style>
     :root { --bg: #07090E; --surface: #0C1018; --surface-2: #111827; --border: rgba(255,255,255,0.1); --emerald: #10B981; --cyan: #38BDF8; --text: #F8FAFC; --muted: #94A3B8; }
     * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -1053,7 +1059,7 @@ export function renderBuyPassHtmlPage(selectedTierParam?: string): string {
   <div class="container">
     <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;margin-bottom:20px;">
       <div>
-        <span class="mono" style="color:var(--emerald);font-size:12px;font-weight:700;">NULLCLEAR FIREWALL PRO SUITE &bull; BASE USDC &amp; CARD CHECKOUT</span>
+        <span class="mono" style="color:var(--emerald);font-size:12px;font-weight:700;">NULLCLEAR FIREWALL PRO SUITE &bull; BASE USDC (CHAIN 8453)${cardCheckoutEnabled ? " &amp; CARD CHECKOUT" : ""}</span>
         <h1 style="font-size:30px;font-weight:800;margin-top:4px;">Mint an Instant Prepaid API Pass</h1>
       </div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;">
@@ -1069,13 +1075,10 @@ export function renderBuyPassHtmlPage(selectedTierParam?: string): string {
       </p>
       <div class="tiers" id="tierGrid"></div>
       <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:12px;">
-        <button class="btn btn-primary" id="walletBtn" onclick="connectAndBuy()">🦊 Connect Web3 Wallet &amp; Sign Base USDC</button>
-        <button class="btn" id="cardBtn" onclick="startCardCheckout('starter')">💳 Card — $5 Starter (2k)</button>
-        <button class="btn" onclick="startCardCheckout('builder')">💳 $20 Builder (10k)</button>
-        <button class="btn" onclick="startCardCheckout('pro')">💳 $100 Pro (60k)</button>
+        <button class="btn btn-primary" id="walletBtn" onclick="connectAndBuy()">🦊 Connect Web3 Wallet &amp; Sign Base USDC</button>${cardButtonsHtml}
         <a class="btn" href="mailto:ops@nullclear.dev?subject=NullClear%20Prepaid%20Pass%20Enterprise%20Invoice">✉️ Enterprise Invoice (ops@nullclear.dev)</a>
       </div>
-      <pre id="out">// Select a tier for instant Base USDC EIP-3009 minting, or click Pay by Card ($5 Starter / $20 Builder / $100 Pro)</pre>
+      <pre id="out">// Select a tier for instant Base USDC EIP-3009 minting, or use POST /v1/pass/buy with an x402 PAYMENT-SIGNATURE header</pre>
     </div>
   </div>
   <script>
