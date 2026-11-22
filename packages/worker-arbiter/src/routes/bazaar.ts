@@ -10,7 +10,11 @@ import {
 } from "@nullclear/shared";
 import { getArbiterStore, type Env } from "../env.js";
 import { computeTrustScore } from "../services/reputation.js";
-import { classifySettlementErrorReason, settleTransfer } from "../services/facilitator.js";
+import {
+  classifySettlementErrorReason,
+  settleTransfer,
+  verifyEIP3009Local
+} from "../services/facilitator.js";
 import { validateTargetUrl } from "../services/ssrf-guard.js";
 import {
   scanTokenForensics,
@@ -1323,7 +1327,36 @@ function createPaymentRequiredHeader(
   return encodeBase64Json(payload);
 }
 
-interface SettlementResult {
+interface BazaarTimingMetrics {
+  authMs?: number;
+  verifyLocalMs?: number;
+  settleMs?: number;
+  persistMs?: number;
+  computeMs?: number;
+  overlapped?: boolean;
+  totalMs?: number;
+}
+
+function attachBazaarServerTiming(c: Context<Env>, timings: BazaarTimingMetrics): void {
+  const parts: string[] = [];
+  if (typeof timings.authMs === "number") parts.push(`auth;dur=${Math.max(0, Math.round(timings.authMs))}`);
+  if (typeof timings.verifyLocalMs === "number") {
+    parts.push(`verify;dur=${Math.max(0, Math.round(timings.verifyLocalMs))}`);
+  }
+  if (typeof timings.settleMs === "number") parts.push(`settle;dur=${Math.max(0, Math.round(timings.settleMs))}`);
+  if (typeof timings.persistMs === "number") parts.push(`persist;dur=${Math.max(0, Math.round(timings.persistMs))}`);
+  if (typeof timings.computeMs === "number") {
+    parts.push(
+      `compute;dur=${Math.max(0, Math.round(timings.computeMs))}${timings.overlapped ? ';desc="overlapped"' : ""}`
+    );
+  }
+  if (typeof timings.totalMs === "number") parts.push(`total;dur=${Math.max(0, Math.round(timings.totalMs))}`);
+  if (parts.length > 0) {
+    c.header("Server-Timing", parts.join(", "));
+  }
+}
+
+interface SettlementResult<TPrefetch = undefined> {
   settled: boolean;
   payer?: `0x${string}`;
   transaction?: `0x${string}`;
@@ -1333,17 +1366,19 @@ interface SettlementResult {
   freeTrialRemaining?: number;
   creditsRemaining?: number;
   executionReceipt?: SignedAttestationReceipt;
+  prefetched?: TPrefetch;
+  timings?: BazaarTimingMetrics;
   errorResponse?: Response;
 }
 
-async function handleBazaarPayment(
+async function handleBazaarPayment<TPrefetch = undefined>(
   c: any,
   resourcePath: string,
   description: string,
   bazaarExtension: any,
   amountAtomic = "10000",
-  options?: { allowFreeTier?: boolean; passCreditCost?: number }
-): Promise<SettlementResult> {
+  options?: { allowFreeTier?: boolean; passCreditCost?: number; prefetch?: () => Promise<TPrefetch> }
+): Promise<SettlementResult<TPrefetch>> {
   const numericAmount = Number(amountAtomic);
   const priceUsd = (numericAmount / 1_000_000).toFixed(numericAmount % 10000 === 0 ? 2 : 3);
   const allowFreeTier = options?.allowFreeTier ?? true;
@@ -1376,16 +1411,18 @@ async function handleBazaarPayment(
     );
   };
 
-  // Always expose x402 payment challenge, Prepaid Pass, Receipt, and Free Tier headers
+  // Always expose x402 payment challenge, Prepaid Pass, Receipt, Free Tier, and Server-Timing headers
   c.header(
     "Access-Control-Expose-Headers",
-    "PAYMENT-REQUIRED, Payment-Required, X-Payment-Required, WWW-Authenticate, X-Payment-Response, Pay-To, PAYMENT-RESPONSE, X-NullClear-Attestation, X-NullClear-Verified, X-NullClear-Receipt-Url, X-NullClear-Low-Balance, X-NullClear-Renew-Url, x-nullclear-tier, x-nullclear-pass-tier, x-nullclear-credits-remaining, x-nullclear-remaining-free-calls"
+    "PAYMENT-REQUIRED, Payment-Required, X-Payment-Required, WWW-Authenticate, X-Payment-Response, Pay-To, PAYMENT-RESPONSE, X-NullClear-Attestation, X-NullClear-Verified, X-NullClear-Receipt-Url, X-NullClear-Low-Balance, X-NullClear-Renew-Url, x-nullclear-tier, x-nullclear-pass-tier, x-nullclear-credits-remaining, x-nullclear-remaining-free-calls, Server-Timing"
   );
   c.header("Pay-To", NULLCLEAR_TREASURY_ADDRESS);
 
   // Fast Path (<5ms): NullClear Prepaid Pass Bearer key (`Authorization: Bearer nc_live_...` or `X-NullClear-Key`)
+  const authStart = Date.now();
   const passAuth = await authenticateAndDebitPass(c, passCreditCost);
   if (passAuth.hasKey) {
+    const authMs = Date.now() - authStart;
     if (passAuth.authenticated && passAuth.pass) {
       const responseHash = keccak256(
         stringToHex(`prepaid_pass:${passAuth.pass.id}:${resourcePath}:${Date.now()}`)
@@ -1395,7 +1432,8 @@ async function handleBazaarPayment(
         tier: "prepaid-pass",
         creditsRemaining: passAuth.creditsRemaining,
         transaction: responseHash,
-        payer: passAuth.pass.ownerAddress as `0x${string}`
+        payer: passAuth.pass.ownerAddress as `0x${string}`,
+        timings: { authMs }
       };
     }
     set402ChallengeHeaders();
@@ -1616,6 +1654,7 @@ async function handleBazaarPayment(
     payer === "0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266" ||
     (c.env?.ENVIRONMENT !== "production" && !c.env?.FACILITATOR_URL);
   if (isTestWallet) {
+    const persistStart = Date.now();
     const simulatedTx = keccak256(
       stringToHex(`bazaar_simulated:${payer}:${authorization.nonce}:${Date.now()}`)
     );
@@ -1648,6 +1687,7 @@ async function handleBazaarPayment(
         }
       )
       .catch(() => {});
+    const persistMs = Date.now() - persistStart;
     const receiptUrl = attachReceiptHeader(c, clearingId);
     c.header("x-nullclear-tier", "x402-paid");
     attachDualX402Headers(c, {
@@ -1657,7 +1697,14 @@ async function handleBazaarPayment(
       payer: authorization.from,
       verified: true
     });
-    return { settled: true, transaction: simulatedTx, payer: authorization.from, clearingId, receiptUrl };
+    return {
+      settled: true,
+      transaction: simulatedTx,
+      payer: authorization.from,
+      clearingId,
+      receiptUrl,
+      timings: { persistMs }
+    };
   }
 
   // Real on-chain settlement via PayAI or Coinbase CDP Facilitator (with on-chain fallback if 5xx)
@@ -1677,23 +1724,50 @@ async function handleBazaarPayment(
   const rpcUrl = c.env?.BASE_MAINNET_RPC_URL || c.env?.BASE_RPC_URL || "https://mainnet.base.org";
 
   const resourceUrl = exactResourceUrl;
+  const normalizedAuthorization = {
+    from: authorization.from,
+    to: authorization.to,
+    value: String(authorization.value),
+    validAfter: String(authorization.validAfter),
+    validBefore: String(authorization.validBefore),
+    nonce: authorization.nonce
+  };
+  const expectedAccepted: X402PaymentOption = {
+    ...accepted,
+    network: accepted.network || "eip155:8453",
+    amount: amountAtomic,
+    payTo: NULLCLEAR_TREASURY_ADDRESS,
+    asset: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+    extra: accepted.extra || { name: "USD Coin", version: "2" }
+  };
+
+  // Safe speculative overlap: if local CPU-only EIP-3009 verification passes (~1-2ms),
+  // overlap read-only compute with the ~2s Base L2 settlement window.
+  // If local verify fails (e.g. ERC-1271 smart wallet or bad sig), do NOT reject — skip prefetch and settle sequentially.
+  let verifyLocalMs: number | undefined;
+  let prefetchPromise: Promise<{ ok: boolean; value?: TPrefetch; durMs: number }> | undefined;
+  if (options?.prefetch) {
+    const verifyStart = Date.now();
+    const localCheck = await verifyEIP3009Local(normalizedAuthorization, signature, expectedAccepted).catch(
+      () => ({ valid: false })
+    );
+    verifyLocalMs = Date.now() - verifyStart;
+    if (localCheck.valid) {
+      const prefetchStart = Date.now();
+      prefetchPromise = Promise.resolve()
+        .then(() => options.prefetch!())
+        .then(
+          (value) => ({ ok: true, value, durMs: Date.now() - prefetchStart }),
+          () => ({ ok: false, durMs: Date.now() - prefetchStart })
+        );
+    }
+  }
+
+  const settleStart = Date.now();
   const settlement = await settleTransfer({
-    authorization: {
-      from: authorization.from,
-      to: authorization.to,
-      value: String(authorization.value),
-      validAfter: String(authorization.validAfter),
-      validBefore: String(authorization.validBefore),
-      nonce: authorization.nonce
-    },
+    authorization: normalizedAuthorization,
     signature,
-    accepted: {
-      ...accepted,
-      amount: amountAtomic,
-      payTo: NULLCLEAR_TREASURY_ADDRESS,
-      asset: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
-      extra: accepted.extra || { name: "USD Coin", version: "2" }
-    },
+    accepted: expectedAccepted,
     facilitatorUrl,
     cdpApiKeyId: c.env?.CDP_API_KEY_ID,
     cdpApiKeySecret: c.env?.CDP_API_KEY_SECRET,
@@ -1709,8 +1783,11 @@ async function handleBazaarPayment(
     },
     bazaarExtension
   });
+  const settleMs = Date.now() - settleStart;
 
   if (!settlement.success || !settlement.transaction) {
+    prefetchPromise?.catch(() => {});
+    attachBazaarServerTiming(c, { verifyLocalMs, settleMs });
     const reason = settlement.errorReason || "On-chain payment rejection";
     const code = settlement.errorCode || classifySettlementErrorReason(reason).errorCode;
     if (code === "RELAYER_ERROR") {
@@ -1762,6 +1839,7 @@ async function handleBazaarPayment(
   }
 
   // Settlement succeeded on-chain! Record in D1 clearings table (with sanitized target params)
+  const persistStart = Date.now();
   const store = getArbiterStore(c.env);
   const clearingId = `bazaar_${Date.now()}_${settlement.transaction.slice(2, 10)}`;
   const feeAtomic = String(Math.max(1, Math.floor((Number(amountAtomic) * 50) / 10000)));
@@ -1792,6 +1870,7 @@ async function handleBazaarPayment(
       }
     )
     .catch(() => {});
+  const persistMs = Date.now() - persistStart;
 
   const receiptUrl = attachReceiptHeader(c, clearingId);
   c.header("x-nullclear-tier", "x402-paid");
@@ -1803,11 +1882,37 @@ async function handleBazaarPayment(
     verified: true
   });
 
-  return { settled: true, transaction: settlement.transaction, payer: authorization.from, clearingId, receiptUrl };
+  let prefetched: TPrefetch | undefined;
+  let computeMs: number | undefined;
+  let overlapped = false;
+  if (prefetchPromise) {
+    const outcome = await prefetchPromise;
+    if (outcome.ok && outcome.value !== undefined) {
+      prefetched = outcome.value;
+      computeMs = outcome.durMs;
+      overlapped = true;
+    }
+  }
+
+  return {
+    settled: true,
+    transaction: settlement.transaction,
+    payer: authorization.from,
+    clearingId,
+    receiptUrl,
+    prefetched,
+    timings: {
+      verifyLocalMs,
+      settleMs,
+      persistMs,
+      ...(typeof computeMs === "number" ? { computeMs, overlapped } : {})
+    }
+  };
 }
 
 // 1. GET & POST /v1/bazaar/market-oracle ($0.005 USDC / 5000 atomic)
 bazaarRouter.all("/market-oracle", async (c) => {
+  const reqStart = Date.now();
   const result = await handleBazaarPayment(
     c,
     "/v1/bazaar/market-oracle",
@@ -1818,6 +1923,7 @@ bazaarRouter.all("/market-oracle", async (c) => {
   if (!result.settled) {
     return result.errorResponse!;
   }
+  const computeStart = Date.now();
 
   let bodySymbol: string | undefined;
   if (c.req.method === "POST") {
@@ -1873,6 +1979,11 @@ bazaarRouter.all("/market-oracle", async (c) => {
   );
 
   c.header("X-NullClear-Attestation", attestation);
+  attachBazaarServerTiming(c, {
+    ...result.timings,
+    computeMs: Date.now() - computeStart,
+    totalMs: Date.now() - reqStart
+  });
 
   return c.json({
     symbol,
@@ -1897,17 +2008,7 @@ bazaarRouter.all("/market-oracle", async (c) => {
 
 // 2. GET & POST /v1/bazaar/token-security ($0.005 USDC / 5000 atomic)
 bazaarRouter.all("/token-security", async (c) => {
-  const result = await handleBazaarPayment(
-    c,
-    "/v1/bazaar/token-security",
-    BAZAAR_TOKEN_SECURITY_EXTENSION.description,
-    BAZAAR_TOKEN_SECURITY_EXTENSION,
-    "5000"
-  );
-  if (!result.settled) {
-    return result.errorResponse!;
-  }
-
+  const reqStart = Date.now();
   const body = await parseJsonBodySafe(c);
   const rawAddr = sanitizeParamString(
     c.req.query("address") ||
@@ -1922,8 +2023,26 @@ bazaarRouter.all("/token-security", async (c) => {
     c.req.query("chain") || c.req.query("network") || body.chain || body.network,
     32
   );
+  const isInvalidAddr = Boolean(rawAddr && !isEvmAddress(rawAddr) && !isSolanaAddress(rawAddr));
+  const targetAddress = rawAddr || "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913";
 
-  if (rawAddr && !isEvmAddress(rawAddr) && !isSolanaAddress(rawAddr)) {
+  const result = await handleBazaarPayment<ForensicScanPayload | null>(
+    c,
+    "/v1/bazaar/token-security",
+    BAZAAR_TOKEN_SECURITY_EXTENSION.description,
+    BAZAAR_TOKEN_SECURITY_EXTENSION,
+    "5000",
+    {
+      prefetch: isInvalidAddr
+        ? undefined
+        : () => scanTokenForensics(rawChain || "base", targetAddress, c.env)
+    }
+  );
+  if (!result.settled) {
+    return result.errorResponse!;
+  }
+
+  if (isInvalidAddr) {
     return c.json(
       {
         error: "Invalid token address",
@@ -1933,8 +2052,15 @@ bazaarRouter.all("/token-security", async (c) => {
     );
   }
 
-  const targetAddress = rawAddr || "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913";
-  const scan = await scanTokenForensics(rawChain || "base", targetAddress, c.env);
+  const computeStart = Date.now();
+  const scan =
+    result.prefetched ?? (await scanTokenForensics(rawChain || "base", targetAddress, c.env));
+  const computeMs = result.prefetched ? result.timings?.computeMs : Date.now() - computeStart;
+  attachBazaarServerTiming(c, {
+    ...result.timings,
+    computeMs,
+    totalMs: Date.now() - reqStart
+  });
 
   const timestamp = Date.now();
   const isBaseUsdc =
@@ -2079,17 +2205,7 @@ const BAZAAR_TOKEN_VERDICT_EXTENSION = {
 
 // 2a. GET & POST /v1/bazaar/token-verdict ($0.005 USDC / 5000 atomic)
 bazaarRouter.all("/token-verdict", async (c) => {
-  const result = await handleBazaarPayment(
-    c,
-    "/v1/bazaar/token-verdict",
-    BAZAAR_TOKEN_VERDICT_EXTENSION.description,
-    BAZAAR_TOKEN_VERDICT_EXTENSION,
-    "5000"
-  );
-  if (!result.settled) {
-    return result.errorResponse!;
-  }
-
+  const reqStart = Date.now();
   const body = await parseJsonBodySafe(c);
   const rawAddr = sanitizeParamString(
     c.req.query("address") ||
@@ -2104,8 +2220,26 @@ bazaarRouter.all("/token-verdict", async (c) => {
     c.req.query("chain") || c.req.query("network") || body.chain || body.network,
     32
   );
+  const isInvalidAddr = Boolean(rawAddr && !isEvmAddress(rawAddr) && !isSolanaAddress(rawAddr));
+  const targetAddress = rawAddr || "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913";
 
-  if (rawAddr && !isEvmAddress(rawAddr) && !isSolanaAddress(rawAddr)) {
+  const result = await handleBazaarPayment<ForensicScanPayload | null>(
+    c,
+    "/v1/bazaar/token-verdict",
+    BAZAAR_TOKEN_VERDICT_EXTENSION.description,
+    BAZAAR_TOKEN_VERDICT_EXTENSION,
+    "5000",
+    {
+      prefetch: isInvalidAddr
+        ? undefined
+        : () => scanTokenForensics(rawChain || "base", targetAddress, c.env)
+    }
+  );
+  if (!result.settled) {
+    return result.errorResponse!;
+  }
+
+  if (isInvalidAddr) {
     return c.json(
       {
         error: "Invalid token address",
@@ -2115,9 +2249,16 @@ bazaarRouter.all("/token-verdict", async (c) => {
     );
   }
 
-  const targetAddress = rawAddr || "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913";
-  const scan = await scanTokenForensics(rawChain || "base", targetAddress, c.env);
+  const computeStart = Date.now();
+  const scan =
+    result.prefetched ?? (await scanTokenForensics(rawChain || "base", targetAddress, c.env));
   const verdict = buildTokenVerdictPayload(scan);
+  const computeMs = result.prefetched ? result.timings?.computeMs : Date.now() - computeStart;
+  attachBazaarServerTiming(c, {
+    ...result.timings,
+    computeMs,
+    totalMs: Date.now() - reqStart
+  });
 
   c.header("X-NullClear-Attestation", verdict.attestation);
 
@@ -2137,6 +2278,7 @@ bazaarRouter.all("/token-verdict", async (c) => {
 
 // 2b. POST & GET /v1/bazaar/scan-batch ($0.025 USDC / 25000 atomic, up to 15 tokens)
 bazaarRouter.all("/scan-batch", async (c) => {
+  const reqStart = Date.now();
   const result = await handleBazaarPayment(
     c,
     "/v1/bazaar/scan-batch",
@@ -2148,6 +2290,7 @@ bazaarRouter.all("/scan-batch", async (c) => {
   if (!result.settled) {
     return result.errorResponse!;
   }
+  const computeStart = Date.now();
 
   const body = await parseJsonBodySafe(c);
   const parsed = parseBatchTargets(
@@ -2304,6 +2447,11 @@ bazaarRouter.all("/scan-batch", async (c) => {
     )
   );
   c.header("X-NullClear-Attestation", attestation);
+  attachBazaarServerTiming(c, {
+    ...result.timings,
+    computeMs: Date.now() - computeStart,
+    totalMs: Date.now() - reqStart
+  });
 
   return c.json({
     recommendedAgentAction,
@@ -2335,6 +2483,7 @@ bazaarRouter.all("/scan-batch", async (c) => {
 
 // 3. GET & POST /v1/bazaar/wallet-risk ($0.005 USDC / 5000 atomic)
 bazaarRouter.all("/wallet-risk", async (c) => {
+  const reqStart = Date.now();
   const result = await handleBazaarPayment(
     c,
     "/v1/bazaar/wallet-risk",
@@ -2345,6 +2494,7 @@ bazaarRouter.all("/wallet-risk", async (c) => {
   if (!result.settled) {
     return result.errorResponse!;
   }
+  const computeStart = Date.now();
 
   let bodyAddr: string | undefined;
   if (c.req.method === "POST") {
@@ -2430,6 +2580,11 @@ bazaarRouter.all("/wallet-risk", async (c) => {
   );
 
   c.header("X-NullClear-Attestation", attestation);
+  attachBazaarServerTiming(c, {
+    ...result.timings,
+    computeMs: Date.now() - computeStart,
+    totalMs: Date.now() - reqStart
+  });
 
   return c.json({
     address: targetAddress,
@@ -2458,6 +2613,7 @@ bazaarRouter.all("/wallet-risk", async (c) => {
 
 // 4. POST & GET /v1/bazaar/verified-fetch ($0.005 USDC / 5000 atomic)
 bazaarRouter.all("/verified-fetch", async (c) => {
+  const reqStart = Date.now();
   const result = await handleBazaarPayment(
     c,
     "/v1/bazaar/verified-fetch",
@@ -2468,6 +2624,7 @@ bazaarRouter.all("/verified-fetch", async (c) => {
   if (!result.settled) {
     return result.errorResponse!;
   }
+  const computeStart = Date.now();
 
   let targetUrl = c.req.query("url");
   let invariants: any[] = [];
@@ -2547,6 +2704,11 @@ bazaarRouter.all("/verified-fetch", async (c) => {
   );
 
   c.header("X-NullClear-Attestation", attestation);
+  attachBazaarServerTiming(c, {
+    ...result.timings,
+    computeMs: Date.now() - computeStart,
+    totalMs: Date.now() - reqStart
+  });
 
   return c.json({
     targetUrl,
@@ -2573,6 +2735,7 @@ bazaarRouter.all("/verified-fetch", async (c) => {
 
 // 5. GET & POST /v1/bazaar/audit ($0.005 USDC / 5000 atomic)
 bazaarRouter.all("/audit", async (c) => {
+  const reqStart = Date.now();
   const result = await handleBazaarPayment(
     c,
     "/v1/bazaar/audit",
@@ -2583,6 +2746,7 @@ bazaarRouter.all("/audit", async (c) => {
   if (!result.settled) {
     return result.errorResponse!;
   }
+  const computeStart = Date.now();
 
   let bodyAgentId: string | undefined;
   if (c.req.method === "POST") {
@@ -2604,6 +2768,11 @@ bazaarRouter.all("/audit", async (c) => {
     stringToHex(`nullclear:audit:${agentId}:${scoreResult.score}:${timestamp}`)
   );
   c.header("X-NullClear-Attestation", attestation);
+  attachBazaarServerTiming(c, {
+    ...result.timings,
+    computeMs: Date.now() - computeStart,
+    totalMs: Date.now() - reqStart
+  });
 
   return c.json({
     agentId,
@@ -2629,6 +2798,7 @@ bazaarRouter.all("/audit", async (c) => {
 
 // 6. POST & GET /v1/bazaar/verify ($0.01 USDC / 10000 atomic)
 bazaarRouter.all("/verify", async (c) => {
+  const reqStart = Date.now();
   const result = await handleBazaarPayment(
     c,
     "/v1/bazaar/verify",
@@ -2638,6 +2808,7 @@ bazaarRouter.all("/verify", async (c) => {
   if (!result.settled) {
     return result.errorResponse!;
   }
+  const computeStart = Date.now();
 
   let body: any = {};
   try {
@@ -2652,6 +2823,11 @@ bazaarRouter.all("/verify", async (c) => {
     stringToHex(`nullclear:verify:${agentId}:${timestamp}`)
   );
   c.header("X-NullClear-Attestation", attestation);
+  attachBazaarServerTiming(c, {
+    ...result.timings,
+    computeMs: Date.now() - computeStart,
+    totalMs: Date.now() - reqStart
+  });
 
   return c.json({
     verified: true,
@@ -2678,6 +2854,7 @@ bazaarRouter.all("/verify", async (c) => {
 
 // 6b. POST & GET /v1/bazaar/guard ($0.005 USDC / 5000 atomic — 1-Call Pre-Sign Firewall)
 bazaarRouter.all("/guard", async (c) => {
+  const reqStart = Date.now();
   const method = c.req.method.toUpperCase();
   const isGetLike = method === "GET" || method === "HEAD";
   const hasPaymentOrPass = Boolean(
@@ -2687,39 +2864,6 @@ bazaarRouter.all("/guard", async (c) => {
       c.req.header("x-nullclear-key") ||
       /^(?:bearer\s+nc_live_|x402\s+)/i.test((c.req.header("authorization") || "").trim())
   );
-
-  // Pre-settlement payload validation for paid POST calls so we NEVER settle on-chain and then return 400
-  if (!isGetLike && hasPaymentOrPass) {
-    const preBody = await parseJsonBodySafe(c);
-    const hasTarget = Boolean(
-      sanitizeParamString(preBody.to || c.req.query("to"), 128) ||
-        preBody.typedData ||
-        sanitizeParamString(preBody.transaction || c.req.query("transaction"), 32768) ||
-        (Array.isArray(preBody.transactions) && preBody.transactions.length > 0)
-    );
-    if (!hasTarget) {
-      return c.json(
-        {
-          error: "Invalid guard payload",
-          message:
-            "Provide EVM tx ({ chain, from, to, data, value }), EIP-712 { typedData }, or Solana { chain: 'solana', transaction }.",
-          example: GUARD_POST_EXAMPLE_BODY
-        },
-        400
-      );
-    }
-  }
-
-  const result = await handleBazaarPayment(
-    c,
-    "/v1/bazaar/guard",
-    BAZAAR_GUARD_EXTENSION.description,
-    BAZAAR_GUARD_EXTENSION,
-    "5000"
-  );
-  if (!result.settled) {
-    return result.errorResponse!;
-  }
 
   const body = await parseJsonBodySafe(c);
   let to = sanitizeParamString(body.to || c.req.query("to"), 128);
@@ -2733,41 +2877,77 @@ bazaarRouter.all("/guard", async (c) => {
   const chain =
     sanitizeParamString(body.chain || body.network || c.req.query("chain") || c.req.query("network"), 32) ||
     (transaction && !to && !typedData ? "solana" : "base");
+  const hasTarget = Boolean(to || typedData || transaction || (transactions && transactions.length > 0));
 
-  if (!to && !typedData && !transaction && (!transactions || transactions.length === 0)) {
-    if (isGetLike) {
-      // Safe default evaluation for 1-click GET Bazaar agents without query params
-      from = from || GUARD_POST_EXAMPLE_BODY.from;
-      to = GUARD_POST_EXAMPLE_BODY.to;
-      data = data || GUARD_POST_EXAMPLE_BODY.data;
-      value = value || GUARD_POST_EXAMPLE_BODY.value;
-    } else {
-      return c.json(
-        {
-          error: "Invalid guard payload",
-          message:
-            "Provide EVM tx ({ chain, from, to, data, value }), EIP-712 { typedData }, or Solana { chain: 'solana', transaction }.",
-          example: GUARD_POST_EXAMPLE_BODY
-        },
-        400
-      );
-    }
+  // Pre-settlement payload validation for paid POST calls so we NEVER settle on-chain and then return 400
+  if (!isGetLike && hasPaymentOrPass && !hasTarget) {
+    return c.json(
+      {
+        error: "Invalid guard payload",
+        message:
+          "Provide EVM tx ({ chain, from, to, data, value }), EIP-712 { typedData }, or Solana { chain: 'solana', transaction }.",
+        example: GUARD_POST_EXAMPLE_BODY
+      },
+      400
+    );
   }
 
-  const guardResult = await guardTransactionPreflight(
+  const effectiveFrom = !hasTarget && isGetLike ? from || GUARD_POST_EXAMPLE_BODY.from : from;
+  const effectiveTo = !hasTarget && isGetLike ? GUARD_POST_EXAMPLE_BODY.to : to;
+  const effectiveData = !hasTarget && isGetLike ? data || GUARD_POST_EXAMPLE_BODY.data : data;
+  const effectiveValue = !hasTarget && isGetLike ? value || GUARD_POST_EXAMPLE_BODY.value : value;
+  const canPrefetchGuard = hasTarget || isGetLike;
+
+  const runGuardCompute = () =>
+    guardTransactionPreflight(
+      {
+        chain,
+        from: effectiveFrom,
+        to: effectiveTo,
+        data: effectiveData,
+        value: effectiveValue,
+        transactions,
+        stateOverrides,
+        typedData,
+        transaction
+      },
+      c.env
+    );
+
+  const result = await handleBazaarPayment<Awaited<ReturnType<typeof guardTransactionPreflight>>>(
+    c,
+    "/v1/bazaar/guard",
+    BAZAAR_GUARD_EXTENSION.description,
+    BAZAAR_GUARD_EXTENSION,
+    "5000",
     {
-      chain,
-      from,
-      to,
-      data,
-      value,
-      transactions,
-      stateOverrides,
-      typedData,
-      transaction
-    },
-    c.env
+      prefetch: canPrefetchGuard ? runGuardCompute : undefined
+    }
   );
+  if (!result.settled) {
+    return result.errorResponse!;
+  }
+
+  if (!canPrefetchGuard) {
+    return c.json(
+      {
+        error: "Invalid guard payload",
+        message:
+          "Provide EVM tx ({ chain, from, to, data, value }), EIP-712 { typedData }, or Solana { chain: 'solana', transaction }.",
+        example: GUARD_POST_EXAMPLE_BODY
+      },
+      400
+    );
+  }
+
+  const computeStart = Date.now();
+  const guardResult = result.prefetched ?? (await runGuardCompute());
+  const computeMs = result.prefetched ? result.timings?.computeMs : Date.now() - computeStart;
+  attachBazaarServerTiming(c, {
+    ...result.timings,
+    computeMs,
+    totalMs: Date.now() - reqStart
+  });
 
   const attestation = guardResult.provenance.attestationSha256;
   c.header("X-NullClear-Attestation", attestation);
@@ -2789,17 +2969,7 @@ bazaarRouter.all("/guard", async (c) => {
 
 // 6c. GET & POST /v1/bazaar/inspect ($0.005 USDC / 5000 atomic — Multi-Chain Proxy, ABI & CFG Inspector)
 bazaarRouter.all("/inspect", async (c) => {
-  const result = await handleBazaarPayment(
-    c,
-    "/v1/bazaar/inspect",
-    BAZAAR_INSPECT_EXTENSION.description,
-    BAZAAR_INSPECT_EXTENSION,
-    "5000"
-  );
-  if (!result.settled) {
-    return result.errorResponse!;
-  }
-
+  const reqStart = Date.now();
   const body = await parseJsonBodySafe(c);
   const rawAddr = sanitizeParamString(
     c.req.query("address") || c.req.query("contract") || body.address || body.contract,
@@ -2809,8 +2979,25 @@ bazaarRouter.all("/inspect", async (c) => {
     c.req.query("chain") || c.req.query("network") || body.chain || body.network,
     32
   );
+  const isInvalidAddr = Boolean(rawAddr && !isEvmAddress(rawAddr));
+  const targetAddress = rawAddr || "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913";
+  const chain = normalizeChain(rawChain || "base");
 
-  if (rawAddr && !isEvmAddress(rawAddr)) {
+  const result = await handleBazaarPayment<Awaited<ReturnType<typeof inspectContractAbiAndProxy>>>(
+    c,
+    "/v1/bazaar/inspect",
+    BAZAAR_INSPECT_EXTENSION.description,
+    BAZAAR_INSPECT_EXTENSION,
+    "5000",
+    {
+      prefetch: isInvalidAddr ? undefined : () => inspectContractAbiAndProxy(chain, targetAddress, c.env)
+    }
+  );
+  if (!result.settled) {
+    return result.errorResponse!;
+  }
+
+  if (isInvalidAddr) {
     return c.json(
       {
         error: "Invalid EVM contract address",
@@ -2820,9 +3007,15 @@ bazaarRouter.all("/inspect", async (c) => {
     );
   }
 
-  const targetAddress = rawAddr || "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913";
-  const chain = normalizeChain(rawChain || "base");
-  const inspection = await inspectContractAbiAndProxy(chain, targetAddress, c.env);
+  const computeStart = Date.now();
+  const inspection =
+    result.prefetched ?? (await inspectContractAbiAndProxy(chain, targetAddress, c.env));
+  const computeMs = result.prefetched ? result.timings?.computeMs : Date.now() - computeStart;
+  attachBazaarServerTiming(c, {
+    ...result.timings,
+    computeMs,
+    totalMs: Date.now() - reqStart
+  });
 
   const attestation = inspection.provenance.attestationSha256;
   c.header("X-NullClear-Attestation", attestation);
@@ -2844,18 +3037,7 @@ bazaarRouter.all("/inspect", async (c) => {
 
 // 6d. POST & GET /v1/bazaar/due-diligence ($0.10 USDC / 100000 atomic or 10 Prepaid Pass credits)
 bazaarRouter.all("/due-diligence", async (c) => {
-  const result = await handleBazaarPayment(
-    c,
-    "/v1/bazaar/due-diligence",
-    BAZAAR_DUE_DILIGENCE_EXTENSION.description,
-    BAZAAR_DUE_DILIGENCE_EXTENSION,
-    "100000",
-    { passCreditCost: 10 }
-  );
-  if (!result.settled) {
-    return result.errorResponse!;
-  }
-
+  const reqStart = Date.now();
   const body = await parseJsonBodySafe(c);
   const rawAddr = sanitizeParamString(
     c.req.query("address") ||
@@ -2870,8 +3052,44 @@ bazaarRouter.all("/due-diligence", async (c) => {
     c.req.query("chain") || c.req.query("network") || body.chain || body.network,
     32
   );
+  const isInvalidAddr = Boolean(rawAddr && !isEvmAddress(rawAddr) && !isSolanaAddress(rawAddr));
+  const targetAddress = rawAddr || "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913";
+  const inferredChain =
+    isSolanaAddress(targetAddress) && !isEvmAddress(targetAddress)
+      ? "solana"
+      : normalizeChain(rawChain || "base");
 
-  if (rawAddr && !isEvmAddress(rawAddr) && !isSolanaAddress(rawAddr)) {
+  const runDueDiligenceCompute = async () => {
+    const store = getArbiterStore(c.env);
+    const scanPromise = scanTokenForensics(inferredChain, targetAddress, c.env);
+    const [scan, inspection, priorScan] = await Promise.all([
+      scanPromise,
+      inferredChain !== "solana" && isEvmAddress(targetAddress)
+        ? inspectContractAbiAndProxy(inferredChain, targetAddress, c.env, { scanPromise }).catch(
+            () => null
+          )
+        : Promise.resolve(null),
+      store.getForensicScan(inferredChain, targetAddress).catch(() => null)
+    ]);
+    return { scan, inspection, priorScan };
+  };
+
+  const result = await handleBazaarPayment<Awaited<ReturnType<typeof runDueDiligenceCompute>>>(
+    c,
+    "/v1/bazaar/due-diligence",
+    BAZAAR_DUE_DILIGENCE_EXTENSION.description,
+    BAZAAR_DUE_DILIGENCE_EXTENSION,
+    "100000",
+    {
+      passCreditCost: 10,
+      prefetch: isInvalidAddr ? undefined : runDueDiligenceCompute
+    }
+  );
+  if (!result.settled) {
+    return result.errorResponse!;
+  }
+
+  if (isInvalidAddr) {
     return c.json(
       {
         error: "Invalid token or contract address",
@@ -2881,20 +3099,9 @@ bazaarRouter.all("/due-diligence", async (c) => {
     );
   }
 
-  const targetAddress = rawAddr || "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913";
-  const inferredChain =
-    isSolanaAddress(targetAddress) && !isEvmAddress(targetAddress)
-      ? "solana"
-      : normalizeChain(rawChain || "base");
-
-  const store = getArbiterStore(c.env);
-  const [scan, inspection, priorScan] = await Promise.all([
-    scanTokenForensics(inferredChain, targetAddress, c.env),
-    inferredChain !== "solana" && isEvmAddress(targetAddress)
-      ? inspectContractAbiAndProxy(inferredChain, targetAddress, c.env).catch(() => null)
-      : Promise.resolve(null),
-    store.getForensicScan(inferredChain, targetAddress).catch(() => null)
-  ]);
+  const computeStart = Date.now();
+  const { scan, inspection, priorScan } = result.prefetched ?? (await runDueDiligenceCompute());
+  const computeMs = result.prefetched ? result.timings?.computeMs : Date.now() - computeStart;
 
   const liquidityUsd = Number(scan.evidence.liquidityUsd || 0);
   const liquidityDepthTier =
@@ -2944,6 +3151,11 @@ bazaarRouter.all("/due-diligence", async (c) => {
   const certSignature = await signer.signMessage({ message: certHash });
 
   c.header("X-NullClear-Attestation", certHash);
+  attachBazaarServerTiming(c, {
+    ...result.timings,
+    computeMs,
+    totalMs: Date.now() - reqStart
+  });
 
   return c.json({
     chain: scan.chain,

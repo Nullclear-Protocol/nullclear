@@ -2395,12 +2395,12 @@ function buildPaymentDiagnosticsReport(params: {
  * Cloudflare D1 Database adapter for production deployments
  */
 export class D1ArbiterStore implements IArbiterStore {
-  private clearingsParamsEnsured = false;
+  private static clearingsParamsEnsured = false;
 
   constructor(private db: D1Database) {}
 
   private async ensureClearingsParamColumns(): Promise<void> {
-    if (this.clearingsParamsEnsured) return;
+    if (D1ArbiterStore.clearingsParamsEnsured) return;
     try {
       const info = await this.db.prepare("PRAGMA table_info(clearings)").all<{ name: string }>();
       const cols = new Set((info.results || []).map((c) => c.name));
@@ -2413,7 +2413,7 @@ export class D1ArbiterStore implements IArbiterStore {
           await this.db.prepare(sql).run();
         } catch {}
       }
-      this.clearingsParamsEnsured = true;
+      D1ArbiterStore.clearingsParamsEnsured = true;
     } catch {
       // Fall back quietly; migration 0006 creates these columns cleanly on remote D1
     }

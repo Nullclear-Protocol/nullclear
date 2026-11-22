@@ -1591,15 +1591,11 @@ async function persistScanResult(
     scannedAt: Date.now()
   };
 
-  try {
-    await store.saveForensicScan(record);
-  } catch {}
-
+  const writes: Promise<unknown>[] = [store.saveForensicScan(record).catch(() => {})];
   if (kv) {
-    try {
-      await kv.put(cacheKey, payloadStr, { expirationTtl: 86400 });
-    } catch {}
+    writes.push(kv.put(cacheKey, payloadStr, { expirationTtl: 86400 }).catch(() => {}));
   }
+  await Promise.allSettled(writes);
 }
 
 /**
@@ -1651,9 +1647,56 @@ export async function resolveSelectorViaOpenChain(
 export async function inspectContractAbiAndProxy(
   rawChain: string,
   rawAddress: string,
-  env?: Env["Bindings"]
+  env?: Env["Bindings"],
+  options?: {
+    precomputedScan?: ForensicScanPayload;
+    scanPromise?: Promise<ForensicScanPayload>;
+    forceFresh?: boolean;
+    maxCacheAgeMs?: number;
+  }
 ) {
-  const scan = await scanTokenForensics(rawChain, rawAddress, env);
+  const requestedChain = normalizeChain(rawChain);
+  const trimmedAddress = (rawAddress || "").trim();
+  const isEvmTarget = requestedChain !== "solana" && isEvmAddress(trimmedAddress);
+  const normRequestedAddr = isEvmTarget ? trimmedAddress.toLowerCase() : trimmedAddress;
+  const kv = env?.NULLCLEAR_CACHE || env?.KV;
+  const maxCacheAgeMs = options?.maxCacheAgeMs ?? 5 * 60 * 1000;
+
+  if (!options?.forceFresh && kv && isEvmTarget) {
+    try {
+      const cachedStr = await kv.get(`inspect_v1:${requestedChain}:${normRequestedAddr}`);
+      if (cachedStr) {
+        const parsed = JSON.parse(cachedStr);
+        const tsMs =
+          typeof parsed?._cachedAt === "number"
+            ? parsed._cachedAt
+            : parsed?.provenance?.timestampIso
+              ? Date.parse(parsed.provenance.timestampIso)
+              : NaN;
+        if (!Number.isFinite(tsMs) || Date.now() - tsMs <= maxCacheAgeMs) {
+          const { _cachedAt: _drop, ...clean } = parsed;
+          return { ...clean, cached: true };
+        }
+      }
+    } catch {}
+  }
+
+  const scanPromise = options?.precomputedScan
+    ? Promise.resolve(options.precomputedScan)
+    : options?.scanPromise ?? scanTokenForensics(rawChain, rawAddress, env);
+
+  // Speculatively fetch bytecode probe + Sourcify in parallel with scanPromise for EVM targets
+  const speculativeEvmChain: SupportedEvmForensicChain | null = isEvmTarget
+    ? (requestedChain as SupportedEvmForensicChain)
+    : null;
+  const speculativeProbePromise = speculativeEvmChain
+    ? probeEvmContractOnChain(speculativeEvmChain, normRequestedAddr, env).catch(() => null)
+    : null;
+  const speculativeSourcifyPromise = speculativeEvmChain
+    ? fetchSourcifyContractInfo(EVM_CHAIN_METADATA[speculativeEvmChain].chainId, normRequestedAddr).catch(() => null)
+    : null;
+
+  const scan = await scanPromise;
   if (scan.chain === "solana") {
     return {
       llmDigest: scan.llmDigest,
@@ -1678,10 +1721,16 @@ export async function inspectContractAbiAndProxy(
   const evmChain: SupportedEvmForensicChain = scan.chain;
   const chainId = EVM_CHAIN_METADATA[evmChain].chainId;
 
-  const [probe, sourcify] = await Promise.all([
-    probeEvmContractOnChain(evmChain, scan.address, env),
-    fetchSourcifyContractInfo(chainId, scan.address)
-  ]);
+  const [probe, sourcify] =
+    speculativeEvmChain === evmChain &&
+    normRequestedAddr === scan.address &&
+    speculativeProbePromise &&
+    speculativeSourcifyPromise
+      ? await Promise.all([speculativeProbePromise, speculativeSourcifyPromise])
+      : await Promise.all([
+          probeEvmContractOnChain(evmChain, scan.address, env),
+          fetchSourcifyContractInfo(chainId, scan.address)
+        ]);
 
   const disasm = probe?.disassembly || disassembleEvmBytecode("0x");
   const controlFlowRisks: ControlFlowRiskSignals = analyzeBytecodeControlFlowRisks(
@@ -1743,7 +1792,7 @@ export async function inspectContractAbiAndProxy(
     ])
   );
 
-  return {
+  const result = {
     llmDigest: `Contract ${sourcify?.contractName || scan.name} (${scan.symbol}) at ${scan.address} on ${scan.chain.toUpperCase()}: ${
       scan.evidence.isProxy
         ? `Resolved ${scan.evidence.proxyType} implementation at ${scan.evidence.implementationAddress}.`
@@ -1788,6 +1837,18 @@ export async function inspectContractAbiAndProxy(
       )
     }
   };
+
+  if (kv && (probe || sourcify)) {
+    try {
+      await kv.put(
+        `inspect_v1:${evmChain}:${scan.address}`,
+        JSON.stringify({ ...result, _cachedAt: Date.now() }),
+        { expirationTtl: 86400 }
+      );
+    } catch {}
+  }
+
+  return result;
 }
 
 /**

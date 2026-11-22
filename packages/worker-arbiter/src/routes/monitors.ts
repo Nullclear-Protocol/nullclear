@@ -100,10 +100,11 @@ export async function captureMonitorSnapshot(
   env?: Env["Bindings"]
 ): Promise<MonitorSnapshot> {
   const normChain = normalizeChain(chain);
+  const scanPromise = scanTokenForensics(normChain, address, env);
   const [scan, inspect] = await Promise.all([
-    scanTokenForensics(normChain, address, env),
+    scanPromise,
     normChain !== "solana" && isEvmAddress(address)
-      ? inspectContractAbiAndProxy(normChain, address, env).catch(() => null)
+      ? inspectContractAbiAndProxy(normChain, address, env, { scanPromise }).catch(() => null)
       : Promise.resolve(null)
   ]);
 
