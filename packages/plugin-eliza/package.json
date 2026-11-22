@@ -10,8 +10,10 @@
     "directory": "packages/plugin-eliza"
   },
   "keywords": [
+    "plugin",
     "elizaos",
     "eliza",
+    "security",
     "nullclear",
     "solana",
     "base",

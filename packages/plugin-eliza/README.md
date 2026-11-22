@@ -42,7 +42,7 @@ await assertSafeElizaSwap(mintAddress, { chain: "solana", strict: true });
 
 ## Included Actions & Provider
 
-- `NULLCLEAR_SCAN_TOKEN` — Checks any Solana SPL/Token-2022 mint or EVM token (`base`, `eth`, `arbitrum`, `optimism`, `polygon`, `bsc`) for honeypots, taxes, and rug traps
-- `NULLCLEAR_SCAN_BATCH` — Batch-checks 2 to 15 tokens across all 7 chains
-- `NULLCLEAR_GUARD_CALLDATA` — Runs the 1-Call Pre-Sign Firewall (`guard` / nested `decode`) blocking unlimited approval & Multicall3 drainers (`ABORT_DRAINER_APPROVAL`)
-- `nullclear-firewall-context` Provider — Injects real-time NullClear security verdicts into agent context when token addresses appear
+- `NULLCLEAR_SCAN_TOKEN`: Checks any Solana SPL/Token-2022 mint or EVM token (`base`, `eth`, `arbitrum`, `optimism`, `polygon`, `bsc`) for honeypots, taxes, and rug traps
+- `NULLCLEAR_SCAN_BATCH`: Batch-checks 2 to 15 tokens across all 7 chains
+- `NULLCLEAR_GUARD_CALLDATA`: Runs the 1-Call Pre-Sign Firewall (`guard` / nested `decode`) blocking unlimited approval & Multicall3 drainers (`ABORT_DRAINER_APPROVAL`)
+- `nullclear-firewall-context` Provider: Injects real-time NullClear security verdicts into agent context when token addresses appear
