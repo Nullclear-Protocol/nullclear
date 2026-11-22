@@ -1702,7 +1702,7 @@ const getOpenApiSpec = () => ({
     description:
       "Non-custodial x402 payment clearinghouse, schema & LLM-refusal escrow firewall, and ERC-8004 Sybil reputation & DeFi intelligence oracle on Base Mainnet (Agent #124595).",
     "x-guidance":
-      "NullClear provides two modes for autonomous AI agents on Base Mainnet (eip155:8453): (1) Direct x402 Payable Intelligence Oracles ($0.005-$0.025 USDC / 5000-25000 atomic units per call via PayAI or Coinbase CDP Facilitator): call POST /v1/bazaar/guard ($0.005) for a 1-call pre-sign firewall across 7 chains (Base, ETH, Arbitrum, Optimism, Polygon, BSC, Solana â€” nested Multicall3/UniversalRouter/Safe decode, EIP-712 Permit/Seaport audit, Solana wire tx & stateful eth_simulateV1 asset diffs), GET /v1/bazaar/inspect?chain=base&address=0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913 ($0.005) for proxy resolution, Sourcify v2 + batch OpenChain ABI & bytecode CFG risk, GET /v1/bazaar/token-security?chain=base&address=0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913 ($0.005) for 7-chain contract & honeypot/Token-2022 scanning, POST /v1/bazaar/scan-batch ($0.025) for parallel batch scanning up to 15 tokens across 7 chains, GET /v1/bazaar/market-oracle?symbol=ETH ($0.005) for cross-verified crypto spot prices, GET /v1/bazaar/wallet-risk?address=0xfd74fF802EA0E735514C070AF04E0D6528deD145 ($0.005) for wallet counterparty & Sybil profiling, GET/POST /v1/bazaar/verified-fetch?url=https://api.coinbase.com/v2/prices/BTC-USD/spot ($0.005) for schema-verified anti-hallucination HTTP fetching, GET/POST /v1/bazaar/audit?agentId=124595 ($0.005) for ERC-8004 reputation audits, or POST /v1/bazaar/verify ($0.01) for x402 schema readiness verification (plus zero-key dev free tier then $0.005 USDC on /v1/guard, /v1/scan, /v1/inspect, /v1/decode, /v1/simulate). All paid endpoints return HTTP 402 with a PAYMENT-REQUIRED header first before any parameter rejection. (2) Non-Custodial Schema-Escrow Proxy: use POST /v1/clear (holds your signed EIP-3009 header in memory and only settles if the upstream response satisfies your JSON schema, numeric invariants, and LLM-refusal checks; voids with $0.00 charged on upstream failure).",
+      "NullClear provides two modes for autonomous AI agents on Base Mainnet (eip155:8453): (1) Direct x402 Payable Intelligence Oracles ($0.005-$0.10 USDC / 5000-100000 atomic units per call via PayAI or Coinbase CDP Facilitator): call POST /v1/bazaar/guard ($0.005) for a 1-call pre-sign firewall across 7 chains (Base, ETH, Arbitrum, Optimism, Polygon, BSC, Solana - nested Multicall3/UniversalRouter/Safe decode, EIP-712 Permit/Seaport audit, Solana wire tx & stateful eth_simulateV1 asset diffs), GET /v1/bazaar/inspect?chain=base&address=0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913 ($0.005) for proxy resolution, Sourcify v2 + batch OpenChain ABI & bytecode CFG risk, GET /v1/bazaar/token-security?chain=base&address=0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913 ($0.005) for 7-chain contract & honeypot/Token-2022 scanning, GET /v1/bazaar/token-verdict?chain=base&address=0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913 ($0.005) for an A-F token grade, one-line bytecode/tax/proxy verdict & shareable SVG card URL, POST /v1/bazaar/scan-batch ($0.025) for parallel batch scanning up to 15 tokens across 7 chains, GET /v1/bazaar/market-oracle?symbol=ETH ($0.005) for cross-verified crypto spot prices, GET /v1/bazaar/wallet-risk?address=0xfd74fF802EA0E735514C070AF04E0D6528deD145 ($0.005) for wallet counterparty & Sybil profiling, GET/POST /v1/bazaar/verified-fetch?url=https://api.coinbase.com/v2/prices/BTC-USD/spot ($0.005) for schema-verified anti-hallucination HTTP fetching, GET/POST /v1/bazaar/audit?agentId=124595 ($0.005) for ERC-8004 reputation audits, or POST /v1/bazaar/verify ($0.01) for x402 schema readiness verification (plus zero-key dev free tier then $0.005 USDC on /v1/guard, /v1/scan, /v1/inspect, /v1/decode, /v1/simulate). All paid endpoints return HTTP 402 with a PAYMENT-REQUIRED header first before any parameter rejection. (2) Non-Custodial Schema-Escrow Proxy: use POST /v1/clear (holds your signed EIP-3009 header in memory and only settles if the upstream response satisfies your JSON schema, numeric invariants, and LLM-refusal checks; voids with $0.00 charged on upstream failure).",
     contact: {
       name: "NullClear Protocol Operations",
       email: "ops@nullclear.dev",
@@ -2753,11 +2753,29 @@ const getOpenApiSpec = () => ({
         operationId: "guardedJsonRpc",
         summary: "Drop-In Guarded JSON-RPC 2.0 Firewall across 7 chains (0-credit reads, auto-blocks malicious broadcasts)",
         tags: ["Firewall Pro Suite"],
+        security: [],
         parameters: [
           { name: "chain", in: "path", required: true, schema: { type: "string", enum: ["base", "eth", "arbitrum", "optimism", "polygon", "bsc", "solana"] } },
           { name: "apiKey", in: "path", required: true, schema: { type: "string" } },
           { name: "failMode", in: "query", required: false, schema: { type: "string", enum: ["closed", "open"], default: "closed" } }
         ],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                required: ["jsonrpc", "id", "method"],
+                properties: {
+                  jsonrpc: { type: "string", enum: ["2.0"], default: "2.0", example: "2.0" },
+                  id: { type: "integer", default: 1, example: 1 },
+                  method: { type: "string", example: "eth_blockNumber" },
+                  params: { type: "array", items: {}, example: [] }
+                }
+              }
+            }
+          }
+        },
         responses: {
           "200": { description: "JSON-RPC 2.0 result or -32003 Firewall Blocked error" }
         }
@@ -2771,6 +2789,77 @@ const getOpenApiSpec = () => ({
         "x-payment-info": {
           price: { mode: "fixed", currency: "USD", amount: "0.02" },
           protocols: [{ x402: {} }]
+        },
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                properties: {
+                  chain: {
+                    type: "string",
+                    enum: ["base", "eth", "arbitrum", "optimism", "polygon", "bsc", "solana"],
+                    default: "base",
+                    example: "base",
+                    description: "Target network"
+                  },
+                  from: {
+                    type: "string",
+                    example: "0xfd74fF802EA0E735514C070AF04E0D6528deD145",
+                    description: "Sender EVM wallet address"
+                  },
+                  to: {
+                    type: "string",
+                    example: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+                    description: "Target EVM contract address"
+                  },
+                  data: {
+                    type: "string",
+                    example: "0x095ea7b3000000000000000000000000b586efcca41df27ad3873beca54da0c30bf04d5c00000000000000000000000000000000000000000000000000000000000f4240",
+                    description: "0x-prefixed hex calldata"
+                  },
+                  value: {
+                    type: "string",
+                    default: "0x0",
+                    example: "0x0",
+                    description: "Optional native wei value"
+                  },
+                  policyId: {
+                    type: "string",
+                    description: "Optional registered policy ID from POST /v1/policy/register"
+                  },
+                  policy: {
+                    type: "object",
+                    description: "Optional inline policy rules (maxTaxPercent, maxValueWei, allowedChains, blockCaution)"
+                  },
+                  typedData: {
+                    type: "object",
+                    description: "Optional EIP-712 typed data object (Permit, Permit2, Seaport)"
+                  },
+                  transaction: {
+                    type: "string",
+                    description: "Optional Base64-encoded Solana wire transaction"
+                  },
+                  transactions: {
+                    type: "array",
+                    items: { type: "object" },
+                    description: "Optional multi-transaction EVM bundle"
+                  },
+                  stateOverrides: {
+                    type: "object",
+                    description: "Optional eth_simulateV1 state overrides"
+                  },
+                  ttlSeconds: {
+                    type: "integer",
+                    default: 300,
+                    example: 300,
+                    description: "Co-signature validity window in seconds (30-3600)"
+                  }
+                }
+              }
+            }
+          }
         },
         responses: {
           "200": { description: "approved=true with EIP-712 PolicyApproval signature, or approved=false with violatedRules" },
@@ -2786,6 +2875,47 @@ const getOpenApiSpec = () => ({
         "x-payment-info": {
           price: { mode: "fixed", currency: "USD", amount: "1.00" },
           protocols: [{ x402: {} }]
+        },
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                required: ["address", "webhookUrl"],
+                properties: {
+                  chain: {
+                    type: "string",
+                    enum: ["base", "eth", "arbitrum", "optimism", "polygon", "bsc", "solana"],
+                    default: "base",
+                    example: "base",
+                    description: "Target blockchain network"
+                  },
+                  address: {
+                    type: "string",
+                    example: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+                    description: "EVM contract address or Solana base58 mint to monitor"
+                  },
+                  webhookUrl: {
+                    type: "string",
+                    format: "uri",
+                    example: "https://example.com/webhooks/nullclear-alerts",
+                    description: "HTTPS webhook endpoint to receive signed Watchtower drift alerts"
+                  },
+                  durationDays: {
+                    type: "integer",
+                    default: 30,
+                    example: 30,
+                    description: "Monitoring duration in days (1-365)"
+                  },
+                  alertRules: {
+                    type: "object",
+                    description: "Optional alert trigger thresholds (proxyUpgrade, sellTaxSpike, lpDropPercent, solanaAuthorityChange)"
+                  }
+                }
+              }
+            }
+          }
         },
         responses: {
           "201": { description: "Active Watchtower monitor with baseline state" },
