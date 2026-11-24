@@ -5,6 +5,7 @@
 <p align="left">
   <a href="https://satohub.ai/verify/nullclear-arbiter?utm_source=badge&utm_medium=embed"><img src="https://satohub.ai/api/badge/nullclear-arbiter" alt="Sato Score" /></a>
   <a href="https://glama.ai/mcp/servers/Nullclear-Protocol/nullclear"><img src="https://glama.ai/mcp/servers/Nullclear-Protocol/nullclear/badges/score.svg" alt="NullClear Arbiter MCP server – quality and maintenance score on Glama" /></a>
+  <a href="https://glama.ai/mcp/connectors/io.github.Nullclear-Protocol/nullclear"><img src="https://glama.ai/mcp/connectors/io.github.Nullclear-Protocol/nullclear/badges/score.svg" alt="NullClear Arbiter MCP connector – quality and maintenance score on Glama" /></a>
   <a href="https://mcpservers.org/servers/nullclear-protocol/nullclear"><img src="https://mcpservers.org/badge.svg" alt="Listed on mcpservers.org" /></a>
   <a href="https://mcptry.com/servers/io.github.Nullclear-Protocol/nullclear"><img src="https://mcptry.com/badge/io.github.Nullclear-Protocol/nullclear" alt="mcptry" /></a>
   <a href="https://nullclear.dev/leaderboard"><img src="https://img.shields.io/badge/x402-V1_%26_V2_Compatible-10b981" alt="x402 V1 & V2" /></a>
