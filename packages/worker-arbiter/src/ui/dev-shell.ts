@@ -423,7 +423,7 @@ export function renderDevHeader(active: DevNavTab, wide = false): string {
         <a href="/x402" class="${active === "x402" ? "active" : ""}">x402</a>
         <a href="/history" class="${active === "history" ? "active" : ""}">Telemetry</a>
         <a href="/leaderboard" class="${active === "leaderboard" ? "active" : ""}">Leaderboard</a>
-        <a href="https://nullclear.com">SafePay &#8599;</a>
+        <a href="https://nullclear.com">Polymarket Terminal &#8599;</a>
       </nav>
       <div class="dev-nav-right">
         <a href="/buy-pass" class="btn btn-primary btn-sm">Get Pass</a>
@@ -442,7 +442,7 @@ export function renderDevHeader(active: DevNavTab, wide = false): string {
       <a href="/x402" class="${active === "x402" ? "active" : ""}">x402 Clearinghouse</a>
       <a href="/history" class="${active === "history" ? "active" : ""}">Telemetry</a>
       <a href="/leaderboard" class="${active === "leaderboard" ? "active" : ""}">Leaderboard</a>
-      <a href="https://nullclear.com">SafePay (nullclear.com) &#8599;</a>
+      <a href="https://nullclear.com">Polymarket Guard (nullclear.com) &#8599;</a>
       <a href="/buy-pass">Get Prepaid Pass</a>
     </div>
   </header>`;
@@ -492,7 +492,8 @@ export function renderDevFooter(wide = false): string {
             <li><a href="https://www.npmjs.com/package/@nullclear/mcp" target="_blank" rel="noopener" class="mono" style="font-size:12px;">@nullclear/mcp</a></li>
             <li><a href="https://www.npmjs.com/package/@nullclear/agentkit" target="_blank" rel="noopener" class="mono" style="font-size:12px;">@nullclear/agentkit</a></li>
             <li><a href="https://www.npmjs.com/package/@nullclear/plugin-eliza" target="_blank" rel="noopener" class="mono" style="font-size:12px;">@nullclear/plugin-eliza</a></li>
-            <li><a href="https://nullclear.com">NullClear SafePay (nullclear.com) &#8599;</a></li>
+            <li><a href="https://nullclear.com">Polymarket Guarded Terminal (nullclear.com) &#8599;</a></li>
+            <li><a href="https://nullclear.com/safepay">NullClear SafePay Escrow &#8599;</a></li>
             <li><a href="https://github.com/Nullclear-Protocol/nullclear" target="_blank" rel="noopener">GitHub Repository &#8599;</a></li>
           </ul>
         </div>

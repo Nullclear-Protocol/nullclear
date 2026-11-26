@@ -29,7 +29,8 @@ describe("NullClear Worker Arbiter Test Suite", () => {
   const sellerAccount = privateKeyToAccount(sellerKey);
 
   const testEnv = {
-    ARBITER_PRIVATE_KEY: arbiterKey
+    ARBITER_PRIVATE_KEY: arbiterKey,
+    ENVIRONMENT: "development"
   };
 
   beforeAll(async () => {
@@ -1791,7 +1792,7 @@ describe("NullClear Worker Arbiter Test Suite", () => {
   it("AUDIT 6: Interactive Zero-Wallet Landing Pages (nullclear.dev & nullclear.com)", async () => {
     const [devRes, comRes, demoDealRes] = await Promise.all([
       app.fetch(new Request("https://nullclear.dev/"), testEnv),
-      app.fetch(new Request("https://nullclear.com/"), testEnv),
+      app.fetch(new Request("https://nullclear.com/safepay"), testEnv),
       app.fetch(new Request("https://nullclear.com/deal/demo-ai-audit-101"), testEnv)
     ]);
 

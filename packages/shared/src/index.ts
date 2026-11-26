@@ -4,4 +4,6 @@ export * from "./x402-types.js";
 export * from "./eip712-kya.js";
 export * from "./schemas.js";
 export * from "./safepay.js";
+export * from "./polymarket.js";
+
 

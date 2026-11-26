@@ -423,9 +423,11 @@ async function resolveMonitorCreateAuth(c: Context<Env>): Promise<{
   }
 
   const payer = parsedAuth.from.toLowerCase() as `0x${string}`;
+  const isLocalDevEnv =
+    c.env?.ENVIRONMENT === "development" || c.env?.ENVIRONMENT === "local";
   const isTestWallet =
-    payer === "0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266" ||
-    (c.env?.ENVIRONMENT !== "production" && !c.env?.FACILITATOR_URL);
+    isLocalDevEnv &&
+    (payer === "0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266" || !c.env?.FACILITATOR_URL);
 
   let txHash: `0x${string}`;
   if (isTestWallet) {

@@ -515,7 +515,7 @@ describe("NullClear SafePay (nullclear.com) End-to-End Test Suite", () => {
   });
 
   it("5. Serves NullClear SafePay commercial pages, programmatic SEO verticals, sitemap.xml, and robots.txt on nullclear.com", async () => {
-    const homeRes = await app.fetch(new Request("http://nullclear.com/"), testEnv);
+    const homeRes = await app.fetch(new Request("http://nullclear.com/safepay"), testEnv);
     expect(homeRes.status).toBe(200);
     const homeHtml = await homeRes.text();
     expect(homeHtml).toContain("Escrow That Never Holds Your Money.");

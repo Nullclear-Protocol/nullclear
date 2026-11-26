@@ -31,7 +31,16 @@ export interface Env {
     BASE_SEPOLIA_RPC_URL?: string;
     ETH_RPC_URL?: string;
     SOLANA_RPC_URL?: string;
-    TELEGRAM_BOT_TOKEN?: string;
+    NULLCLEAR_BUILDER_CODE?: string;
+    POLYMARKET_BUILDER_ADDRESS?: string;
+    POLYMARKET_BUILDER_API_KEY?: string;
+    POLYMARKET_BUILDER_SECRET?: string;
+    POLYMARKET_BUILDER_PASSPHRASE?: string;
+    POLYMARKET_RELAYER_API_KEY?: string;
+    POLYMARKET_RELAYER_ADDRESS?: string;
+    LIVE_AUTOCOPY_ENABLED?: string;
+    POLY_ALERT_MIN_USD?: string;
+    POLY_ADMIN_TOKEN?: string;
     INDEXNOW_KEY?: string;
     MIN_ONCHAIN_ATOMIC?: string;
     MAX_DAILY_ONCHAIN_PER_WALLET?: string;
@@ -1608,7 +1617,24 @@ const KNOWN_INDEXER_BOT_PATTERNS = [
   "_probe",
   "harvester",
   "trustindex",
-  "ispettore"
+  "ispettore",
+  "mekler-conformance",
+  "paywary",
+  "x402watch",
+  "x402-measurement-research",
+  "agenteconomyreport",
+  "x402-collector",
+  "apistrust",
+  "lumitrustprobe",
+  "tiagscovik",
+  "x402-doctor-trust-scan",
+  "x402statsweb",
+  "toolassay",
+  "keptvowbot",
+  "lumio-confiance",
+  "tanod-referee",
+  "mpp32-health",
+  "blockchainiq-etl"
 ];
 
 export function buildBalancedSqlAnd(clauses: string[]): string {

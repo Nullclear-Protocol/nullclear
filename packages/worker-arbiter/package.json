@@ -21,6 +21,7 @@
   },
   "dependencies": {
     "@nullclear/shared": "workspace:*",
+    "@polymarket/client": "^0.20.1",
     "hono": "^4.7.0",
     "viem": "^2.23.0"
   },

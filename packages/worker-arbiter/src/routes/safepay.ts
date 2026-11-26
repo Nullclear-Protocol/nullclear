@@ -47,10 +47,12 @@ async function fetchBuyerUsdcBalanceAtomic(
   chainId: 8453 | 84532,
   env?: Env["Bindings"]
 ): Promise<string | null> {
-  if (buyerAddress.toLowerCase() === "0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266") {
+  const isLocalDevEnv =
+    env?.ENVIRONMENT === "development" || env?.ENVIRONMENT === "local";
+  if (isLocalDevEnv && buyerAddress.toLowerCase() === "0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266") {
     return "10000000000"; // $10,000 USDC deterministic sandbox test wallet
   }
-  if (env?.ENVIRONMENT !== "production" && !env?.BASE_MAINNET_RPC_URL && !env?.BASE_RPC_URL) {
+  if (isLocalDevEnv && !env?.BASE_MAINNET_RPC_URL && !env?.BASE_RPC_URL) {
     return null;
   }
   try {
@@ -130,9 +132,13 @@ async function executeAtomicDualSettlement(
     deal.chainId === 8453
       ? env?.BASE_MAINNET_RPC_URL || env?.BASE_RPC_URL || chainConfig.rpcUrl
       : env?.BASE_SEPOLIA_RPC_URL || chainConfig.rpcUrl;
-  const isSandboxBuyer = deal.buyerAddress.toLowerCase() === "0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266";
+  const isLocalDevEnv =
+    env?.ENVIRONMENT === "development" || env?.ENVIRONMENT === "local";
+  const isSandboxBuyer =
+    isLocalDevEnv &&
+    deal.buyerAddress.toLowerCase() === "0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266";
   const settlementMode = isSandboxBuyer ? "simulated" : env?.SETTLEMENT_MODE || "onchain";
-  const environment = isSandboxBuyer ? "development" : env?.ENVIRONMENT || "development";
+  const environment = isSandboxBuyer ? "development" : env?.ENVIRONMENT || "production";
 
   const feeOption: X402PaymentOption = {
     scheme: "exact",

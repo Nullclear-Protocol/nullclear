@@ -28,6 +28,7 @@ import {
   attachDualX402Headers
 } from "../utils/x402-headers.js";
 import { getBazaarResourceMetadata, parseAtomicBigInt } from "./bazaar-metadata.js";
+import { executeGuardedPolymarketOrder } from "../services/poly-policy-engine.js";
 
 export const policyRouter = new Hono<Env>();
 
@@ -220,9 +221,11 @@ async function resolvePolicyAuth(
   }
 
   const payer = parsedAuth.from.toLowerCase() as `0x${string}`;
+  const isLocalDevEnv =
+    c.env?.ENVIRONMENT === "development" || c.env?.ENVIRONMENT === "local";
   const isTestWallet =
-    payer === "0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266" ||
-    (c.env?.ENVIRONMENT !== "production" && !c.env?.FACILITATOR_URL);
+    isLocalDevEnv &&
+    (payer === "0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266" || !c.env?.FACILITATOR_URL);
 
   let txHash: `0x${string}`;
   if (isTestWallet) {
@@ -362,7 +365,8 @@ policyRouter.get("/", (c) => {
     endpoints: {
       registerPolicy: "POST https://api.nullclear.dev/v1/policy/register (1 pass credit or $0.005 USDC)",
       listPolicies: "GET https://api.nullclear.dev/v1/policy/list (Bearer nc_live_...)",
-      cosignTransaction: "POST https://api.nullclear.dev/v1/policy/cosign (2 pass credits or $0.02 USDC)"
+      cosignTransaction: "POST https://api.nullclear.dev/v1/policy/cosign (2 pass credits or $0.02 USDC)",
+      polymarketCosign: "POST https://api.nullclear.dev/v1/policy/polymarket/cosign (CLOB V2 Guardrails + Public Receipt)"
     },
     eip712DomainTemplate: {
       name: "NullClearPolicyCoSigner",
@@ -647,5 +651,84 @@ policyRouter.all("/cosign", async (c) => {
     attestation: guardResult.provenance.attestationSha256,
     settlementTransaction: auth.settlementTx,
     timestamp: Date.now()
+  });
+});
+
+// POST /v1/policy/polymarket/cosign — Validate Polymarket CLOB V2 order against spend/slippage/fee guardrails & issue verifiable receipt
+policyRouter.post("/polymarket/cosign", async (c) => {
+  let body: any = {};
+  try {
+    body = await c.req.json();
+  } catch {
+    return c.json({ error: "Invalid JSON payload" }, 400);
+  }
+
+  if (body.privateKey || body.private_key || body.mnemonic) {
+    return c.json(
+      {
+        error: "ZERO_CUSTODY_VIOLATION",
+        message: "NullClear Policy Co-Signer never accepts wallet private keys."
+      },
+      400
+    );
+  }
+
+  const assetId = String(body.assetId || "").trim();
+  const orderSizeUsd = Number(body.orderSizeUsd);
+  const triggerPrice = Number(body.triggerPrice);
+  if (!assetId || !Number.isFinite(orderSizeUsd) || !Number.isFinite(triggerPrice)) {
+    return c.json(
+      {
+        error: "Missing Polymarket CLOB V2 order parameters",
+        required: ["assetId", "orderSizeUsd", "triggerPrice", "category"]
+      },
+      400
+    );
+  }
+
+  const userId = String(body.userId || body.walletAddress || "poly-cosign").trim();
+  const result = await executeGuardedPolymarketOrder(
+    {
+      userId,
+      mode: body.mode === "live" ? "live" : "paper",
+      walletAddress:
+        typeof body.walletAddress === "string" && /^0x[a-fA-F0-9]{40}$/.test(body.walletAddress)
+          ? (body.walletAddress.toLowerCase() as `0x${string}`)
+          : null,
+      sessionSigner:
+        typeof body.sessionSigner === "string" && /^0x[a-fA-F0-9]{40}$/.test(body.sessionSigner)
+          ? (body.sessionSigner.toLowerCase() as `0x${string}`)
+          : null,
+      useDepositWallet1271: Boolean(body.useDepositWallet1271),
+      assetId,
+      marketTitle: String(body.marketTitle || "Polymarket V2 Contract"),
+      category: String(body.category || "geopolitics"),
+      side: String(body.side || "BUY").toUpperCase() === "SELL" ? "SELL" : "BUY",
+      orderSizeUsd,
+      triggerPrice,
+      liveBookAsk: typeof body.liveBookAsk === "number" ? body.liveBookAsk : null,
+      tickSize: body.tickSize ?? null,
+      postOnly: Boolean(body.postOnly),
+      whaleAddress: typeof body.whaleAddress === "string" ? body.whaleAddress : null,
+      policyOverride: body.policy || body.policyOverride,
+      accountStateOverride: body.accountState,
+      skipLiveBookFetch: Boolean(body.skipLiveBookFetch)
+    },
+    c.env
+  );
+
+  c.header("X-NullClear-Firewall", result.verdict === "ALLOWED" ? "COSIGN_APPROVED" : "COSIGN_DENIED");
+  c.header("X-NullClear-Receipt-Url", result.receiptUrl);
+
+  return c.json({
+    approved: result.verdict === "ALLOWED",
+    verdict: result.verdict,
+    rejectionCode: result.evaluation.primaryRejectionCode,
+    receiptId: result.receipt.id,
+    receiptUrl: result.receiptUrl,
+    evaluation: result.evaluation,
+    eip712Approval: result.eip712Approval ?? null,
+    liveOrderBundle: result.liveOrderBundle ?? null,
+    timestamp: result.receipt.createdAt
   });
 });

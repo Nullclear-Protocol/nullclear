@@ -131,6 +131,7 @@ export async function handleBuyPassRequest(
     c.req.header("x-nullclear-authorization");
 
   const make402 = (message?: string, errorTitle = "Payment Required", code?: string) => {
+    const resourceUrl = `https://api.nullclear.dev${resourcePath}`;
     const payload = {
       x402Version: 2,
       scheme: "exact",
@@ -138,7 +139,7 @@ export async function handleBuyPassRequest(
       amount: tier.priceAtomic,
       payTo: NULLCLEAR_TREASURY_ADDRESS,
       resource: {
-        url: `https://api.nullclear.dev${resourcePath}`,
+        url: resourceUrl,
         description: extension.description,
         mimeType: "application/json",
         ...resourceMeta
@@ -148,6 +149,10 @@ export async function handleBuyPassRequest(
           scheme: "exact",
           network: "eip155:8453",
           amount: tier.priceAtomic,
+          maxAmountRequired: tier.priceAtomic,
+          resource: resourceUrl,
+          description: extension.description,
+          mimeType: "application/json",
           asset: BASE_MAINNET.usdc,
           payTo: NULLCLEAR_TREASURY_ADDRESS,
           maxTimeoutSeconds: 300,
@@ -345,9 +350,12 @@ export async function handleBuyPassRequest(
   }
 
   const payer = parsedAuth.from.toLowerCase() as `0x${string}`;
+  const isLocalDevEnv =
+    c.env?.ENVIRONMENT === "development" || c.env?.ENVIRONMENT === "local";
   const isTestWallet =
-    payer === "0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266" ||
-    (c.env?.ENVIRONMENT !== "production" && !c.env?.FACILITATOR_URL && c.env?.SETTLEMENT_MODE !== "onchain");
+    isLocalDevEnv &&
+    (payer === "0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266" ||
+      (!c.env?.FACILITATOR_URL && c.env?.SETTLEMENT_MODE !== "onchain"));
 
   let settlementTx: `0x${string}`;
   if (isTestWallet) {

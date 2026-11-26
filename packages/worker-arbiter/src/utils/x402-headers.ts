@@ -679,7 +679,7 @@ export function buildWwwAuthenticateX402Header(opts: WwwAuthenticateOptions): st
   const recipient = opts.recipient || NULLCLEAR_TREASURY_ADDRESS;
   const amount = String(opts.amount || "5000");
   const asset = opts.asset || BASE_MAINNET_USDC;
-  const facilitator = opts.facilitator || "https://api.nullclear.dev/v1/pass/buy";
+  const facilitator = opts.facilitator || "https://facilitator.payai.network";
   return `x402 realm="${realm}", token="${token}", network="${network}", recipient="${recipient}", amount="${amount}", asset="${asset}", facilitator="${facilitator}"`;
 }
 

@@ -11,6 +11,9 @@ import { bazaarRouter } from "./routes/bazaar.js";
 import { a2aRouter } from "./routes/a2a.js";
 import { safepayRouter } from "./routes/safepay.js";
 import { safepayWebRouter } from "./routes/safepay-web.js";
+import { polyApiRouter } from "./routes/poly.js";
+import { polyWebRouter } from "./routes/poly-web.js";
+import { runPolymarketLiveFeedCron } from "./services/poly-alerts.js";
 import { proxyRouter, handleUrlProxyRequest } from "./routes/proxy.js";
 import { gatewaysRouter, gatewayProxyRouter } from "./routes/gateways.js";
 import { radarRouter } from "./routes/radar.js";
@@ -121,8 +124,9 @@ app.use("*", async (c, next) => {
 
 // Domain routing:
 // - On nullclear.com / www.nullclear.com:
-//   * Agent protocol discovery paths (/llms.txt, /openapi.json, /.well-known/*, /v1/*, /mcp, /a2a, /leaderboard) 301-redirect to https://nullclear.dev
-//   * Human commercial routes (/, /deal/*, /for/*, /sitemap.xml, /robots.txt) render NullClear SafePay directly
+//   * Agent protocol discovery paths (/llms.txt, /openapi.json, /.well-known/*, /a2a, /history) 301-redirect to https://nullclear.dev
+//   * Polymarket consumer vertical (/, /calculator, /whale/*, /leaderboard, /terminal, /sitemap.xml, /robots.txt) renders polyWebRouter
+//   * Legacy SafePay commercial routes (/safepay, /deal/*, /for/*) remain preserved via safepayWebRouter
 app.use("*", async (c, next) => {
   const url = new URL(c.req.url);
   const hostname = url.hostname.toLowerCase();
@@ -135,7 +139,6 @@ app.use("*", async (c, next) => {
       p === "/openapi.json" ||
       p === "/api/v1/openapi.json" ||
       p === "/agents.md" ||
-      p === "/leaderboard" ||
       p === "/history" ||
       p.startsWith("/.well-known/") ||
       p.startsWith("/a2a");
@@ -146,9 +149,19 @@ app.use("*", async (c, next) => {
 
     if (
       p === "/" ||
-      p === "/safepay" ||
+      p === "/live" ||
+      p === "/calculator" ||
+      p === "/leaderboard" ||
+      p === "/terminal" ||
       p === "/sitemap.xml" ||
       p === "/robots.txt" ||
+      p.startsWith("/whale/")
+    ) {
+      return polyWebRouter.fetch(c.req.raw, c.env);
+    }
+
+    if (
+      p === "/safepay" ||
       p.startsWith("/deal/") ||
       p.startsWith("/for/")
     ) {
@@ -190,6 +203,13 @@ app.route("/safepay", safepayWebRouter);
 app.get("/deal/:dealId", (c) => safepayWebRouter.fetch(c.req.raw, c.env));
 app.get("/for/:vertical", (c) => safepayWebRouter.fetch(c.req.raw, c.env));
 
+// Polymarket Vertical API Routes (accessible on both nullclear.com and api.nullclear.dev)
+app.route("/api/poly", polyApiRouter);
+app.get("/live", (c) => polyWebRouter.fetch(c.req.raw, c.env));
+app.get("/calculator", (c) => polyWebRouter.fetch(c.req.raw, c.env));
+app.get("/whale/:address", (c) => polyWebRouter.fetch(c.req.raw, c.env));
+app.get("/terminal", (c) => polyWebRouter.fetch(c.req.raw, c.env));
+
 // Public Cryptographic Receipt Verifier (/receipt/:id & /v1/receipt/:id)
 app.route("/", receiptRouter);
 
@@ -228,7 +248,8 @@ export async function scheduled(
     runTrendingTokenCronScan(env),
     runWatchtowerCronTick(env),
     runEcosystemCrawlAndAudit(env),
-    syncBaseEip3009Logs(env)
+    syncBaseEip3009Logs(env),
+    runPolymarketLiveFeedCron(env)
   ]);
   if (ctx && typeof ctx.waitUntil === "function") {
     ctx.waitUntil(task);
@@ -241,4 +262,10 @@ export async function scheduled(
 
 export default app;
 export { app };
+export {
+  runPolymarketLiveFeedCron,
+  buildLiveWhaleAlertRecord,
+  formatByoWebhookPayload,
+  deliverByoWebhook
+} from "./services/poly-alerts.js";
 

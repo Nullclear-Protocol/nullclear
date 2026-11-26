@@ -37,6 +37,9 @@ BASE_RPC_URL = "https://mainnet.base.org"
 BASE_SEPOLIA_RPC_URL = "https://sepolia.base.org"
 MIN_ONCHAIN_ATOMIC = "5000"
 MAX_DAILY_ONCHAIN_PER_WALLET = "50"
+LIVE_AUTOCOPY_ENABLED = "false"
+POLY_ALERT_MIN_USD = "1500"
+POLYMARKET_BUILDER_ADDRESS = "0xdb658795c3d4791c0da3b148ee65a5528bbefff3"
 
 [triggers]
 crons = ["*/15 * * * *"]

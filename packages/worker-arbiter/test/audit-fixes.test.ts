@@ -17,7 +17,8 @@ describe("Production Audit Fixes (Tasks 1-5)", () => {
   const buyerAccount = privateKeyToAccount(buyerKey);
 
   const testEnv = {
-    ARBITER_PRIVATE_KEY: arbiterKey
+    ARBITER_PRIVATE_KEY: arbiterKey,
+    ENVIRONMENT: "development"
   };
 
   beforeEach(() => {
@@ -342,7 +343,7 @@ describe("Production Audit Fixes (Tasks 1-5)", () => {
       expect(wwwAuth).toContain(`recipient="${NULLCLEAR_TREASURY_ADDRESS}"`);
       expect(wwwAuth).toContain('amount="5000"');
       expect(wwwAuth).toContain(`asset="${BASE_MAINNET.usdc}"`);
-      expect(wwwAuth).toContain('facilitator="https://api.nullclear.dev/v1/pass/buy"');
+      expect(wwwAuth).toContain('facilitator="https://facilitator.payai.network"');
 
       const body11 = (await res11.json()) as any;
       expect(body11.schema).toBeDefined();

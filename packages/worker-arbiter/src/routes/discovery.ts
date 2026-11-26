@@ -1099,6 +1099,7 @@ const getX402Manifest = async (c: any) => {
       bazaarDueDiligence: {
         path: "/v1/bazaar/due-diligence",
         method: "GET",
+        methods: ["GET", "POST"],
         payable: true,
         amountAtomic: "100000",
         ...getBazaarResourceMetadata("/v1/bazaar/due-diligence"),

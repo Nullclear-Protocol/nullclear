@@ -322,12 +322,15 @@ importers:
       '@nullclear/shared':
         specifier: workspace:*
         version: link:../shared
+      '@polymarket/client':
+        specifier: ^0.20.1
+        version: 0.20.1(typescript@5.9.3)(viem@2.57.5(bufferutil@4.2.0)(typescript@5.9.3)(utf-8-validate@6.0.6)(zod@4.6.7))
       hono:
         specifier: ^4.7.0
         version: 4.13.13
       viem:
         specifier: ^2.23.0
-        version: 2.57.5(bufferutil@4.2.0)(typescript@5.9.3)(utf-8-validate@6.0.6)(zod@3.25.76)
+        version: 2.57.5(bufferutil@4.2.0)(typescript@5.9.3)(utf-8-validate@6.0.6)(zod@4.6.7)
     devDependencies:
       '@cloudflare/workers-types':
         specifier: ^4.20250214.0
@@ -1035,6 +1038,10 @@ packages:
       '@cfworker/json-schema':
         optional: true
 
+  '@msgpack/msgpack@3.1.3':
+    resolution: {integrity: sha512-47XIizs9XZXvuJgoaJUIE2lFoID8ugvc0jzSHP+Ptfk8nTbnR8g788wv48N03Kx0UkAv559HWRQ3yzOgzlRNUA==}
+    engines: {node: '>= 18'}
+
   '@napi-rs/lzma-linux-x64-gnu@1.5.1':
     resolution: {integrity: sha512-oTXEIha4SsuXdTA4Iyskj0kpdx2yVXdhd75c2v3xGrHFfVMsbhTPZU/nMPL4sWKo4pBHm3aucLaqGlF696dTyQ==}
     engines: {node: ^22.20 || ^24.12 || >=25}
@@ -1053,6 +1060,29 @@ packages:
   '@noble/hashes@1.8.0':
     resolution: {integrity: sha512-jCs9ldd7NwzpgXDIf6P3+NrHh9/sD6CQdxHyjQI+h/6rDNo88ypBxxz45UDuZHz9r3tNz7N/VInSVoVdtXEI4A==}
     engines: {node: ^14.21.3 || >=16}
+
+  '@polymarket/bindings@0.18.2':
+    resolution: {integrity: sha512-RiCaR/cNzniZhZsUc91itvLOcHFpptkwpWFd9yDHwCz3+zifDUss7lDrx1qXAofawAtwvrg9xYsrFJafvXBQyg==}
+    engines: {node: '>=24'}
+
+  '@polymarket/client@0.20.1':
+    resolution: {integrity: sha512-Wusem5NnIhXLmlt/1tcZadVYCJRVeL8ua806UooI3ItbhGdismUKIA8gymOXv0PUSqq/eYtO3jPgybYyyKd/dA==}
+    engines: {node: '>=24'}
+    peerDependencies:
+      '@privy-io/node': ^0.15.0
+      ethers-v5: ^5.8.0
+      viem: ^2.46.3
+    peerDependenciesMeta:
+      '@privy-io/node':
+        optional: true
+      ethers-v5:
+        optional: true
+      viem:
+        optional: true
+
+  '@polymarket/types@0.3.0':
+    resolution: {integrity: sha512-N65FDYq7C8UnN9e7D2/BsMAmknX11jxfb1lb2Cb//TJaMZ6y0ak69xVh0ORrwM4+IU9YFieCLK6MdkbZTEiJtw==}
+    engines: {node: '>=24'}
 
   '@rollup/rollup-android-arm-eabi@4.64.5':
     resolution: {integrity: sha512-MrfgRQSpD5hkkRg6XI16B6EDLb+6+xp8xje6bpdSwkYw+qxrBKbUVrRAQu9h82UT+QumSIVQ8HXsXjPd2dlhqw==}
@@ -1288,6 +1318,9 @@ packages:
         optional: true
       zod:
         optional: true
+
+  abort-error@1.0.2:
+    resolution: {integrity: sha512-lVgvB2NyPLqbXXhVmXcYFTC1x5K7CiVdPgdY7LGgFQWC8506oN01sPN3i9cl9ynuwF4iJ0TS9exnR7cZ9FuX4w==}
 
   accepts@2.0.0:
     resolution: {integrity: sha512-5cvg6CtKwfgdmVqY1WIiXKc3Q1bkRqGLi+2W/6ao+6Y7gu/RCwRuAhGEzh5B4KlszSuTLgZYuqFqo5bImjNKng==}
@@ -1648,6 +1681,15 @@ packages:
     peerDependencies:
       ws: '*'
 
+  it-merge@3.0.15:
+    resolution: {integrity: sha512-rUskoyECUdJsUwpfBtiLXddm56J+vukMztq+PpfTss1mRl/aHv1YJs+6Q2XnpvDThFC2y4Xm636X0xh6IecPGg==}
+
+  it-pushable@3.2.4:
+    resolution: {integrity: sha512-WSD7Ss4oCRfDZJT4ldLWr0Bom/muY90xxoJ5PQnU3uSKf0kxCOeehqZtiJX1ARqn+ymXGh1bxpDW9bDNHp2ivQ==}
+
+  it-queueless-pushable@2.0.5:
+    resolution: {integrity: sha512-BaKqGLL1AQMR1AEaxiM09vzJQVXHHhfhh9UV0qPqORw/8Rm8igDQqT1qHregfHIb1NIW9jxQ/aXBibHJyuivuQ==}
+
   jose@6.2.12:
     resolution: {integrity: sha512-9NiFmJEex0sy2Dk58j2UGBSHgUs2ypF9eZSu4L6vjOX3Dp96Sw1F3uL+H+D1sx02jZZdzUT0HgvCy59CuvXcWw==}
 
@@ -1663,6 +1705,10 @@ packages:
 
   json-schema-typed@8.0.2:
     resolution: {integrity: sha512-fQhoXdcvc3V28x7C7BMs4P5+kNlgUURe2jmUT1T//oBRMDrqy1QPelJimwZGo7Hg9VPV3EQV5Bnq4hbFy2vetA==}
+
+  ky@1.14.3:
+    resolution: {integrity: sha512-9zy9lkjac+TR1c2tG+mkNSVlyOpInnWdSMiue4F+kq8TwJSgv6o8jhLRg8Ho6SnZ9wOYUq/yozts9qQCfk7bIw==}
+    engines: {node: '>=18'}
 
   lilconfig@3.1.3:
     resolution: {integrity: sha512-/vlFKAoH5Cgt3Ie+JLhRbwOsCQePABiU3tJ1egGvyQ+33R/vcwM2Zl2QR/LzjsBeItPt3oSVXapn+m4nQDvpzw==}
@@ -1766,6 +1812,10 @@ packages:
       typescript:
         optional: true
 
+  p-defer@4.0.1:
+    resolution: {integrity: sha512-Mr5KC5efvAK5VUptYEIopP1bakB85k2IWXaRC0rsh1uwn1L6M0LVml8OIQ4Gudg4oyZakf7FmeRLkMMtZW1i5A==}
+    engines: {node: '>=12'}
+
   parseurl@1.3.3:
     resolution: {integrity: sha512-CiyeOxFT/JZyN5m0z9PfXw4SCBJ6Sygz1Dpl0wqjlhDEGGBP1GnsUVEL0p63hoG1fcj3fHynXi9NYO4nWOL+qQ==}
     engines: {node: '>= 0.8'}
@@ -1837,6 +1887,9 @@ packages:
   qs@6.16.0:
     resolution: {integrity: sha512-h6fhOIaRrID2CbEY2fqs+7t+UXZo+MLAnU5gRIq85uFtdiUPCdsApMlHhXogKVM4HM2DVbIjGNTTYH2OcmP1vA==}
     engines: {node: '>=0.6'}
+
+  race-signal@2.0.2:
+    resolution: {integrity: sha512-IuNNNY5NLriMFEGl3BVei2xq9NIcpkuAklhPWamhu5tRJrJz0w9sloUMz73YXpmUluE2EZocmJm9rpQqXmCPiA==}
 
   range-parser@1.3.0:
     resolution: {integrity: sha512-hek2mFQpPuI4E1BBKrSto+BU3e3x4xuarsbiwr3+lf7p44juvFMV0XFWQAP3xUyqXA4RrXLIoaSUGbSt056ZMw==}
@@ -1975,6 +2028,10 @@ packages:
     resolution: {integrity: sha512-qpCAvRl9stuOHveKsn7HncJRvv501qIacKzQlO/+Lwxc9+0q2wLyv4Dfvt80/DPn2pqOBsJdDiogXGR9+OvwRw==}
     engines: {node: '>=8'}
 
+  tagged-tag@1.0.0:
+    resolution: {integrity: sha512-yEFYrVhod+hdNyx7g5Bnkkb0G6si8HJurOoOEgC8B/O0uXLHlaey/65KRv6cuWBNhBgHKAROVpc7QyYqE5gFng==}
+    engines: {node: '>=20'}
+
   thenify-all@1.6.0:
     resolution: {integrity: sha512-RNxQH/qI8/t3thXJDwcstUO4zeqo64+Uy/+sNVRBx4Xn2OX+OZ9oP+iJnNFqplFra2ZUVeKCSa2oVWi3T4uVmA==}
     engines: {node: '>=0.8'}
@@ -2045,6 +2102,10 @@ packages:
   turbo@2.11.7:
     resolution: {integrity: sha512-RhXHbqfvY6o3xt/zSHCwSNwLrZlXiqHzewi4eAj9PtZ1T1CqgMJ2yIDb7SKPTG9IikTm925mfzL6hldQVdyNWw==}
     hasBin: true
+
+  type-fest@5.10.0:
+    resolution: {integrity: sha512-NoSdpq/WEiAg5sjmBkmV/hfxv6HJH4NqPNrqjtSO5CwRmpsDfaf4begxW34KdJykH/l1yHtwBWQkCRdoXO8mPA==}
+    engines: {node: '>=20'}
 
   type-is@2.1.0:
     resolution: {integrity: sha512-faYHw0anBbc/kWF3zFTEnxSFOAGUX9GFbOBthvDdLsIlEoWOFOtS0zgCiQYwIskL9iGXZL3kAXD8OoZ4GmMATA==}
@@ -2231,6 +2292,9 @@ packages:
 
   zod@3.25.76:
     resolution: {integrity: sha512-gzUt/qt81nXsFGKIFcC3YnfEAx5NkunCfnDlvuBSSFS02bcXu4Lmea0AFIUwbLWxWPx3d9p8S5QoaujKcNQxcQ==}
+
+  zod@4.6.7:
+    resolution: {integrity: sha512-g8W2D2kU6a8untc053fX1uVBKzM7yqAxW/3zwk83+6RyF2+SKOuV+c0wBDhUwzV1PaGapmZH+rmcUzPf+3CGwg==}
 
 snapshots:
 
@@ -2626,6 +2690,8 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
+  '@msgpack/msgpack@3.1.3': {}
+
   '@napi-rs/lzma-linux-x64-gnu@1.5.1':
     optional: true
 
@@ -2636,6 +2702,30 @@ snapshots:
       '@noble/hashes': 1.8.0
 
   '@noble/hashes@1.8.0': {}
+
+  '@polymarket/bindings@0.18.2':
+    dependencies:
+      '@polymarket/types': 0.3.0
+      zod: 4.6.7
+
+  '@polymarket/client@0.20.1(typescript@5.9.3)(viem@2.57.5(bufferutil@4.2.0)(typescript@5.9.3)(utf-8-validate@6.0.6)(zod@4.6.7))':
+    dependencies:
+      '@msgpack/msgpack': 3.1.3
+      '@polymarket/bindings': 0.18.2
+      '@polymarket/types': 0.3.0
+      it-merge: 3.0.15
+      it-pushable: 3.2.4
+      ky: 1.14.3
+      ox: 0.14.56(typescript@5.9.3)(zod@4.6.7)
+      zod: 4.6.7
+    optionalDependencies:
+      viem: 2.57.5(bufferutil@4.2.0)(typescript@5.9.3)(utf-8-validate@6.0.6)(zod@4.6.7)
+    transitivePeerDependencies:
+      - typescript
+
+  '@polymarket/types@0.3.0':
+    dependencies:
+      type-fest: 5.10.0
 
   '@rollup/rollup-android-arm-eabi@4.64.5':
     optional: true
@@ -2810,6 +2900,13 @@ snapshots:
     optionalDependencies:
       typescript: 5.9.3
       zod: 3.25.76
+
+  abitype@1.2.3(typescript@5.9.3)(zod@4.6.7):
+    optionalDependencies:
+      typescript: 5.9.3
+      zod: 4.6.7
+
+  abort-error@1.0.2: {}
 
   accepts@2.0.0:
     dependencies:
@@ -3230,6 +3327,20 @@ snapshots:
     dependencies:
       ws: 8.21.0(bufferutil@4.2.0)(utf-8-validate@6.0.6)
 
+  it-merge@3.0.15:
+    dependencies:
+      it-queueless-pushable: 2.0.5
+
+  it-pushable@3.2.4:
+    dependencies:
+      p-defer: 4.0.1
+
+  it-queueless-pushable@2.0.5:
+    dependencies:
+      abort-error: 1.0.2
+      p-defer: 4.0.1
+      race-signal: 2.0.2
+
   jose@6.2.12: {}
 
   joycon@3.1.1: {}
@@ -3239,6 +3350,8 @@ snapshots:
   json-schema-traverse@1.0.0: {}
 
   json-schema-typed@8.0.2: {}
+
+  ky@1.14.3: {}
 
   lilconfig@3.1.3: {}
 
@@ -3342,6 +3455,23 @@ snapshots:
     transitivePeerDependencies:
       - zod
 
+  ox@0.14.56(typescript@5.9.3)(zod@4.6.7):
+    dependencies:
+      '@adraffy/ens-normalize': 1.11.1
+      '@noble/ciphers': 1.3.0
+      '@noble/curves': 1.9.1
+      '@noble/hashes': 1.8.0
+      '@scure/bip32': 1.7.0
+      '@scure/bip39': 1.6.0
+      abitype: 1.2.3(typescript@5.9.3)(zod@4.6.7)
+      eventemitter3: 5.0.1
+    optionalDependencies:
+      typescript: 5.9.3
+    transitivePeerDependencies:
+      - zod
+
+  p-defer@4.0.1: {}
+
   parseurl@1.3.3: {}
 
   path-key@3.1.1: {}
@@ -3393,6 +3523,8 @@ snapshots:
     dependencies:
       es-define-property: 1.0.1
       side-channel: 1.1.1
+
+  race-signal@2.0.2: {}
 
   range-parser@1.3.0: {}
 
@@ -3605,6 +3737,8 @@ snapshots:
       has-flag: 4.0.0
     optional: true
 
+  tagged-tag@1.0.0: {}
+
   thenify-all@1.6.0:
     dependencies:
       thenify: 3.3.1
@@ -3680,6 +3814,10 @@ snapshots:
       '@turbo/windows-64': 2.11.7
       '@turbo/windows-arm64': 2.11.7
 
+  type-fest@5.10.0:
+    dependencies:
+      tagged-tag: 1.0.0
+
   type-is@2.1.0:
     dependencies:
       content-type: 2.1.0
@@ -3722,6 +3860,23 @@ snapshots:
       abitype: 1.2.3(typescript@5.9.3)(zod@3.25.76)
       isows: 1.0.7(ws@8.21.0(bufferutil@4.2.0)(utf-8-validate@6.0.6))
       ox: 0.14.56(typescript@5.9.3)(zod@3.25.76)
+      ws: 8.21.0(bufferutil@4.2.0)(utf-8-validate@6.0.6)
+    optionalDependencies:
+      typescript: 5.9.3
+    transitivePeerDependencies:
+      - bufferutil
+      - utf-8-validate
+      - zod
+
+  viem@2.57.5(bufferutil@4.2.0)(typescript@5.9.3)(utf-8-validate@6.0.6)(zod@4.6.7):
+    dependencies:
+      '@noble/curves': 1.9.1
+      '@noble/hashes': 1.8.0
+      '@scure/bip32': 1.7.0
+      '@scure/bip39': 1.6.0
+      abitype: 1.2.3(typescript@5.9.3)(zod@4.6.7)
+      isows: 1.0.7(ws@8.21.0(bufferutil@4.2.0)(utf-8-validate@6.0.6))
+      ox: 0.14.56(typescript@5.9.3)(zod@4.6.7)
       ws: 8.21.0(bufferutil@4.2.0)(utf-8-validate@6.0.6)
     optionalDependencies:
       typescript: 5.9.3
@@ -3872,3 +4027,5 @@ snapshots:
   zod@3.22.3: {}
 
   zod@3.25.76: {}
+
+  zod@4.6.7: {}

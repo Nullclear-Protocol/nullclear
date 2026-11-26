@@ -1,6 +1,6 @@
-# NullClear (`nullclear.dev` / `nullclear.com`)
+# NullClear (`nullclear.com` / `nullclear.dev`)
 
-> **The Autonomous Pre-Execution Firewall for On-Chain Agents (`Check → Enforce → Monitor`) + Non-Custodial x402 Clearinghouse**
+> **Non-Custodial Pre-Sign Firewall & EIP-712 Policy Co-Signer (`Check → Enforce → Monitor`) — Powering Policy-Guarded Polymarket Execution (`nullclear.com`)**
 
 <p align="left">
   <a href="https://satohub.ai/verify/nullclear-arbiter?utm_source=badge&utm_medium=embed"><img src="https://satohub.ai/api/badge/nullclear-arbiter" alt="Sato Score" /></a>
@@ -8,7 +8,7 @@
   <a href="https://glama.ai/mcp/connectors/io.github.Nullclear-Protocol/nullclear"><img src="https://glama.ai/mcp/connectors/io.github.Nullclear-Protocol/nullclear/badges/score.svg" alt="NullClear Arbiter MCP connector – quality and maintenance score on Glama" /></a>
   <a href="https://mcpservers.org/servers/nullclear-protocol/nullclear"><img src="https://mcpservers.org/badge.svg" alt="Listed on mcpservers.org" /></a>
   <a href="https://mcptry.com/servers/io.github.Nullclear-Protocol/nullclear"><img src="https://mcptry.com/badge/io.github.Nullclear-Protocol/nullclear" alt="mcptry" /></a>
-  <a href="https://nullclear.dev/leaderboard"><img src="https://img.shields.io/badge/x402-V1_%26_V2_Compatible-10b981" alt="x402 V1 & V2" /></a>
+  <a href="https://nullclear.com/terminal"><img src="https://img.shields.io/badge/Polymarket-CLOB_V2_Guarded-10b981" alt="Polymarket CLOB V2 Guarded" /></a>
   <a href="https://basescan.org/address/0x8004A169FB4a3325136EB29fA0ceB6D2e539a432"><img src="https://img.shields.io/badge/ERC--8004-Agent_%23124595-3b82f6" alt="ERC-8004 Agent #124595" /></a>
 </p>
 
@@ -18,7 +18,19 @@
   <a href="https://mcprush.com/to/nullclear-arbiter-mcp?ref=badge"><img src="https://mcprush.com/badge/nullclear-arbiter-mcp/card.svg" alt="NullClear Arbiter MCP server" height="180" /></a>
 </p>
 
-NullClear eliminates payment risk in Agent-to-Agent (A2A) commerce. In standard HTTP `402 Payment Required` flows, buyers are forced to pay before seeing whether an upstream agent hallucinates, crashes, or returns malformed data. NullClear introduces **deferred non-custodial schema escrow**: the buyer signs an EIP-3009 `TransferWithAuthorization`, the arbiter cryptographically validates the upstream agent's output against the buyer's schema contract, and only settles payment upon 100% verification. If the seller hallucinates or crashes, **the authorization is voided and $0 is spent**.
+## Flagship Live Consumer Vertical: Policy-Guarded Polymarket Execution (`nullclear.com`)
+
+NullClear's Pre-Sign Firewall & EIP-712 Policy Co-Signer powers **[nullclear.com](https://nullclear.com)** — a zero-custody Polymarket CLOB V2 execution and whale Copy-Tax audit terminal:
+
+- **2026 Real Fee & Copy-Tax Calculator (`/calculator`):** Exact late-2026 category taker fee math (`shares * feeRate * price * (1 - price)`), fill-delay slippage, and Taker vs. `postOnly` Maker (0% fee) comparison.
+- **Indexable Whale Reality & Copyability Auditor (`/whale/[address]`):** Audits any wallet via `data-api.polymarket.com/v2` + `clob.polymarket.com/book`, computing Naive PnL vs. Simulated Copier PnL (`0.5¢`, `1.0¢`, `2.0¢` slip), flagging 5m/15m crypto taker traps, and issuing Copyability Grades (`A`–`F`).
+- **Copyable Whale Leaderboard (`/leaderboard`):** Ranked by **Net Copier PnL** (not deceptive raw PnL), filterable by category (`Geopolitics 0% Fee`, `Politics`, `Sports`, `Economics`, `Crypto`).
+- **Non-Custodial Guarded Execution Terminal (`/terminal`):** Paper Mode (default ON, zero wallet setup) + Live CLOB V2 (`@polymarket/client`, `pUSD` on Polygon `137`, `builder` `bytes32` attribution via `NULLCLEAR_BUILDER_CODE`, `POLY_1271` Deposit Wallet session key scaffold). Every allowed or blocked trade emits a verifiable public receipt at `https://nullclear.dev/receipt/[id]`.
+- **Live Whale Feed & BYO Webhooks (`/live`):** Cloudflare Worker cron polling watched whales via `data-api.polymarket.com/v2/trades`, checking live CLOB best asks, persisting Copy-Tax verdicts (`COPYABLE` vs `PASS - SLIPPAGE TOO HIGH`) to D1, and pushing JSON or Discord Embed payloads to any user-supplied HTTPS webhook stored in `poly_policies` (plus email watchlist capture on `/whale/[address]` and `/leaderboard`).
+
+## Core Protocol Engine (`nullclear.dev`)
+
+Underneath `nullclear.com`, `nullclear.dev` runs the 7-chain Pre-Sign Security Firewall, Drop-In Guarded JSON-RPC, EIP-712 Policy Co-Signer (`POST /v1/policy/cosign`, `POST /v1/policy/polymarket/cosign`), 30-Day Watchtower, MCP server, and optional non-custodial x402 schema-escrow clearinghouse (`/v1/clear`, `/v1/bazaar/*`).
 
 ---
 

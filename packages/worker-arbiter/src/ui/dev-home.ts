@@ -6,10 +6,10 @@ export function renderDevHomeHtml(): string {
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>NullClear Arbiter — Pre-Execution Security &amp; x402 Clearinghouse</title>
-  <meta name="description" content="7-chain pre-execution security firewall, Guarded JSON-RPC, MCP server, Prepaid Passes, and non-custodial x402 clearinghouse for autonomous AI agents." />
-  <meta property="og:title" content="NullClear Arbiter — Pre-Execution Security &amp; x402 Clearinghouse" />
-  <meta property="og:description" content="7-chain pre-execution security firewall, Guarded JSON-RPC, MCP server, and non-custodial x402 clearinghouse on Base Mainnet (ERC-8004 #124595)." />
+  <title>NullClear — Pre-Sign Firewall &amp; EIP-712 Policy Co-Signer</title>
+  <meta name="description" content="7-chain Pre-Sign Security Firewall, EIP-712 Policy Co-Signer, Guarded JSON-RPC, and verifiable execution receipts powering Policy-Guarded Polymarket Execution on nullclear.com." />
+  <meta property="og:title" content="NullClear — Pre-Sign Firewall &amp; EIP-712 Policy Co-Signer" />
+  <meta property="og:description" content="Pre-execution security firewall, EIP-712 Policy Co-Signer, and verifiable receipts powering Polymarket Guarded Execution (nullclear.com) alongside x402 schema clearing." />
   <meta property="og:type" content="website" />
   <meta property="og:url" content="https://nullclear.dev" />
   ${DEV_FONTS_HEAD}
@@ -270,18 +270,23 @@ export function renderDevHomeHtml(): string {
     <!-- Asymmetric Developer-First Hero -->
     <section class="hero-split">
       <div>
-        <div class="eyebrow">PROTOCOL v1.7 &middot; 7 CHAINS &middot; SUB-50MS EDGE</div>
-        <h1 class="h1" style="margin-top:14px;">Pre-execution security for autonomous agents.</h1>
-        <p class="lead" style="margin-top:16px;max-width:520px;">
-          NullClear Arbiter combines bytecode CFG analysis, honeypot and EIP-712 permit simulation, drop-in Guarded JSON-RPC, and non-custodial x402 schema clearing in a single zero-key edge layer.
+        <div class="eyebrow">PROTOCOL v1.8 &middot; PRE-SIGN FIREWALL &middot; EIP-712 POLICY CO-SIGNER</div>
+        <h1 class="h1" style="margin-top:14px;">Pre-Sign Firewall &amp; Policy Co-Signer for On-Chain Execution.</h1>
+        <p class="lead" style="margin-top:16px;max-width:540px;">
+          Enforce hard non-custodial spend caps, slippage locks, fee-drag guards, and 7-chain bytecode/permit security before any signature lands on-chain. Every approved or blocked order emits a verifiable public receipt at <code>/receipt/:id</code>.
         </p>
+        <div style="margin-top:16px;padding:12px 14px;border-radius:8px;background:var(--safe-bg);border:1px solid var(--safe-border);font-size:13px;">
+          <strong style="color:var(--safe);">Flagship Live Consumer Implementation:</strong>
+          <a href="https://nullclear.com" style="text-decoration:underline;text-underline-offset:3px;font-weight:600;">Policy-Guarded Polymarket Execution &amp; Whale Copy-Tax Terminal (nullclear.com) &#8599;</a>
+        </div>
         <div class="hero-actions">
-          <a href="#workbench" class="btn btn-primary">Inspect a Contract</a>
+          <a href="https://nullclear.com/terminal" class="btn btn-primary">Launch Polymarket Terminal &#8599;</a>
+          <a href="#workbench" class="btn btn-secondary">Inspect a Contract</a>
           <a href="/history" class="btn btn-secondary">Open Live Telemetry</a>
         </div>
         <div class="hero-meta-strip">
-          <span><strong>10</strong> free calls/day/IP</span>
-          <span><strong>$0.005</strong> x402 USDC</span>
+          <span><strong>EIP-712</strong> Policy Co-Signer</span>
+          <span><strong>CLOB V2</strong> Polymarket Receipts</span>
           <span><strong>&lt;5ms</strong> KV pass auth</span>
         </div>
       </div>

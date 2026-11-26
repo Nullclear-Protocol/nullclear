@@ -93,8 +93,6 @@ export function classifyActorType(
     ua.includes("langchain") ||
     ua.includes("autogen") ||
     ua.includes("crewai") ||
-    headers.has("x-nullclear-escrow-hold") ||
-    headers.has("x-nullclear-verified-escrow") ||
     headers.has("x-nullclear-free-trial") ||
     path.startsWith("/a2a")
   ) {

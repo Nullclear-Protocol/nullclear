@@ -112,13 +112,6 @@ export function shouldUseFreeTierForBazaar(c: Context<Env>): boolean {
     return false;
   }
 
-  if (
-    c.req.header("x-nullclear-escrow-hold") === "true" ||
-    c.req.header("x-nullclear-verified-escrow")
-  ) {
-    return false;
-  }
-
   // Paid /v1/bazaar/* endpoints are strict HTTP 402 by default so x402 payability verifiers
   // and funded buyer SDKs receive 402 PAYMENT-REQUIRED on call #1.
   // Callers (such as MCP stdio clients and the interactive /x402 UI) can still opt into the

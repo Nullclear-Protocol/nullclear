@@ -1256,8 +1256,22 @@ const BAZAAR_DUE_DILIGENCE_EXTENSION = {
         additionalProperties: false,
         properties: {
           type: { type: "string", const: "http" },
-          method: { type: "string", enum: ["GET", "HEAD", "DELETE"] },
+          method: { type: "string", enum: ["GET", "POST", "HEAD", "DELETE"] },
           queryParams: {
+            type: "object",
+            properties: {
+              chain: {
+                type: "string",
+                description: "base, eth, arbitrum, optimism, polygon, bsc, or solana"
+              },
+              address: {
+                type: "string",
+                description: "EVM contract address or Solana SPL/Token-2022 mint"
+              }
+            }
+          },
+          bodyType: { type: "string", enum: ["json"] },
+          body: {
             type: "object",
             properties: {
               chain: {
@@ -1295,6 +1309,7 @@ function createPaymentRequiredHeader(
   exactResourceUrl?: string
 ) {
   const meta = getBazaarResourceMetadata(resourcePath);
+  const resolvedResourceUrl = exactResourceUrl || `https://api.nullclear.dev${resourcePath}`;
   const payload = {
     x402Version: 2,
     scheme: "exact",
@@ -1304,7 +1319,7 @@ function createPaymentRequiredHeader(
     payTo: NULLCLEAR_TREASURY_ADDRESS,
     maxTimeoutSeconds: 300,
     resource: {
-      url: exactResourceUrl || `https://api.nullclear.dev${resourcePath}`,
+      url: resolvedResourceUrl,
       description,
       mimeType: "application/json",
       ...meta
@@ -1314,6 +1329,10 @@ function createPaymentRequiredHeader(
         scheme: "exact",
         network: "eip155:8453",
         amount: amountAtomic,
+        maxAmountRequired: amountAtomic,
+        resource: resolvedResourceUrl,
+        description,
+        mimeType: "application/json",
         asset: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
         payTo: NULLCLEAR_TREASURY_ADDRESS,
         maxTimeoutSeconds: 300,
@@ -1468,13 +1487,9 @@ async function handleBazaarPayment<TPrefetch = undefined>(
       ? rawPaymentHeader
       : undefined;
 
-  const isEscrowPassThrough =
-    c.req.header("x-nullclear-escrow-hold") === "true" ||
-    c.req.header("x-nullclear-verified-escrow");
-
   // Strict HTTP 402 by default on /v1/bazaar/* so x402 payability verifiers and funded buyers
   // always receive 402 PAYMENT-REQUIRED on call #1 (opt-in free trial via x-nullclear-free-trial: true or MCP session).
-  if (allowFreeTier && !paymentHeader && !isEscrowPassThrough && shouldUseFreeTierForBazaar(c)) {
+  if (allowFreeTier && !paymentHeader && shouldUseFreeTierForBazaar(c)) {
     const freeTier = await consumeSponsoredFreeCall(c, BAZAAR_FREE_TIER_DAILY_LIMIT);
     if (freeTier.allowed) {
       const clearingId = `free_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
@@ -1531,6 +1546,10 @@ async function handleBazaarPayment<TPrefetch = undefined>(
               scheme: "exact",
               network: "eip155:8453",
               amount: amountAtomic,
+              maxAmountRequired: amountAtomic,
+              resource: exactResourceUrl,
+              description,
+              mimeType: "application/json",
               asset: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
               payTo: NULLCLEAR_TREASURY_ADDRESS,
               maxTimeoutSeconds: 300,
@@ -1548,7 +1567,7 @@ async function handleBazaarPayment<TPrefetch = undefined>(
   }
 
   // Rule: "402 Before 400" — Unauthenticated x402 probes (e.g. directory indexers) hit 402 before any query/body validation
-  if (!paymentHeader && !isEscrowPassThrough) {
+  if (!paymentHeader) {
     set402ChallengeHeaders();
     return {
       settled: false,
@@ -1574,6 +1593,10 @@ async function handleBazaarPayment<TPrefetch = undefined>(
               scheme: "exact",
               network: "eip155:8453",
               amount: amountAtomic,
+              maxAmountRequired: amountAtomic,
+              resource: exactResourceUrl,
+              description,
+              mimeType: "application/json",
               asset: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
               payTo: NULLCLEAR_TREASURY_ADDRESS,
               maxTimeoutSeconds: 300,
@@ -1587,16 +1610,6 @@ async function handleBazaarPayment<TPrefetch = undefined>(
         },
         402
       )
-    };
-  }
-
-  // If passed through internal NullClear escrow proxy
-  if (isEscrowPassThrough && !paymentHeader) {
-    return {
-      settled: true,
-      tier: "escrow",
-      transaction: "0x0000000000000000000000000000000000000000000000000000000000000000" as `0x${string}`,
-      payer: "0x0000000000000000000000000000000000000000" as `0x${string}`
     };
   }
 
@@ -1649,10 +1662,12 @@ async function handleBazaarPayment<TPrefetch = undefined>(
 
   const payer = (authorization.from as string).toLowerCase() as `0x${string}`;
 
-  // Deterministic sandbox test wallet bypass for CI test suites
+  // Deterministic sandbox test wallet bypass (strictly local/development allowlist only)
+  const isLocalDevEnv =
+    c.env?.ENVIRONMENT === "development" || c.env?.ENVIRONMENT === "local";
   const isTestWallet =
-    payer === "0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266" ||
-    (c.env?.ENVIRONMENT !== "production" && !c.env?.FACILITATOR_URL);
+    isLocalDevEnv &&
+    (payer === "0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266" || !c.env?.FACILITATOR_URL);
   if (isTestWallet) {
     const persistStart = Date.now();
     const simulatedTx = keccak256(
