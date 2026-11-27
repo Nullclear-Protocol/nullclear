@@ -25,7 +25,7 @@ describe("@nullclear/agentkit ActionProvider Test Suite", () => {
         headers: init?.headers,
         body: init?.body as any
       }),
-      { ARBITER_PRIVATE_KEY: arbiterKey }
+      { ARBITER_PRIVATE_KEY: arbiterKey, ENVIRONMENT: "development" }
     );
   };
 

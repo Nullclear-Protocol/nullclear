@@ -203,7 +203,7 @@ describe("@nullclear/x402-arbiter SDK Test Suite", () => {
             headers: init?.headers,
             body: init?.body as any
           }),
-          { ARBITER_PRIVATE_KEY: arbiterKey }
+          { ARBITER_PRIVATE_KEY: arbiterKey, ENVIRONMENT: "development" }
         );
       }
       return fetch(input, init);
@@ -246,7 +246,7 @@ describe("@nullclear/x402-arbiter SDK Test Suite", () => {
             headers: init?.headers,
             body: init?.body as any
           }),
-          { ARBITER_PRIVATE_KEY: arbiterKey }
+          { ARBITER_PRIVATE_KEY: arbiterKey, ENVIRONMENT: "development" }
         );
       }
       return fetch(input, init);
@@ -290,7 +290,7 @@ describe("@nullclear/x402-arbiter SDK Test Suite", () => {
             headers: init?.headers,
             body: init?.body as any
           }),
-          { ARBITER_PRIVATE_KEY: arbiterKey }
+          { ARBITER_PRIVATE_KEY: arbiterKey, ENVIRONMENT: "development" }
         );
       }
       return fetch(input, init);
@@ -326,7 +326,7 @@ describe("@nullclear/x402-arbiter SDK Test Suite", () => {
           headers: init?.headers,
           body: init?.body as any
         }),
-        { ARBITER_PRIVATE_KEY: arbiterKey }
+        { ARBITER_PRIVATE_KEY: arbiterKey, ENVIRONMENT: "development" }
       );
     };
 
@@ -382,7 +382,7 @@ describe("@nullclear/x402-arbiter SDK Test Suite", () => {
           headers,
           body: init?.body as any
         }),
-        { ARBITER_PRIVATE_KEY: arbiterKey }
+        { ARBITER_PRIVATE_KEY: arbiterKey, ENVIRONMENT: "development" }
       );
     };
 
